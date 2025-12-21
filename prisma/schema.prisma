@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Enums
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum JobStatus {
+  CREATED
+  DISPATCHING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CUSTOMER_REVIEWED
+  ADMIN_REVIEWED
+  CLOSED
+  CANCELLED
+  FAILED
+}
+
+// Models
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  name            String
+  passwordHash    String
+  role            Role     @default(CUSTOMER)
+  
+  // Provider specific
+  isOnline        Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  jobsCreated     Job[]    @relation("CustomerJobs")
+  jobsAssigned    Job[]    @relation("ProviderJobs")
+  
+  customerReviews CustomerReview[]
+  adminReviews    AdminReview[]
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  description String
+  location    String
+  price       Float     
+  status      JobStatus @default(CREATED)
+  
+  customerId  String
+  customer    User      @relation("CustomerJobs", fields: [customerId], references: [id])
+  
+  providerId  String?
+  provider    User?     @relation("ProviderJobs", fields: [providerId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  customerReview CustomerReview?
+  adminReview    AdminReview?
+}
+
+model CustomerReview {
+  id        String   @id @default(uuid())
+  rating    Int      // 1-5
+  comment   String?
+  
+  jobId     String   @unique
+  job       Job      @relation(fields: [jobId], references: [id])
+  
+  reviewerId String
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model AdminReview {
+  id        String   @id @default(uuid())
+  rating    Int      // 1-5 (Reliability)
+  notes     String?
+  
+  jobId     String   @unique
+  job       Job      @relation(fields: [jobId], references: [id])
+  
+  reviewerId String
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+
+  createdAt DateTime @default(now())
+}
