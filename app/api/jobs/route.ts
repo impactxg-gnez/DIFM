@@ -15,34 +15,47 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { description, location, category, isASAP, scheduledAt } = body;
+        const { description, location, category, isASAP, scheduledAt, latitude, longitude, isSimulation } = body;
 
         if (!description || !location || !category) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        // Calculate Price
-        // In V1, we trust the category from the client, but the price comes from backend matrix.
-        // We cast category to ServiceCategory, assuming client sends valid string.
         const fixedPrice = PRICE_MATRIX[category as ServiceCategory];
 
         if (!fixedPrice) {
             return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
         }
 
+        // If simulation, calculate provider start position (approx 10km away)
+        // 1 deg lat is approx 111km. 0.09 deg is approx 10km.
+        let spawnLat = latitude ? parseFloat(latitude) + 0.08 : 51.5874;
+        let spawnLng = longitude ? parseFloat(longitude) + 0.08 : -0.0478;
+
         const job = await prisma.job.create({
             data: {
                 description,
                 location,
+                latitude: latitude ? parseFloat(latitude) : null,
+                longitude: longitude ? parseFloat(longitude) : null,
                 category,
                 fixedPrice,
                 isASAP: isASAP ?? true,
                 scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
                 customerId,
-                status: 'DISPATCHING', // Jump straight to dispatch in V2 reset
-                dispatchRadius: 5 // Start with 5km
+                status: 'DISPATCHING',
+                dispatchRadius: 5,
+                isSimulation: isSimulation ?? false
             },
         });
+
+        // Update Simulator Provider location if this is a sim
+        if (isSimulation) {
+            await prisma.user.updateMany({
+                where: { email: 'simulator@demo.com' },
+                data: { latitude: spawnLat, longitude: spawnLng }
+            });
+        }
 
         return NextResponse.json(job);
 
@@ -74,7 +87,7 @@ export async function GET(request: Request) {
         if (id) {
             const job = await prisma.job.findUnique({
                 where: { id },
-                include: { provider: { select: { name: true } } }
+                include: { provider: { select: { name: true, latitude: true, longitude: true } } }
             });
             // Simple auth check: owner or assigned provider
             if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'DISPATCHING') {
@@ -119,7 +132,7 @@ export async function GET(request: Request) {
             orderBy: { createdAt: 'desc' },
             include: {
                 customer: { select: { name: true } },
-                provider: { select: { name: true } }
+                provider: { select: { name: true, latitude: true, longitude: true } }
             }
         });
 

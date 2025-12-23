@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Badge as StatusBadge } from '@/components/ui/badge';
+import { ProviderMap } from './ProviderMap';
+import { MapPin } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -16,17 +18,53 @@ export function ProviderView({ user }: { user: any }) {
     useEffect(() => {
         // Request location permission on mount for Providers too
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    console.log("Provider location access granted", position.coords);
-                    // Future: Update provider location in DB via API
-                },
-                (error) => {
-                    console.error("Provider location access denied", error);
+            // Heartbeat location update
+            const updateLocation = async () => {
+                // Simulation Logic: If this is the simulator account, move towards the job
+                if (user.email === 'simulator@demo.com') {
+                    // Find active job
+                    const activeJob = jobs?.find((j: any) => ['ACCEPTED', 'IN_PROGRESS'].includes(j.status));
+                    if (activeJob && activeJob.latitude && activeJob.longitude) {
+                        const currentLat = user.latitude || 51.5874;
+                        const currentLng = user.longitude || -0.0478;
+
+                        // Move 20% closer every update
+                        const newLat = currentLat + (activeJob.latitude - currentLat) * 0.2;
+                        const newLng = currentLng + (activeJob.longitude - currentLng) * 0.2;
+
+                        try {
+                            await fetch('/api/user/location', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ latitude: newLat, longitude: newLng })
+                            });
+                        } catch (e) { }
+                        return; // Skip normal geolocation update
+                    }
                 }
-            );
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        try {
+                            await fetch('/api/user/location', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ latitude, longitude })
+                            });
+                        } catch (e) {
+                            console.error("Failed to heart-beat location", e);
+                        }
+                    },
+                    (error) => console.error("Location error", error),
+                    { enableHighAccuracy: true }
+                );
+            };
+
+            const interval = setInterval(updateLocation, 10000); // Every 10s
+            return () => clearInterval(interval);
         }
-    }, []);
+    }, [user, jobs]);
 
     const acceptJob = async (jobId: string) => {
         try {
@@ -94,7 +132,22 @@ export function ProviderView({ user }: { user: any }) {
                             <span className="text-sm font-mono font-bold">£{job.fixedPrice}</span>
                         </div>
                         <h3 className="font-semibold mb-1">{job.description}</h3>
-                        <p className="text-sm text-gray-500 mb-4">{job.location}</p>
+                        <p className="text-sm text-gray-500 mb-4 flex items-start gap-1">
+                            <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                            {job.location}
+                        </p>
+
+                        {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.latitude && (
+                            <div className="mb-4">
+                                <ProviderMap
+                                    providerLat={user.latitude || 51.5074} // Fallback to London 
+                                    providerLon={user.longitude || -0.1278}
+                                    jobLat={job.latitude}
+                                    jobLon={job.longitude}
+                                    showRoute={true}
+                                />
+                            </div>
+                        )}
 
                         <div className="flex gap-2">
                             {job.status === 'ACCEPTED' && (

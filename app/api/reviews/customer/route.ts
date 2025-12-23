@@ -29,7 +29,8 @@ export async function POST(request: Request) {
             prisma.customerReview.create({
                 data: {
                     jobId,
-                    reviewerId: userId,
+                    customerId: userId,
+                    providerId: job.providerId!,
                     rating: parseInt(rating),
                     comment,
                 }

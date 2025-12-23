@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ServiceSelection } from './ServiceSelection';
 import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
+import { ProviderMap } from './ProviderMap';
 import { ServiceCategory } from '@/lib/constants';
 import { Plus, MapPin } from 'lucide-react';
 
@@ -23,6 +24,7 @@ export function CustomerView({ user }: { user: any }) {
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
+    const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isLocating, setIsLocating] = useState(false);
 
     useEffect(() => {
@@ -32,6 +34,7 @@ export function CustomerView({ user }: { user: any }) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const { latitude, longitude } = position.coords;
+                    setUserCoords({ lat: latitude, lng: longitude });
                     try {
                         // Free reverse geocoding via OpenStreetMap (Nominatim)
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
@@ -68,6 +71,8 @@ export function CustomerView({ user }: { user: any }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...details,
+                    latitude: userCoords?.lat,
+                    longitude: userCoords?.lng,
                     category: selectedCategory,
                     price: 0 // Backend fills from Matrix, passing 0 placeholder
                 }),
@@ -125,14 +130,49 @@ export function CustomerView({ user }: { user: any }) {
         );
     }
 
+    const handleCreateSimulation = async () => {
+        // Find customer's current location to spawn provider 15 mins (approx 7-8km) away
+        let lat = userCoords?.lat || 51.5074;
+        let lng = userCoords?.lng || -0.1278;
+
+        try {
+            const res = await fetch('/api/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    description: "Simulation: Fix a leaking pipe",
+                    location: userLocation || "London, UK",
+                    latitude: lat,
+                    longitude: lng,
+                    category: 'PLUMBER',
+                    isSimulation: true,
+                    price: 0
+                }),
+            });
+            if (res.ok) {
+                const job = await res.json();
+                setActiveJobId(job.id);
+                setStep('WAITING');
+                mutate();
+            }
+        } catch (e) {
+            console.error("Sim creation failed", e);
+        }
+    };
+
     // Default: LIST
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-4">
                 <h2 className="text-xl font-semibold">Your Jobs</h2>
-                <Button onClick={() => setStep('SELECT')} className="gap-2">
-                    <Plus className="w-4 h-4" /> New Request
-                </Button>
+                <div className="flex gap-2">
+                    <Button onClick={handleCreateSimulation} variant="outline" className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50">
+                        Spawn Test Job (15m delay)
+                    </Button>
+                    <Button onClick={() => setStep('SELECT')} className="gap-2">
+                        <Plus className="w-4 h-4" /> New Request
+                    </Button>
+                </div>
             </div>
 
             {!jobs ? <p>Loading...</p> : jobs.length === 0 ? (
@@ -164,6 +204,16 @@ export function CustomerView({ user }: { user: any }) {
                                     <span>{job.location}</span>
                                     {job.provider && <span className="text-blue-600 font-medium">Pro: {job.provider.name}</span>}
                                 </div>
+                                {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.provider?.latitude && job.latitude && (
+                                    <div className="mt-4">
+                                        <ProviderMap
+                                            providerLat={job.provider.latitude}
+                                            providerLon={job.provider.longitude}
+                                            jobLat={job.latitude}
+                                            jobLon={job.longitude}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </Card>
                     ))}

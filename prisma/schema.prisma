@@ -33,12 +33,19 @@ model User {
   
   // Financials
   transactions    Transaction[]
+  
+  // Reviews
+  customerReviews CustomerReview[] @relation("CustomerReviews")
+  providerReviews CustomerReview[] @relation("ProviderReviews")
+  adminReviews    AdminReview[]
 }
 
 model Job {
   id          String    @id @default(uuid())
   description String
   location    String    // Human readable address
+  latitude    Float?
+  longitude   Float?
   
   // Job Specifics
   category    String    // One of the valid categories
@@ -64,7 +71,11 @@ model Job {
   providerId  String?
   provider    User?     @relation("ProviderJobs", fields: [providerId], references: [id])
 
+  isSimulation Boolean   @default(false)
+
   transactions Transaction[]
+  customerReview CustomerReview?
+  adminReview    AdminReview?
 }
 
 model Transaction {
@@ -80,4 +91,34 @@ model Transaction {
   user      User?    @relation(fields: [userId], references: [id])
   
   createdAt DateTime @default(now())
+}
+
+model CustomerReview {
+  id          String   @id @default(uuid())
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  jobId       String   @unique
+  job         Job      @relation(fields: [jobId], references: [id])
+  
+  customerId  String
+  customer    User     @relation(name: "CustomerReviews", fields: [customerId], references: [id])
+  
+  providerId  String
+  provider    User     @relation(name: "ProviderReviews", fields: [providerId], references: [id])
+}
+
+model AdminReview {
+  id          String   @id @default(uuid())
+  rating      Int?
+  notes       String?
+  decision    String?  // e.g. "APPROVED", "REJECTED"
+  createdAt   DateTime @default(now())
+
+  jobId       String   @unique
+  job         Job      @relation(fields: [jobId], references: [id])
+
+  reviewerId  String
+  reviewer    User     @relation(fields: [reviewerId], references: [id])
 }
