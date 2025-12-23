@@ -3,109 +3,172 @@
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { clsx } from 'clsx';
+import { ServiceSelection } from './ServiceSelection';
+import { JobCreationForm } from './JobCreationForm';
+import { DispatchTimer } from './DispatchTimer';
+import { ServiceCategory } from '@/lib/constants';
+import { Plus, MapPin } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export function CustomerView({ user }: { user: any }) {
-    const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
-    const [description, setDescription] = useState('');
-    const [location, setLocation] = useState('');
-    const [price, setPrice] = useState('');
-    const [creating, setCreating] = useState(false);
+    const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
-    const createJob = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setCreating(true);
-        await fetch('/api/jobs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description, location, price }),
-        });
-        setCreating(false);
-        setDescription('');
-        setLocation('');
-        setPrice('');
-        mutate(); // Refresh list immediately
+    // Steps: LIST -> SELECT -> CREATE -> WAITING
+    const [step, setStep] = useState<'LIST' | 'SELECT' | 'CREATE' | 'WAITING'>('LIST');
+    const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
+    const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+    // Location Logic
+    const [userLocation, setUserLocation] = useState<string>('');
+    const [isLocating, setIsLocating] = useState(false);
+
+    useEffect(() => {
+        // Auto-grab location on mount (page load)
+        if (navigator.geolocation && !userLocation) {
+            setIsLocating(true);
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    try {
+                        // Free reverse geocoding via OpenStreetMap (Nominatim)
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            // Construct simple address
+                            const address = data.display_name.split(',').slice(0, 3).join(', ');
+                            setUserLocation(address);
+                        }
+                    } catch (e) {
+                        console.error("Geocoding failed", e);
+                        setUserLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+                    } finally {
+                        setIsLocating(false);
+                    }
+                },
+                (error) => {
+                    console.error("Location permission denied or failed", error);
+                    setIsLocating(false);
+                }
+            );
+        }
+    }, []);
+
+    const handleCategorySelect = (category: ServiceCategory) => {
+        setSelectedCategory(category);
+        setStep('CREATE');
     };
 
-    const submitReview = async (jobId: string) => {
-        const rating = prompt("Rate (1-5):");
-        const comment = prompt("Comment:");
-        if (!rating) return;
-        await fetch('/api/reviews/customer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId, rating, comment })
-        });
+    const handleCreateJob = async (details: any) => {
+        try {
+            const res = await fetch('/api/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...details,
+                    category: selectedCategory,
+                    price: 0 // Backend fills from Matrix, passing 0 placeholder
+                }),
+            });
+            if (res.ok) {
+                const job = await res.json();
+                setActiveJobId(job.id);
+                setStep('WAITING');
+                mutate();
+            }
+        } catch (e) {
+            console.error("Job creation failed", e);
+        }
+    };
+
+    const handleCancelJob = async () => {
+        if (!activeJobId) return;
+        await fetch(`/api/jobs/${activeJobId}/cancel`, { method: 'POST' });
+        setStep('LIST');
         mutate();
+    };
+
+    // Render Logic
+    if (step === 'SELECT') {
+        return (
+            <div className="space-y-4">
+                <Button variant="ghost" onClick={() => setStep('LIST')} className="mb-4">← Back to Dashboard</Button>
+                <h1 className="text-2xl font-bold mb-6">Select a Service</h1>
+                <ServiceSelection onSelect={handleCategorySelect} />
+            </div>
+        );
     }
 
+    if (step === 'CREATE' && selectedCategory) {
+        return (
+            <div className="space-y-4">
+                <JobCreationForm
+                    category={selectedCategory}
+                    onSubmit={handleCreateJob}
+                    onBack={() => setStep('SELECT')}
+                    loading={false}
+                    defaultLocation={userLocation}
+                />
+            </div>
+        );
+    }
+
+    if (step === 'WAITING' && activeJobId) {
+        return (
+            <DispatchTimer
+                jobId={activeJobId}
+                onCompleted={() => setStep('LIST')}
+                onCancel={handleCancelJob}
+            />
+        );
+    }
+
+    // Default: LIST
     return (
         <div className="space-y-8">
-            {/* Create Job Section */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Create New Job</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={createJob} className="flex gap-4 items-end">
-                        <div className="flex-1 space-y-2">
-                            <label className="text-sm font-medium">What needs to be done?</label>
-                            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Fix leaky tap" required />
-                        </div>
-                        <div className="w-48 space-y-2">
-                            <label className="text-sm font-medium">Location</label>
-                            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Apt 4B" required />
-                        </div>
-                        <div className="w-32 space-y-2">
-                            <label className="text-sm font-medium">Price ($)</label>
-                            <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="50" required />
-                        </div>
-                        <Button type="submit" disabled={creating}>{creating ? 'Creating...' : 'Post Job'}</Button>
-                    </form>
-                </CardContent>
-            </Card>
-
-            {/* Active Jobs List */}
-            <div className="space-y-4">
+            <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold">Your Jobs</h2>
-                {!jobs ? <p>Loading...</p> : jobs.length === 0 ? <p className="text-gray-500">No jobs yet.</p> : (
-                    <div className="grid gap-4">
-                        {jobs.map((job: any) => (
-                            <Card key={job.id} className="overflow-hidden">
-                                <div className="flex justify-between p-6 items-center">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="font-semibold text-lg">{job.description}</h3>
-                                            <Badge status={job.status}>{job.status}</Badge>
-                                        </div>
-                                        <p className="text-sm text-gray-500">{job.location} • ${job.price}</p>
-                                        {job.provider && <p className="text-sm text-blue-600 mt-2">Provider: {job.provider.name}</p>}
-                                    </div>
-
-                                    {job.status === 'COMPLETED' && (
-                                        <Button onClick={() => submitReview(job.id)} size="sm">Rate Provider</Button>
-                                    )}
-                                </div>
-                                {/* Visual Progress Bar */}
-                                <div className="h-1 w-full bg-gray-100">
-                                    <div className={clsx("h-full transition-all duration-500", {
-                                        'w-[10%] bg-blue-500': job.status === 'CREATED',
-                                        'w-[25%] bg-yellow-500': job.status === 'DISPATCHING',
-                                        'w-[50%] bg-indigo-500': job.status === 'ACCEPTED',
-                                        'w-[75%] bg-orange-500': job.status === 'IN_PROGRESS',
-                                        'w-[100%] bg-green-500': ['COMPLETED', 'CUSTOMER_REVIEWED', 'ADMIN_REVIEWED', 'CLOSED'].includes(job.status)
-                                    })} />
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
-                )}
+                <Button onClick={() => setStep('SELECT')} className="gap-2">
+                    <Plus className="w-4 h-4" /> New Request
+                </Button>
             </div>
+
+            {!jobs ? <p>Loading...</p> : jobs.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed text-gray-400">
+                    No active jobs. Start a new request!
+                </div>
+            ) : (
+                <div className="grid gap-4">
+                    {jobs.map((job: any) => (
+                        <Card key={job.id} className="overflow-hidden">
+                            <div className="p-6">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="space-y-1">
+                                        <Badge variant={
+                                            ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
+                                                ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' : 'secondary'
+                                        } className="mb-2">
+                                            {job.status.replace('_', ' ')}
+                                        </Badge>
+                                        <h3 className="font-bold text-lg">{job.category}</h3>
+                                        <p className="font-medium text-gray-800">{job.description}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-bold text-lg">£{job.fixedPrice}</div>
+                                        <div className="text-sm text-gray-500">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                                    </div>
+                                </div>
+                                <div className="mt-4 pt-4 border-t flex justify-between text-sm text-gray-500">
+                                    <span>{job.location}</span>
+                                    {job.provider && <span className="text-blue-600 font-medium">Pro: {job.provider.name}</span>}
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

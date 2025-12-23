@@ -7,37 +7,22 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-// Enums
-enum Role {
-  CUSTOMER
-  PROVIDER
-  ADMIN
-}
-
-enum JobStatus {
-  CREATED
-  DISPATCHING
-  ACCEPTED
-  IN_PROGRESS
-  COMPLETED
-  CUSTOMER_REVIEWED
-  ADMIN_REVIEWED
-  CLOSED
-  CANCELLED
-  FAILED
-}
-
-// Models
+// Valid Roles: CUSTOMER, PROVIDER, ADMIN
+// Valid Categories: CLEANING, PEST_CONTROL, ELECTRICIAN, PLUMBER, CARPENTER, PAINTER, PC_REPAIR
+// Valid JobStatuses: CREATED, DISPATCHING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED_FREE, CANCELLED_CHARGED, CLOSED
 
 model User {
   id              String   @id @default(uuid())
   email           String   @unique
   name            String
   passwordHash    String
-  role            Role     @default(CUSTOMER)
+  role            String   @default("CUSTOMER")
   
   // Provider specific
   isOnline        Boolean  @default(false)
+  categories      String?  // Comma-separated list of categories (SQLite workaround for String[])
+  latitude        Float?
+  longitude       Float?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -46,54 +31,53 @@ model User {
   jobsCreated     Job[]    @relation("CustomerJobs")
   jobsAssigned    Job[]    @relation("ProviderJobs")
   
-  customerReviews CustomerReview[]
-  adminReviews    AdminReview[]
+  // Financials
+  transactions    Transaction[]
 }
 
 model Job {
   id          String    @id @default(uuid())
   description String
-  location    String
-  price       Float     
-  status      JobStatus @default(CREATED)
+  location    String    // Human readable address
   
+  // Job Specifics
+  category    String    // One of the valid categories
+  fixedPrice  Float
+  isASAP      Boolean   @default(true)
+  scheduledAt DateTime? // If not ASAP
+  
+  status      String    @default("CREATED")
+  dispatchRadius Int    @default(5) // In km, expands over time
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  acceptedAt  DateTime?
+  
+  // Cancellation
+  cancellationReason String?
+  
+  // Relations
   customerId  String
   customer    User      @relation("CustomerJobs", fields: [customerId], references: [id])
   
   providerId  String?
   provider    User?     @relation("ProviderJobs", fields: [providerId], references: [id])
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  customerReview CustomerReview?
-  adminReview    AdminReview?
+  transactions Transaction[]
 }
 
-model CustomerReview {
+model Transaction {
   id        String   @id @default(uuid())
-  rating    Int      // 1-5
-  comment   String?
+  amount    Float
+  type      String   // PAYOUT, CHARGE, FEE
+  status    String   // PENDING, COMPLETED, FAILED
   
-  jobId     String   @unique
+  jobId     String
   job       Job      @relation(fields: [jobId], references: [id])
   
-  reviewerId String
-  reviewer   User     @relation(fields: [reviewerId], references: [id])
-
-  createdAt DateTime @default(now())
-}
-
-model AdminReview {
-  id        String   @id @default(uuid())
-  rating    Int      // 1-5 (Reliability)
-  notes     String?
+  userId    String?  // Who is this transaction for (e.g. Provider for Payout, Customer for Charge)
+  user      User?    @relation(fields: [userId], references: [id])
   
-  jobId     String   @unique
-  job       Job      @relation(fields: [jobId], references: [id])
-  
-  reviewerId String
-  reviewer   User     @relation(fields: [reviewerId], references: [id])
-
   createdAt DateTime @default(now())
 }

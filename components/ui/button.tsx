@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export interface ButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'default' | 'outline' | 'ghost' | 'danger';
+    variant?: 'default' | 'outline' | 'ghost' | 'danger' | 'destructive';
     size?: 'sm' | 'md' | 'lg';
 }
 
@@ -23,7 +23,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                         "bg-foreground text-background hover:opacity-90": variant === "default",
                         "border border-foreground/20 hover:bg-foreground/5": variant === "outline",
                         "hover:bg-foreground/5": variant === "ghost",
-                        "bg-red-500 text-white hover:bg-red-600": variant === "danger",
+                        "bg-red-500 text-white hover:bg-red-600": variant === "danger" || variant === "destructive",
                         "h-9 px-4": size === "sm",
                         "h-11 px-6": size === "md",
                         "h-14 px-8 text-base": size === "lg",

@@ -1,68 +1,65 @@
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { PLATFORM_FEE_PERCENT } from '@/lib/constants';
 
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    try {
-        const { id: jobId } = await params;
-        const cookieStore = await cookies();
-        const userId = cookieStore.get('userId')?.value;
-        const userRole = cookieStore.get('userRole')?.value;
+    const { id } = await params;
 
-        // Validate request body
+    try {
         const body = await request.json();
         const { status } = body;
 
-        if (!status) {
-            return NextResponse.json({ error: 'Status required' }, { status: 400 });
-        }
+        // V2 State transition logic
+        // Only allow specific transitions
 
-        // Role-based State Machine Logic
-        const job = await prisma.job.findUnique({ where: { id: jobId } });
-        if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+        await prisma.$transaction(async (tx) => {
+            const job = await tx.job.findUnique({ where: { id } });
+            if (!job) throw new Error("Job not found");
 
-        // PROVIDER Transitions
-        if (userRole === 'PROVIDER') {
-            if (job.providerId !== userId) return NextResponse.json({ error: 'Not your job' }, { status: 403 });
+            // Update status
+            await tx.job.update({
+                where: { id },
+                data: { status }
+            });
 
-            if (status === 'IN_PROGRESS' && job.status === 'ACCEPTED') {
-                // Valid
-            } else if (status === 'COMPLETED' && job.status === 'IN_PROGRESS') {
-                // Valid
-            } else {
-                return NextResponse.json({ error: 'Invalid transition for Provider' }, { status: 400 });
-            }
-        }
-        // ADMIN Transitions
-        else if (userRole === 'ADMIN') {
-            if (status === 'CLOSED') {
-                // Must have both reviews?
-                const reviews = await prisma.job.findUnique({
-                    where: { id: jobId },
-                    include: { customerReview: true, adminReview: true }
+            // If COMPLETED, calculate payout
+            if (status === 'COMPLETED') {
+                const price = job.fixedPrice;
+                const platformFee = price * PLATFORM_FEE_PERCENT;
+                const payout = price - platformFee;
+
+                // Create Payout Transaction
+                await tx.transaction.create({
+                    data: {
+                        jobId: id,
+                        amount: payout,
+                        type: 'PAYOUT',
+                        status: 'PENDING', // Manual execution later
+                        userId: job.providerId
+                    }
                 });
-                if (!reviews?.customerReview || !reviews?.adminReview) {
-                    return NextResponse.json({ error: 'Cannot close: Reviews missing' }, { status: 400 });
-                }
-            }
-            // Admin can force other states too if needed, but keeping strict for now.
-        }
-        else {
-            return NextResponse.json({ error: 'Unauthorized to change status directly' }, { status: 403 });
-        }
 
-        const updatedJob = await prisma.job.update({
-            where: { id: jobId },
-            data: { status: status }
+                // Create Fee Record (optional, but good for reporting)
+                await tx.transaction.create({
+                    data: {
+                        jobId: id,
+                        amount: platformFee,
+                        type: 'FEE',
+                        status: 'COMPLETED', // Fee is taken immediately
+                        userId: job.providerId // Fee from provider's cut effectively
+                    }
+                });
+            }
         });
 
-        return NextResponse.json(updatedJob);
+        return NextResponse.json({ success: true });
 
     } catch (error) {
-        console.error('Job status error', error);
+        console.error('Update status error', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

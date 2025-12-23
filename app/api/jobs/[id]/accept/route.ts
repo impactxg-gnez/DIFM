@@ -1,46 +1,52 @@
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
 
 export async function POST(
     request: Request,
-    { params }: { params: Promise<{ id: string }> } // Params are promise in Next 15
+    { params }: { params: Promise<{ id: string }> } // Next.js 15: props.params is a Promise
 ) {
+    const { id } = await params;
+
     try {
-        const { id: jobId } = await params;
-        const cookieStore = await cookies();
-        const providerId = cookieStore.get('userId')?.value;
-        const userRole = cookieStore.get('userRole')?.value;
+        const body = await request.json();
+        const { providerId } = body;
 
-        if (!providerId || userRole !== 'PROVIDER') {
-            return NextResponse.json({ error: 'Unauthorized: Only providers can accept jobs' }, { status: 403 });
+        // Transaction to ensure race condition safety
+        // Only accept if status is DISPATCHING
+
+        try {
+            const result = await prisma.$transaction(async (tx) => {
+                const job = await tx.job.findUnique({
+                    where: { id }
+                });
+
+                if (!job) {
+                    throw new Error("Job not found");
+                }
+
+                if (job.status !== 'DISPATCHING') {
+                    throw new Error("Job is no longer available");
+                }
+
+                // Lock the job
+                const updatedJob = await tx.job.update({
+                    where: { id },
+                    data: {
+                        status: 'ACCEPTED',
+                        providerId,
+                        acceptedAt: new Date()
+                    }
+                });
+
+                return updatedJob;
+            });
+
+            return NextResponse.json(result);
+
+        } catch (e: any) {
+            return NextResponse.json({ error: e.message }, { status: 409 });
         }
-
-        // Atomic acceptance using interactive transaction or updateMany with where clause
-        // 'updateMany' ensures we only update if it is still null and DISPATCHING
-        const result = await prisma.job.updateMany({
-            where: {
-                id: jobId,
-                status: 'DISPATCHING', // Must be in this state
-                providerId: null       // Must be unassigned
-            },
-            data: {
-                providerId: providerId,
-                status: 'ACCEPTED',
-                updatedAt: new Date() // force update
-            }
-        });
-
-        if (result.count === 0) {
-            return NextResponse.json({ error: 'Job already accepted or not available' }, { status: 409 });
-        }
-
-        // Fetch the updated job to return
-        const updatedJob = await prisma.job.findUnique({
-            where: { id: jobId }
-        });
-
-        return NextResponse.json(updatedJob);
 
     } catch (error) {
         console.error('Accept job error', error);

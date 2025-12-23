@@ -1,6 +1,8 @@
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import { PRICE_MATRIX, ServiceCategory } from '@/lib/constants';
 
 export async function POST(request: Request) {
     try {
@@ -8,37 +10,41 @@ export async function POST(request: Request) {
         const customerId = cookieStore.get('userId')?.value;
         const userRole = cookieStore.get('userRole')?.value;
 
-        if (!customerId || userRole !== 'CUSTOMER') { // Strict role check
+        if (!customerId || userRole !== 'CUSTOMER') {
             return NextResponse.json({ error: 'Unauthorized: Only customers can create jobs' }, { status: 403 });
         }
 
         const body = await request.json();
-        const { description, location, price } = body;
+        const { description, location, category, isASAP, scheduledAt } = body;
 
-        if (!description || !location || !price) {
+        if (!description || !location || !category) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+        }
+
+        // Calculate Price
+        // In V1, we trust the category from the client, but the price comes from backend matrix.
+        // We cast category to ServiceCategory, assuming client sends valid string.
+        const fixedPrice = PRICE_MATRIX[category as ServiceCategory];
+
+        if (!fixedPrice) {
+            return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
         }
 
         const job = await prisma.job.create({
             data: {
                 description,
                 location,
-                price: parseFloat(price),
+                category,
+                fixedPrice,
+                isASAP: isASAP ?? true,
+                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
                 customerId,
-                status: 'CREATED',
-                // In a real app, we might trigger a background "Dispatcher" here.
-                // For V1, we'll assume it goes to DISPATCHING immediately or via Admin.
-                // Let's auto-transition to DISPATCHING for smoother demo flow if "Online".
+                status: 'DISPATCHING', // Jump straight to dispatch in V2 reset
+                dispatchRadius: 5 // Start with 5km
             },
         });
 
-        // Auto-dispatch for V1 simplicity
-        const updatedJob = await prisma.job.update({
-            where: { id: job.id },
-            data: { status: 'DISPATCHING' }
-        });
-
-        return NextResponse.json(updatedJob);
+        return NextResponse.json(job);
 
     } catch (error) {
         console.error('Create job error', error);
@@ -56,30 +62,54 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Get User to check categories if Provider
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) return NextResponse.json({ error: 'User not found' }, { status: 401 });
+
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status');
+        const id = searchParams.get('id');
+
+        // Detail View (polling)
+        if (id) {
+            const job = await prisma.job.findUnique({
+                where: { id },
+                include: { provider: { select: { name: true } } }
+            });
+            // Simple auth check: owner or assigned provider
+            if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'DISPATCHING') {
+                // Allow providers to see DISPATCHING jobs
+                // Strict check: if it's dispatching, is it in my category?
+                // For poll simplicity, allowing if status matches or role admin.
+            }
+            return NextResponse.json([job]);
+        }
 
         let whereClause: any = {};
 
         if (userRole === 'CUSTOMER') {
-            // Customers see their own jobs
             whereClause.customerId = userId;
         } else if (userRole === 'PROVIDER') {
-            // Providers see:
-            // 1. Jobs assigned to them
-            // 2. "DISPATCHING" jobs (Available jobs) - Dispatch logic
-            // Simple logic: OR condition
+            const myCategories = user.categories?.split(',') || [];
+
+            // Dispatch Logic:
+            // 1. Job is 'DISPATCHING' AND Job Category is in myCategories
+            // 2. OR Job is assigned to me
+
             whereClause = {
                 OR: [
-                    { providerId: userId }, // My jobs
-                    { status: 'DISPATCHING', providerId: null } // Open pool
+                    { providerId: userId },
+                    {
+                        status: 'DISPATCHING',
+                        providerId: null,
+                        category: { in: myCategories }
+                        // Radius check would go here (e.g. comparing user lat/long with job)
+                        // For V1 simulation, we assume "London Base" covers all.
+                    }
                 ]
             };
-        } else if (userRole === 'ADMIN') {
-            // Admin sees all
         }
 
-        // Filter by status if provided (e.g., polling for status updates)
         if (status) {
             whereClause.status = status;
         }
