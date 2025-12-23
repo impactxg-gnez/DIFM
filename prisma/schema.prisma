@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Used for migrations against the primary (non-pgbouncer) connection
 }
 
 // Valid Roles: CUSTOMER, PROVIDER, ADMIN

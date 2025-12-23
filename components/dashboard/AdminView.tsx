@@ -9,7 +9,7 @@ import { MapPin, ShieldAlert, CheckCircle, XCircle } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function AdminView() {
+export function AdminView({ user }: { user: any }) { // user prop accepted for consistency with Dashboard routing
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
     const handleOverrideStatus = async (jobId: string, newStatus: string) => {
