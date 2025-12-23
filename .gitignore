@@ -41,5 +41,4 @@ next-env.d.ts
 # dev/test scripts (optional, keeping verification ones but removing log files if any)
 verify_flow*.js
 verify_v2.js
-seed_*.js
 *.log

@@ -127,16 +127,34 @@ export async function GET(request: Request) {
             whereClause.status = status;
         }
 
-        const jobs = await prisma.job.findMany({
+        const rawJobs = await prisma.job.findMany({
             where: whereClause,
             orderBy: { createdAt: 'desc' },
             include: {
                 customer: { select: { name: true } },
-                provider: { select: { name: true, latitude: true, longitude: true } }
+                provider: { select: { id: true, name: true, latitude: true, longitude: true } }
             }
         });
 
-        return NextResponse.json(jobs);
+        // Post-process to hide location data for privacy if status is DISPATCHING
+        const processedJobs = rawJobs.map((job: any) => {
+            if (!['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(job.status)) {
+                if (job.provider) {
+                    return {
+                        ...job,
+                        provider: {
+                            id: job.provider.id,
+                            name: job.provider.name,
+                            latitude: null,
+                            longitude: null
+                        }
+                    };
+                }
+            }
+            return job;
+        });
+
+        return NextResponse.json(processedJobs);
 
     } catch (error) {
         console.error('List jobs error', error);
