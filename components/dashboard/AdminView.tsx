@@ -29,7 +29,7 @@ export function AdminView({ user }: { user: any }) { // user prop accepted for c
         <div className="space-y-6">
             <div className="flex items-center gap-2 mb-6">
                 <ShieldAlert className="w-6 h-6 text-red-600" />
-                <h1 className="text-2xl font-bold italic tracking-tight uppercase">Admin Command Center</h1>
+                <h1 className="text-2xl font-bold italic tracking-tight uppercase text-gray-900">Admin Command Center</h1>
             </div>
 
             <div className="grid gap-4">
