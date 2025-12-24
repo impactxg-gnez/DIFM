@@ -4,7 +4,8 @@ import { Card } from '@/components/ui/card';
 import { Briefcase, Wrench, Zap, Paintbrush, Bug, Monitor, Hammer } from 'lucide-react';
 
 const ICONS = {
-    [SERVICE_CATEGORIES.CLEANING]: Briefcase, // Placeholder
+    [SERVICE_CATEGORIES.HANDYMAN]: Hammer,
+    [SERVICE_CATEGORIES.CLEANING]: Briefcase,
     [SERVICE_CATEGORIES.PEST_CONTROL]: Bug,
     [SERVICE_CATEGORIES.ELECTRICIAN]: Zap,
     [SERVICE_CATEGORIES.PLUMBER]: Wrench,

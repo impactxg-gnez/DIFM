@@ -1,5 +1,6 @@
 
 export const SERVICE_CATEGORIES = {
+    HANDYMAN: 'Handyman',
     CLEANING: 'Cleaning',
     PEST_CONTROL: 'Pest Control',
     ELECTRICIAN: 'Electrician',
@@ -12,6 +13,7 @@ export const SERVICE_CATEGORIES = {
 export type ServiceCategory = keyof typeof SERVICE_CATEGORIES;
 
 export const PRICE_MATRIX: Record<ServiceCategory, number> = {
+    HANDYMAN: 75,      // Call out + 1hr (most common use case)
     CLEANING: 40,      // Fixed price standard clean
     PEST_CONTROL: 80,  // Standard visit
     ELECTRICIAN: 70,   // Call out + 1hr

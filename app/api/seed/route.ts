@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 const SERVICE_CATEGORIES = [
-    'CLEANING', 'PEST_CONTROL', 'ELECTRICIAN',
+    'HANDYMAN', 'CLEANING', 'PEST_CONTROL', 'ELECTRICIAN',
     'PLUMBER', 'CARPENTER', 'PAINTER', 'PC_REPAIR'
 ];
 
