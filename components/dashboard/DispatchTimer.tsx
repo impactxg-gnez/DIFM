@@ -41,11 +41,11 @@ export function DispatchTimer({ jobId, onCompleted, onCancel }: DispatchTimerPro
     return (
         <div className="flex flex-col items-center justify-center p-8 space-y-6">
             <div className="relative flex items-center justify-center w-32 h-32 rounded-full border-4 border-blue-500">
-                <span className="text-4xl font-bold">{timeLeft}s</span>
+                <span className="text-4xl font-bold text-gray-900">{timeLeft}s</span>
             </div>
 
             <div className="text-center space-y-2">
-                <h2 className="text-2xl font-semibold">Finding your Pro...</h2>
+                <h2 className="text-2xl font-semibold text-gray-900">Finding your Pro...</h2>
                 <p className="text-gray-500">
                     {radiusExpanded
                         ? "Expanding search radius to nearby areas..."

@@ -32,7 +32,7 @@ export function ServiceSelection({ onSelect }: ServiceSelectionProps) {
                         onClick={() => onSelect(key)}
                     >
                         <Icon className="w-10 h-10 mb-3 text-blue-600" />
-                        <span className="font-semibold text-center">{label}</span>
+                        <span className="font-semibold text-center text-gray-900">{label}</span>
                     </Card>
                 );
             })}

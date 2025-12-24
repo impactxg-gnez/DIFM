@@ -95,7 +95,7 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
         <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                    <span>{SERVICE_CATEGORIES[category]} Service</span>
+                    <span className="text-gray-900">{SERVICE_CATEGORIES[category]} Service</span>
                     <span className="text-blue-600 font-bold">£{price}</span>
                 </CardTitle>
             </CardHeader>
@@ -121,7 +121,7 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                                             onClick={() => selectSuggestion(s.display_name)}
                                         >
                                             <MapPin className="w-4 h-4 mt-0.5 text-gray-500 shrink-0" />
-                                            <span>{s.display_name}</span>
+                                            <span className="text-gray-900">{s.display_name}</span>
                                         </div>
                                     ))}
                                     <div className="p-2 border-t text-xs text-right text-gray-400">Powered by OpenStreetMap</div>

@@ -99,8 +99,8 @@ export function CustomerView({ user }: { user: any }) {
     if (step === 'SELECT') {
         return (
             <div className="space-y-4">
-                <Button variant="ghost" onClick={() => setStep('LIST')} className="mb-4">← Back to Dashboard</Button>
-                <h1 className="text-2xl font-bold mb-6">Select a Service</h1>
+                <Button variant="ghost" onClick={() => setStep('LIST')} className="mb-4 text-gray-900 hover:text-gray-700">← Back to Dashboard</Button>
+                <h1 className="text-2xl font-bold mb-6 text-gray-900">Select a Service</h1>
                 <ServiceSelection onSelect={handleCategorySelect} />
             </div>
         );
@@ -164,7 +164,7 @@ export function CustomerView({ user }: { user: any }) {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center gap-4">
-                <h2 className="text-xl font-semibold">Your Jobs</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Your Jobs</h2>
                 <div className="flex gap-2">
                     <Button onClick={handleCreateSimulation} variant="outline" className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50">
                         Spawn Test Job (15m delay)
@@ -192,11 +192,11 @@ export function CustomerView({ user }: { user: any }) {
                                         } className="mb-2">
                                             {job.status.replace('_', ' ')}
                                         </Badge>
-                                        <h3 className="font-bold text-lg">{job.category}</h3>
+                                        <h3 className="font-bold text-lg text-gray-900">{job.category}</h3>
                                         <p className="font-medium text-gray-800">{job.description}</p>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-bold text-lg">£{job.fixedPrice}</div>
+                                        <div className="font-bold text-lg text-gray-900">£{job.fixedPrice}</div>
                                         <div className="text-sm text-gray-500">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
                                     </div>
                                 </div>
