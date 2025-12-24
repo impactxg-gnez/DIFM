@@ -61,7 +61,11 @@ export function ProviderView({ user }: { user: any }) {
                 );
             };
 
-            const interval = setInterval(updateLocation, 10000); // Every 10s
+            // Run immediately on mount
+            updateLocation();
+            
+            // Then run every 10s
+            const interval = setInterval(updateLocation, 10000);
             return () => clearInterval(interval);
         }
     }, [user, jobs]);
