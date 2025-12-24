@@ -102,15 +102,15 @@ export function ProviderView({ user }: { user: any }) {
         <div className="grid md:grid-cols-2 gap-8">
             {/* Available Jobs Column */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+                <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-900">
                     Available Jobs
-                    <span className="text-xs bg-gray-200 px-2 py-1 rounded-full">{availableJobs.length}</span>
+                    <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-gray-900">{availableJobs.length}</span>
                 </h2>
                 {availableJobs.map((job: any) => (
                     <Card key={job.id} className="p-4 border-l-4 border-l-yellow-400">
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <h3 className="font-semibold">{job.category} - {job.description}</h3>
+                                <h3 className="font-semibold text-gray-900">{job.category} - {job.description}</h3>
                                 <p className="text-sm text-gray-500">{job.location}</p>
                                 <div className="mt-2 text-lg font-bold text-blue-600">£{job.fixedPrice}</div>
                                 <p className="text-xs text-gray-400 mt-1">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</p>
@@ -124,14 +124,14 @@ export function ProviderView({ user }: { user: any }) {
 
             {/* My Active Jobs Column */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold">My Schedule</h2>
+                <h2 className="text-xl font-semibold text-gray-900">My Schedule</h2>
                 {myJobs.map((job: any) => (
                     <Card key={job.id} className="p-4">
                         <div className="flex justify-between items-center mb-2">
                             <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
-                            <span className="text-sm font-mono font-bold">£{job.fixedPrice}</span>
+                            <span className="text-sm font-mono font-bold text-gray-900">£{job.fixedPrice}</span>
                         </div>
-                        <h3 className="font-semibold mb-1">{job.description}</h3>
+                        <h3 className="font-semibold mb-1 text-gray-900">{job.description}</h3>
                         <p className="text-sm text-gray-500 mb-4 flex items-start gap-1">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
