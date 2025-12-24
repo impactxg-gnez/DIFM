@@ -38,7 +38,7 @@ export function AdminView({ user }: { user: any }) { // user prop accepted for c
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div className="space-y-2 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <Badge variant="outline" className="font-mono text-xs">{job.id.slice(0, 8)}</Badge>
+                                    <Badge variant="outline" className="font-mono text-xs text-gray-900">{job.id.slice(0, 8)}</Badge>
                                     <Badge 
                                         variant={job.status === 'COMPLETED' ? 'default' : job.status === 'CANCELLED_FREE' || job.status === 'CANCELLED_CHARGED' ? 'destructive' : 'secondary'}
                                         className="font-semibold"
@@ -47,7 +47,7 @@ export function AdminView({ user }: { user: any }) { // user prop accepted for c
                                     </Badge>
                                     {job.isASAP && <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">ASAP</Badge>}
                                 </div>
-                                <h3 className="font-bold text-lg">{job.category}</h3>
+                                <h3 className="font-bold text-lg text-gray-900">{job.category}</h3>
                                 <p className="text-sm text-gray-700">{job.description}</p>
                                 <div className="flex items-center gap-1 text-xs text-gray-500">
                                     <MapPin className="w-3 h-3" />
@@ -58,7 +58,7 @@ export function AdminView({ user }: { user: any }) { // user prop accepted for c
                                 <div className="flex items-center gap-2 text-sm pt-2 border-t border-gray-200 mt-2">
                                     <User className="w-4 h-4 text-blue-600" />
                                     <span className="font-medium text-gray-700">Customer:</span>
-                                    <span className="text-gray-600">{job.customer?.name || 'Unknown'} ({job.customer?.email || 'N/A'})</span>
+                                    <span className="text-gray-900">{job.customer?.name || 'Unknown'} ({job.customer?.email || 'N/A'})</span>
                                 </div>
                                 
                                 {/* Provider Info */}
@@ -66,7 +66,7 @@ export function AdminView({ user }: { user: any }) { // user prop accepted for c
                                     <div className="flex items-center gap-2 text-sm">
                                         <UserCog className="w-4 h-4 text-green-600" />
                                         <span className="font-medium text-gray-700">Provider:</span>
-                                        <span className="text-gray-600">{job.provider.name} ({job.provider.email})</span>
+                                        <span className="text-gray-900">{job.provider.name} ({job.provider.email})</span>
                                     </div>
                                 )}
                             </div>
