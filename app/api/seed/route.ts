@@ -41,6 +41,22 @@ export async function GET() {
             }
         });
 
+        // Simulator Provider
+        await prisma.user.upsert({
+            where: { email: 'simulator@demo.com' },
+            update: {},
+            create: {
+                email: 'simulator@demo.com',
+                name: 'Simulation Provider',
+                passwordHash,
+                role: 'PROVIDER',
+                categories: 'PLUMBER,CLEANING',
+                isOnline: true,
+                latitude: 51.5874,
+                longitude: -0.0478,
+            }
+        });
+
         // Admin
         await prisma.user.upsert({
             where: { email: 'admin@demo.com' },
