@@ -41,7 +41,7 @@ export default function LoginPage() {
         <div className="flex items-center justify-center min-h-screen bg-gray-50">
             <Card className="w-full max-w-md">
                 <CardHeader>
-                    <CardTitle className="text-2xl text-center">Login to DIFM</CardTitle>
+                    <CardTitle className="text-2xl text-center text-gray-900 font-bold">Login to DIFM</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleLogin} className="space-y-4">
