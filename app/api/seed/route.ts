@@ -98,6 +98,7 @@ export async function GET() {
             users: [
                 'customer@demo.com', 
                 'provider@demo.com', 
+                'simulator@demo.com',
                 'admin@demo.com',
                 'Plus 35 categorical providers'
             ],
