@@ -16,7 +16,7 @@ export async function GET() {
         // Customer
         await prisma.user.upsert({
             where: { email: 'customer@demo.com' },
-            update: {},
+            update: { passwordHash },
             create: {
                 email: 'customer@demo.com',
                 name: 'Demo Customer',
@@ -28,7 +28,7 @@ export async function GET() {
         // Provider (Generic)
         await prisma.user.upsert({
             where: { email: 'provider@demo.com' },
-            update: {},
+            update: { passwordHash, role: 'PROVIDER', categories: 'PLUMBER,ELECTRICIAN', isOnline: true },
             create: {
                 email: 'provider@demo.com',
                 name: 'Demo Provider (General)',
@@ -44,7 +44,7 @@ export async function GET() {
         // Simulator Provider
         await prisma.user.upsert({
             where: { email: 'simulator@demo.com' },
-            update: {},
+            update: { passwordHash, role: 'PROVIDER', categories: 'PLUMBER,CLEANING', isOnline: true },
             create: {
                 email: 'simulator@demo.com',
                 name: 'Simulation Provider',
@@ -60,7 +60,7 @@ export async function GET() {
         // Admin
         await prisma.user.upsert({
             where: { email: 'admin@demo.com' },
-            update: {},
+            update: { passwordHash, role: 'ADMIN' },
             create: {
                 email: 'admin@demo.com',
                 name: 'Demo Admin',
