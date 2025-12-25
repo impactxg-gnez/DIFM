@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { id, category, itemType, basePrice, isActive = true } = body;
+    const { id, category, itemType, basePrice, isActive = true, unit = 'EACH' } = body;
 
     if (!category || !itemType || typeof basePrice !== 'number') {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -32,10 +32,10 @@ export async function POST(request: Request) {
     const rule = id
         ? await prisma.pricingRule.update({
             where: { id },
-            data: { category, itemType, basePrice, isActive },
+            data: { category, itemType, basePrice, isActive, unit },
         })
         : await prisma.pricingRule.create({
-            data: { category, itemType, basePrice, isActive },
+            data: { category, itemType, basePrice, isActive, unit },
         });
 
     return NextResponse.json(rule);
