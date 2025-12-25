@@ -65,6 +65,11 @@ model Job {
   // Cancellation
   cancellationReason String?
   
+  // Pricing flags for intelligent pricing
+  isParsed    Boolean  @default(false)  // Whether AI parsed the description
+  needsReview Boolean  @default(false)  // Admin review required
+  priceOverride Float? // Manual admin override
+  
   // Relations
   customerId  String
   customer    User      @relation("CustomerJobs", fields: [customerId], references: [id])
@@ -77,6 +82,7 @@ model Job {
   transactions Transaction[]
   customerReview CustomerReview?
   adminReview    AdminReview?
+  items       JobItem[]
 }
 
 model Transaction {
@@ -122,4 +128,31 @@ model AdminReview {
 
   reviewerId  String
   reviewer    User     @relation(fields: [reviewerId], references: [id])
+}
+
+model PricingRule {
+  id          String   @id @default(uuid())
+  category    String   // e.g., "HANDYMAN"
+  itemType    String   // e.g., "MOUNT_TV", "SHELF", "GENERAL_HOUR"
+  basePrice   Float    // Base price for this item
+  unit        String   // "ITEM", "HOUR", "SQ_FT"
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model JobItem {
+  id          String   @id @default(uuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id])
+  
+  itemType    String   // References PricingRule.itemType
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+  
+  description String?  // Parsed from customer input
+  
+  createdAt   DateTime @default(now())
 }

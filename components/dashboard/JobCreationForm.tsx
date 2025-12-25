@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { MapPin } from 'lucide-react';
+import useSWR from 'swr';
 
 interface JobCreationFormProps {
     category: ServiceCategory;
@@ -20,6 +21,7 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
     const [location, setLocation] = useState(defaultLocation);
     const [isASAP, setIsASAP] = useState(true);
     const [scheduledTime, setScheduledTime] = useState('');
+    const [debouncedDesc, setDebouncedDesc] = useState('');
 
     // Autocomplete State
     const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -72,6 +74,29 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
         setShowSuggestions(false);
         setSuggestions([]);
     };
+
+    // Debounce description for live pricing
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedDesc(description), 400);
+        return () => clearTimeout(t);
+    }, [description]);
+
+    const fetcher = async () => {
+        if (!debouncedDesc) return null;
+        const res = await fetch('/api/pricing/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, description: debouncedDesc }),
+        });
+        if (!res.ok) return null;
+        return res.json();
+    };
+
+    const { data: pricePreview, isLoading: priceLoading } = useSWR(
+        debouncedDesc ? ['price-preview', debouncedDesc, category] : null,
+        fetcher,
+        { refreshInterval: 0 }
+    );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -138,6 +163,36 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                             placeholder="Describe the issue..."
                             required
                         />
+                    </div>
+
+                    {/* Live Pricing */}
+                    <div className="space-y-3 rounded-xl border border-blue-100 bg-white/70 backdrop-blur-sm p-4 shadow-inner">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-slate-800">Live Price Breakdown</span>
+                            <span className="text-xs text-slate-500">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
+                        </div>
+                        {pricePreview?.items?.length ? (
+                            <div className="space-y-2">
+                                {pricePreview.items.map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between text-sm text-slate-700">
+                                        <span className="font-medium">{item.quantity}x {item.itemType}</span>
+                                        <span>£{item.totalPrice.toFixed(2)}</span>
+                                    </div>
+                                ))}
+                                <div className="flex justify-between border-t pt-2 font-semibold text-slate-900">
+                                    <span>Total</span>
+                                    <span>£{pricePreview.totalPrice.toFixed(2)}</span>
+                                </div>
+                                {pricePreview.needsReview && (
+                                    <p className="text-xs text-amber-600">Flagged for admin review</p>
+                                )}
+                                {pricePreview.usedFallback && (
+                                    <p className="text-xs text-slate-500">Using fallback pricing</p>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{price}</p>
+                        )}
                     </div>
 
                     <div className="space-y-4 pt-4">

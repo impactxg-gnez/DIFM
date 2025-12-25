@@ -13,6 +13,7 @@
     "@prisma/client": "^5.22.0",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
+    "framer-motion": "^11.0.0",
     "lucide-react": "^0.460.0",
     "next": "16.1.1",
     "react": "^18.2.0",

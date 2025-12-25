@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { PRICE_MATRIX, ServiceCategory } from '@/lib/constants';
+import { calculateJobPrice } from '@/lib/pricing/calculator';
 
 export async function POST(request: Request) {
     try {
@@ -27,26 +28,48 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
         }
 
+        // Intelligent pricing
+        const pricing = await calculateJobPrice(category as ServiceCategory, description, true);
+
         // If simulation, calculate provider start position (approx 10km away)
         // 1 deg lat is approx 111km. 0.09 deg is approx 10km.
         let spawnLat = latitude ? parseFloat(latitude) + 0.08 : 51.5874;
         let spawnLng = longitude ? parseFloat(longitude) + 0.08 : -0.0478;
 
-        const job = await prisma.job.create({
-            data: {
-                description,
-                location,
-                latitude: latitude ? parseFloat(latitude) : null,
-                longitude: longitude ? parseFloat(longitude) : null,
-                category,
-                fixedPrice,
-                isASAP: isASAP ?? true,
-                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-                customerId,
-                status: 'DISPATCHING',
-                dispatchRadius: 5,
-                isSimulation: isSimulation ?? false
-            },
+        const job = await prisma.$transaction(async (tx) => {
+            const createdJob = await tx.job.create({
+                data: {
+                    description,
+                    location,
+                    latitude: latitude ? parseFloat(latitude) : null,
+                    longitude: longitude ? parseFloat(longitude) : null,
+                    category,
+                    fixedPrice: pricing.totalPrice,
+                    isASAP: isASAP ?? true,
+                    scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                    customerId,
+                    status: 'DISPATCHING',
+                    dispatchRadius: 5,
+                    isSimulation: isSimulation ?? false,
+                    needsReview: pricing.needsReview,
+                },
+            });
+
+            // Persist job items if any
+            if (pricing.items.length > 0) {
+                await tx.jobItem.createMany({
+                    data: pricing.items.map((item) => ({
+                        jobId: createdJob.id,
+                        itemType: item.itemType,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice,
+                        description: item.description,
+                    })),
+                });
+            }
+
+            return createdJob;
         });
 
         // Update Simulator Provider location if this is a sim

@@ -11,6 +11,7 @@ import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
 import { ServiceCategory } from '@/lib/constants';
 import { Plus, MapPin } from 'lucide-react';
+import { CustomerGreeting } from './CustomerGreeting';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -163,6 +164,7 @@ export function CustomerView({ user }: { user: any }) {
     // Default: LIST
     return (
         <div className="space-y-8">
+            <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
             <div className="flex justify-between items-center gap-4">
                 <h2 className="text-xl font-semibold text-gray-900">Your Jobs</h2>
                 <div className="flex gap-2">
