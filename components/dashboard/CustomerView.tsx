@@ -80,10 +80,15 @@ export function CustomerView({ user }: { user: any }) {
         }
     };
 
-    const handleCancelJob = async () => {
-        if (!activeJobId) return;
-        await fetch(`/api/jobs/${activeJobId}/cancel`, { method: 'POST' });
-        setStep('LIST');
+    const handleCancelJob = async (jobId?: string) => {
+        const targetId = jobId || activeJobId;
+        if (!targetId) return;
+        const confirmed = window.confirm('Cancel this job?');
+        if (!confirmed) return;
+        await fetch(`/api/jobs/${targetId}/cancel`, { method: 'POST' });
+        if (!jobId) {
+            setStep('LIST');
+        }
         mutate();
     };
 
@@ -106,7 +111,7 @@ export function CustomerView({ user }: { user: any }) {
             <DispatchTimer
                 jobId={activeJobId}
                 onCompleted={() => setStep('LIST')}
-                onCancel={handleCancelJob}
+                onCancel={() => handleCancelJob()}
             />
         );
     }
@@ -166,7 +171,7 @@ export function CustomerView({ user }: { user: any }) {
                     {jobs.map((job: any) => (
                         <Card key={job.id} className="overflow-hidden">
                             <div className="p-6">
-                                <div className="flex justify-between items-start mb-2">
+                                <div className="flex justify-between items-start mb-2 gap-4">
                                     <div className="space-y-1">
                                         <Badge variant={
                                             ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
@@ -180,6 +185,18 @@ export function CustomerView({ user }: { user: any }) {
                                     <div className="text-right">
                                         <div className="font-bold text-lg text-gray-900">£{job.fixedPrice}</div>
                                         <div className="text-sm text-gray-500">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                                        {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED'].includes(job.status) && (
+                                            <div className="mt-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                                    onClick={() => handleCancelJob(job.id)}
+                                                >
+                                                    Cancel order
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="mt-4 pt-4 border-t flex justify-between text-sm text-gray-500">
