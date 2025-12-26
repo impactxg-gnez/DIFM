@@ -23,6 +23,8 @@ export function AdminView({ user }: { user: any }) {
     const [activeTab, setActiveTab] = useState('jobs');
     const [cancelDialog, setCancelDialog] = useState<{ open: boolean; jobId?: string; status?: string; reason: string }>({ open: false, reason: '' });
     const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+    const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; jobId?: string; price?: number; reason: string }>({ open: false, reason: '' });
+    const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
     const { data: jobs, mutate: mutateJobs } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
     const { data: providers, mutate: mutateProviders } = useSWR(activeTab === 'providers' ? '/api/admin/providers' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
@@ -62,23 +64,41 @@ export function AdminView({ user }: { user: any }) {
     const closeCancelDialog = () => setCancelDialog({ open: false, reason: '' });
 
     const handleOverrideJob = async (jobId: string, price?: number, providerId?: string) => {
-        let reason: string | undefined;
         if (price !== undefined) {
-            const promptValue = window.prompt('Enter reason for price override');
-            if (!promptValue) return;
-            reason = promptValue;
+            setOverrideDialog({ open: true, jobId, price, reason: '' });
+            return;
         }
         await fetch(`/api/jobs/${jobId}/override`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                fixedPrice: price !== undefined ? Number(price) : undefined,
                 providerId: providerId || undefined,
-                reason,
             })
         });
         mutateJobs();
     };
+
+    const submitOverrideDialog = async () => {
+        if (!overrideDialog.jobId || overrideDialog.price === undefined) return;
+        if (!overrideDialog.reason.trim()) {
+            alert('Please enter a reason to override price.');
+            return;
+        }
+        setIsSubmittingOverride(true);
+        await fetch(`/api/jobs/${overrideDialog.jobId}/override`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fixedPrice: overrideDialog.price,
+                reason: overrideDialog.reason,
+            })
+        });
+        setIsSubmittingOverride(false);
+        setOverrideDialog({ open: false, reason: '' });
+        mutateJobs();
+    };
+
+    const closeOverrideDialog = () => setOverrideDialog({ open: false, reason: '' });
 
     const handleUpdateRule = async (rule: any) => {
         await fetch('/api/admin/pricing-rules', {
@@ -151,7 +171,17 @@ export function AdminView({ user }: { user: any }) {
                                 <div className="text-xl font-black text-slate-900">£{job.fixedPrice}</div>
                                 <div className="text-xs text-gray-500">Created: {new Date(job.createdAt).toLocaleString()}</div>
                                 <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <Input type="number" placeholder="Override £" onBlur={(e) => handleOverrideJob(job.id, Number(e.target.value) || undefined, undefined)} />
+                                    <Input
+                                        type="number"
+                                        placeholder="Override £"
+                                        onBlur={(e) => {
+                                            const val = Number(e.target.value);
+                                            if (!isNaN(val) && e.target.value) {
+                                                handleOverrideJob(job.id, val, undefined);
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                    />
                                     <Input type="text" placeholder="Provider ID" onBlur={(e) => handleOverrideJob(job.id, undefined, e.target.value)} />
                                 </div>
                                 <div className="flex gap-2 mt-1">
@@ -318,6 +348,38 @@ export function AdminView({ user }: { user: any }) {
                             </Button>
                             <Button variant="destructive" onClick={submitCancelDialog} disabled={isSubmittingCancel}>
                                 {isSubmittingCancel ? 'Cancelling...' : 'Confirm cancel'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {overrideDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold text-slate-900">Price override</h3>
+                            <p className="text-sm text-slate-600">Provide a new price and reason.</p>
+                        </div>
+                        <Input
+                            type="number"
+                            value={overrideDialog.price ?? ''}
+                            onChange={(e) => setOverrideDialog((prev) => ({ ...prev, price: Number(e.target.value) }))}
+                            placeholder="New price"
+                        />
+                        <textarea
+                            className="w-full rounded-md border border-slate-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            rows={4}
+                            placeholder="Reason for override"
+                            value={overrideDialog.reason}
+                            onChange={(e) => setOverrideDialog((prev) => ({ ...prev, reason: e.target.value }))}
+                        />
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={closeOverrideDialog} disabled={isSubmittingOverride}>
+                                Back
+                            </Button>
+                            <Button variant="default" onClick={submitOverrideDialog} disabled={isSubmittingOverride}>
+                                {isSubmittingOverride ? 'Updating...' : 'Confirm override'}
                             </Button>
                         </div>
                     </div>
