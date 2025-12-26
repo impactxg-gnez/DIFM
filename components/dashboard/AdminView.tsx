@@ -27,10 +27,18 @@ export function AdminView({ user }: { user: any }) {
 
     const handleOverrideStatus = async (jobId: string, newStatus: string) => {
         if (!confirm(`Force set job ${jobId.slice(0, 6)} to ${newStatus}?`)) return;
+
+        let reason: string | undefined;
+        if (newStatus.startsWith('CANCELLED')) {
+            const input = window.prompt('Enter cancellation reason');
+            if (!input) return;
+            reason = input;
+        }
+
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus })
+            body: JSON.stringify({ status: newStatus, reason })
         });
         mutateJobs();
     };
