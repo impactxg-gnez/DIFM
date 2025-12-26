@@ -36,12 +36,18 @@ export function AdminView({ user }: { user: any }) {
     };
 
     const handleOverrideJob = async (jobId: string, price?: number, providerId?: string) => {
+        let reason: string | undefined;
+        if (price !== undefined) {
+            reason = window.prompt('Enter reason for price override');
+            if (!reason) return;
+        }
         await fetch(`/api/jobs/${jobId}/override`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 fixedPrice: price !== undefined ? Number(price) : undefined,
                 providerId: providerId || undefined,
+                reason,
             })
         });
         mutateJobs();
@@ -78,6 +84,7 @@ export function AdminView({ user }: { user: any }) {
                                         {job.status}
                                     </Badge>
                                     {job.needsReview && <Badge variant="destructive">Needs Review</Badge>}
+                                    {job.isStuck && <Badge variant="destructive">Stuck</Badge>}
                                 </div>
                                 <h3 className="font-bold text-lg">{job.category}</h3>
                                 <p className="text-sm text-gray-700">{job.description}</p>
@@ -85,6 +92,32 @@ export function AdminView({ user }: { user: any }) {
                                     <MapPin className="w-3 h-3" />
                                     {job.location}
                                 </div>
+                                {job.items?.length > 0 && (
+                                    <div className="text-xs text-slate-700 bg-slate-50 border rounded p-3 space-y-1">
+                                        {job.items.map((item: any) => (
+                                            <div key={item.id} className="flex justify-between">
+                                                <span>{item.quantity}x {item.itemType}</span>
+                                                <span>£{item.totalPrice.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                        <div className="flex justify-between border-t pt-1 font-semibold">
+                                            <span>Total</span>
+                                            <span>£{job.fixedPrice.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {job.stateChanges?.length > 0 && (
+                                    <div className="text-xs text-slate-600 space-y-1">
+                                        <div className="font-semibold">State history</div>
+                                        {job.stateChanges.slice(-3).map((s: any) => (
+                                            <div key={s.id} className="flex justify-between">
+                                                <span>{s.fromStatus} → {s.toStatus}</span>
+                                                <span>{new Date(s.createdAt).toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {job.stuckReason && <div className="text-xs text-red-600">⚠ {job.stuckReason}</div>}
                             </div>
 
                             <div className="flex flex-col gap-2 text-right min-w-[240px]">

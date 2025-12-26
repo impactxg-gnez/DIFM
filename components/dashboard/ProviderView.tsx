@@ -99,7 +99,7 @@ export function ProviderView({ user }: { user: any }) {
 
     if (!jobs) return <div>Loading jobs...</div>;
 
-    const availableJobs = jobs.filter((j: any) => j.status === 'DISPATCHING');
+    const availableJobs = jobs.filter((j: any) => j.status === 'DISPATCHED');
     const myJobs = jobs.filter((j: any) => j.providerId === user.id);
 
     return (

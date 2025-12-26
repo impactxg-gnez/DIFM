@@ -1,5 +1,3 @@
-import { ServiceCategory } from './constants';
-
 interface ParsedItem {
   itemType: string;
   quantity: number;
@@ -12,37 +10,34 @@ interface ParseResult {
   needsReview: boolean;
 }
 
-// Item detection patterns for Handyman category
-const HANDYMAN_PATTERNS = {
-  MOUNT_TV: ['mount tv', 'hang tv', 'install tv', 'tv mount', 'tv installation'],
-  SHELF: ['shelf', 'shelve', 'shelving'],
-  PICTURE_HANG: ['hang picture', 'hang mirror', 'picture', 'mirror', 'frame'],
-  DOOR_FIX: ['door', 'hinge', 'door handle'],
-  FURNITURE_ASSEMBLY: ['assemble', 'assembly', 'furniture', 'ikea'],
-  CURTAIN_RAIL: ['curtain', 'blind', 'rail'],
-  LOCK_CHANGE: ['lock', 'deadbolt', 'key'],
-};
+type TaskKey =
+  | 'MOUNT_TV'
+  | 'SHELF'
+  | 'PICTURE_HANG'
+  | 'DOOR_FIX'
+  | 'FURNITURE_ASSEMBLY'
+  | 'CURTAIN_RAIL'
+  | 'LOCK_CHANGE'
+  | 'SMALL_PLUMBING'
+  | 'SMALL_ELECTRICAL'
+  | 'GENERAL_HOUR';
 
-const ELECTRICIAN_PATTERNS = {
-  OUTLET_INSTALL: ['outlet', 'socket', 'plug'],
-  LIGHT_FIXTURE: ['light', 'fixture', 'chandelier', 'lamp'],
-};
-
-const PLUMBER_PATTERNS = {
-  LEAK_FIX: ['leak', 'leaking', 'drip'],
-  DRAIN_UNBLOCK: ['drain', 'clog', 'block', 'unblock'],
-  TAP_INSTALL: ['tap', 'faucet', 'sink'],
-};
-
-const CATEGORY_PATTERNS: Record<ServiceCategory, Record<string, string[]>> = {
-  HANDYMAN: HANDYMAN_PATTERNS,
-  ELECTRICIAN: ELECTRICIAN_PATTERNS,
-  PLUMBER: PLUMBER_PATTERNS,
-  CLEANING: {},
-  PEST_CONTROL: {},
-  CARPENTER: {},
-  PAINTER: {},
-  PC_REPAIR: {},
+const HANDYMAN_TASKS: Record<
+  TaskKey,
+  { keywords: string[]; defaultQuantity?: number }
+> = {
+  MOUNT_TV: {
+    keywords: ['mount tv', 'hang tv', 'install tv', 'tv mount', 'tv installation'],
+  },
+  SHELF: { keywords: ['shelf', 'shelves', 'shelving'], defaultQuantity: 1 },
+  PICTURE_HANG: { keywords: ['hang picture', 'hang mirror', 'picture', 'mirror', 'frame'] },
+  DOOR_FIX: { keywords: ['door', 'hinge', 'door handle'] },
+  FURNITURE_ASSEMBLY: { keywords: ['assemble', 'assembly', 'furniture', 'ikea'] },
+  CURTAIN_RAIL: { keywords: ['curtain', 'blind', 'rail'] },
+  LOCK_CHANGE: { keywords: ['lock', 'deadbolt', 'key'] },
+  SMALL_PLUMBING: { keywords: ['leak', 'leaking', 'drip', 'tap', 'faucet'] },
+  SMALL_ELECTRICAL: { keywords: ['outlet', 'socket', 'plug', 'light', 'fixture', 'lamp'] },
+  GENERAL_HOUR: { keywords: [] },
 };
 
 // Quantity detection patterns
@@ -60,12 +55,8 @@ const QUANTITY_PATTERNS = [
 /**
  * Parse job description to detect multiple items and quantities
  */
-export async function parseJobDescription(
-  description: string,
-  category: ServiceCategory
-): Promise<ParseResult> {
+export async function parseJobDescription(description: string): Promise<ParseResult> {
   const lowerDesc = description.toLowerCase();
-  const patterns = CATEGORY_PATTERNS[category] || {};
   const detectedItems: ParsedItem[] = [];
   let totalConfidence = 0;
 
@@ -76,53 +67,59 @@ export async function parseJobDescription(
     const trimmedSegment = segment.trim();
     if (!trimmedSegment) continue;
 
-    // Try to match item types
-    for (const [itemType, keywords] of Object.entries(patterns)) {
-      const matched = keywords.some(keyword => trimmedSegment.includes(keyword));
-      
+    let matchedTask: TaskKey | null = null;
+
+    for (const [itemType, task] of Object.entries(HANDYMAN_TASKS) as [TaskKey, any][]) {
+      if (!task.keywords.length && matchedTask) continue;
+      const matched =
+        task.keywords.length === 0
+          ? false
+          : task.keywords.some((keyword: string) => trimmedSegment.includes(keyword));
+
       if (matched) {
-        // Extract quantity
-        let quantity = 1;
-        let quantityConfidence = 0.5;
-
-        // Look for explicit numbers
-        const numberMatch = trimmedSegment.match(/(\d+)/);
-        if (numberMatch) {
-          quantity = parseInt(numberMatch[1], 10);
-          quantityConfidence = 1.0;
-        } else {
-          // Look for word quantities
-          for (const qp of QUANTITY_PATTERNS) {
-            if (qp.type !== 'number' && qp.value) {
-              if (qp.pattern.test(trimmedSegment)) {
-                quantity = qp.value;
-                quantityConfidence = 0.8;
-                break;
-              }
-            }
-          }
-        }
-
-        detectedItems.push({
-          itemType,
-          quantity,
-          description: trimmedSegment,
-        });
-
-        totalConfidence += quantityConfidence;
-        break; // Only match one item type per segment
+        matchedTask = itemType;
+        break;
       }
     }
+
+    const itemType: TaskKey = matchedTask || 'GENERAL_HOUR';
+
+    // Extract quantity
+    let quantity = HANDYMAN_TASKS[itemType].defaultQuantity || 1;
+    let quantityConfidence = matchedTask ? 0.8 : 0.5;
+
+    const numberMatch = trimmedSegment.match(/(\d+)/);
+    if (numberMatch) {
+      quantity = parseInt(numberMatch[1], 10);
+      quantityConfidence = 1.0;
+    } else {
+      for (const qp of QUANTITY_PATTERNS) {
+        if (qp.type !== 'number' && qp.value) {
+          if (qp.pattern.test(trimmedSegment)) {
+            quantity = qp.value;
+            quantityConfidence = 0.8;
+            break;
+          }
+        }
+      }
+    }
+
+    detectedItems.push({
+      itemType,
+      quantity,
+      description: trimmedSegment || description,
+    });
+
+    totalConfidence += quantityConfidence;
   }
 
-  // If no items detected, use general hourly rate
   if (detectedItems.length === 0) {
     detectedItems.push({
       itemType: 'GENERAL_HOUR',
       quantity: 1,
-      description: description,
+      description,
     });
-    totalConfidence = 0.6; // Lower confidence for fallback
+    totalConfidence = 0.6;
   }
 
   const avgConfidence = totalConfidence / detectedItems.length;

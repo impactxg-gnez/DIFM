@@ -15,6 +15,8 @@ async function seedPricingRules() {
     { itemType: 'GENERAL_HOUR', basePrice: 35, unit: 'HOUR', description: 'General handyman work' },
     { itemType: 'CURTAIN_RAIL', basePrice: 30, unit: 'ITEM', description: 'Curtain rail installation' },
     { itemType: 'LOCK_CHANGE', basePrice: 55, unit: 'ITEM', description: 'Lock replacement' },
+    { itemType: 'SMALL_PLUMBING', basePrice: 45, unit: 'ITEM', description: 'Minor leak/tap fixes' },
+    { itemType: 'SMALL_ELECTRICAL', basePrice: 45, unit: 'ITEM', description: 'Minor electrical fixes' },
   ];
 
   for (const rule of handymanRules) {

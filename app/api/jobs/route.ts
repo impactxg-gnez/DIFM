@@ -2,8 +2,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
-import { PRICE_MATRIX, ServiceCategory } from '@/lib/constants';
+import { ServiceCategory } from '@/lib/constants';
 import { calculateJobPrice } from '@/lib/pricing/calculator';
+import { computeStuck } from '@/lib/jobStateMachine';
 
 export async function POST(request: Request) {
     try {
@@ -16,20 +17,17 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { description, location, category, isASAP, scheduledAt, latitude, longitude, isSimulation } = body;
+        const { description, location, isASAP, scheduledAt, latitude, longitude, isSimulation } = body;
 
-        if (!description || !location || !category) {
+        if (!description || !location) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        const fixedPrice = PRICE_MATRIX[category as ServiceCategory];
-
-        if (!fixedPrice) {
-            return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
-        }
+        const category: ServiceCategory = 'HANDYMAN';
 
         // Intelligent pricing
         const pricing = await calculateJobPrice(category as ServiceCategory, description, true);
+        const now = new Date();
 
         // If simulation, calculate provider start position (approx 10km away)
         // 1 deg lat is approx 111km. 0.09 deg is approx 10km.
@@ -48,10 +46,41 @@ export async function POST(request: Request) {
                     isASAP: isASAP ?? true,
                     scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
                     customerId,
-                    status: 'DISPATCHING',
+                    status: 'CREATED',
+                    statusUpdatedAt: now,
+                    priceLockedAt: now,
                     dispatchRadius: 5,
                     isSimulation: isSimulation ?? false,
                     needsReview: pricing.needsReview,
+                    isParsed: true,
+                },
+            });
+
+            await tx.jobStateChange.create({
+                data: {
+                    jobId: createdJob.id,
+                    fromStatus: 'SYSTEM',
+                    toStatus: 'CREATED',
+                    reason: 'Job created',
+                    changedById: customerId,
+                    changedByRole: 'CUSTOMER',
+                },
+            });
+
+            // Auto move to DISPATCHED to allow provider acceptance while preserving log
+            const dispatchedJob = await tx.job.update({
+                where: { id: createdJob.id },
+                data: { status: 'DISPATCHED', statusUpdatedAt: now },
+            });
+
+            await tx.jobStateChange.create({
+                data: {
+                    jobId: createdJob.id,
+                    fromStatus: 'CREATED',
+                    toStatus: 'DISPATCHED',
+                    reason: 'Auto dispatch',
+                    changedById: customerId,
+                    changedByRole: 'CUSTOMER',
                 },
             });
 
@@ -69,7 +98,7 @@ export async function POST(request: Request) {
                 });
             }
 
-            return createdJob;
+            return dispatchedJob;
         });
 
         // Update Simulator Provider location if this is a sim
@@ -110,15 +139,21 @@ export async function GET(request: Request) {
         if (id) {
             const job = await prisma.job.findUnique({
                 where: { id },
-                include: { provider: { select: { name: true, latitude: true, longitude: true } } }
+                include: {
+                    provider: { select: { name: true, latitude: true, longitude: true, id: true } },
+                    items: true,
+                    stateChanges: { orderBy: { createdAt: 'asc' } },
+                    priceOverrides: { orderBy: { createdAt: 'desc' } },
+                }
             });
             // Simple auth check: owner or assigned provider
-            if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'DISPATCHING') {
-                // Allow providers to see DISPATCHING jobs
+            if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'DISPATCHED') {
+                // Allow providers to see DISPATCHED jobs
                 // Strict check: if it's dispatching, is it in my category?
                 // For poll simplicity, allowing if status matches or role admin.
             }
-            return NextResponse.json([job]);
+            const { isStuck, reason } = computeStuck(job?.status || '', job?.statusUpdatedAt);
+            return NextResponse.json([{ ...job, isStuck, stuckReason: reason }]);
         }
 
         let whereClause: any = {};
@@ -128,17 +163,13 @@ export async function GET(request: Request) {
         } else if (userRole === 'PROVIDER') {
             const myCategories = user.categories?.split(',') || [];
 
-            // Dispatch Logic:
-            // 1. Job is 'DISPATCHING' AND Job Category is in myCategories
-            // 2. OR Job is assigned to me
-
             whereClause = {
                 OR: [
                     { providerId: userId },
                     {
-                        status: 'DISPATCHING',
+                        status: 'DISPATCHED',
                         providerId: null,
-                        category: { in: myCategories }
+                        category: { in: myCategories.length ? [...myCategories, 'HANDYMAN'] : ['HANDYMAN'] }
                         // Radius check would go here (e.g. comparing user lat/long with job)
                         // For V1 simulation, we assume "London Base" covers all.
                     }
@@ -155,12 +186,16 @@ export async function GET(request: Request) {
             orderBy: { createdAt: 'desc' },
             include: {
                 customer: { select: { name: true } },
-                provider: { select: { id: true, name: true, latitude: true, longitude: true } }
+                provider: { select: { id: true, name: true, latitude: true, longitude: true } },
+                items: true,
+                stateChanges: { orderBy: { createdAt: 'asc' } },
+                priceOverrides: { orderBy: { createdAt: 'desc' } },
             }
         });
 
-        // Post-process to hide location data for privacy if status is DISPATCHING
         const processedJobs = rawJobs.map((job: any) => {
+            const { isStuck, reason } = computeStuck(job.status, job.statusUpdatedAt);
+
             if (!['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(job.status)) {
                 if (job.provider) {
                     return {
@@ -170,11 +205,13 @@ export async function GET(request: Request) {
                             name: job.provider.name,
                             latitude: null,
                             longitude: null
-                        }
+                        },
+                        isStuck,
+                        stuckReason: reason,
                     };
                 }
             }
-            return job;
+            return { ...job, isStuck, stuckReason: reason };
         });
 
         return NextResponse.json(processedJobs);

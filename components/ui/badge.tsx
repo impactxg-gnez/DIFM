@@ -13,7 +13,7 @@ export const Badge = ({ className, status, variant, ...props }: BadgeProps) => {
     if (status) {
         switch (status) {
             case 'CREATED': colorClass = "bg-blue-100 text-blue-800"; break;
-            case 'DISPATCHING': colorClass = "bg-yellow-100 text-yellow-800 animate-pulse"; break;
+            case 'DISPATCHED': colorClass = "bg-yellow-100 text-yellow-800 animate-pulse"; break;
             case 'ACCEPTED': colorClass = "bg-indigo-100 text-indigo-800"; break;
             case 'IN_PROGRESS': colorClass = "bg-orange-100 text-orange-800"; break;
             case 'COMPLETED': colorClass = "bg-green-100 text-green-800"; break;

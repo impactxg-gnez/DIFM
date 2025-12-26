@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { ServiceCategory, SERVICE_CATEGORIES, PRICE_MATRIX } from '@/lib/constants';
+import { ServiceCategory, PRICE_MATRIX } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,14 +9,14 @@ import { MapPin } from 'lucide-react';
 import useSWR from 'swr';
 
 interface JobCreationFormProps {
-    category: ServiceCategory;
     onSubmit: (details: { description: string; location: string; isASAP: boolean; scheduledAt?: Date }) => void;
-    onBack: () => void;
+    onCancel: () => void;
     loading: boolean;
     defaultLocation?: string;
 }
 
-export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLocation = '' }: JobCreationFormProps) {
+export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation = '' }: JobCreationFormProps) {
+    const category: ServiceCategory = 'HANDYMAN';
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState(defaultLocation);
     const [isASAP, setIsASAP] = useState(true);
@@ -33,7 +33,6 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
     }, [defaultLocation]);
 
     useEffect(() => {
-        // Debounced Search
         const timer = setTimeout(async () => {
             if (location.length > 2 && showSuggestions) {
                 try {
@@ -53,7 +52,6 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
         return () => clearTimeout(timer);
     }, [location, showSuggestions]);
 
-    // Close suggestions on click outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -75,7 +73,6 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
         setSuggestions([]);
     };
 
-    // Debounce description for live pricing
     useEffect(() => {
         const t = setTimeout(() => setDebouncedDesc(description), 400);
         return () => clearTimeout(t);
@@ -100,10 +97,8 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Prevent submit on enter key if suggestion list is open? 
-        // Or just let it submit current value? Let's check.
         if (showSuggestions && suggestions.length > 0) {
-            // Optional: Force selection? No, let user type free text too.
+            // allow free text; no-op
         }
 
         onSubmit({
@@ -114,14 +109,15 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
         });
     };
 
-    const price = PRICE_MATRIX[category];
+    const basePrice = PRICE_MATRIX[category];
+    const displayedPrice = pricePreview?.totalPrice ?? basePrice;
 
     return (
         <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                    <span className="text-gray-900">{SERVICE_CATEGORIES[category]} Service</span>
-                    <span className="text-blue-600 font-bold">£{price}</span>
+                    <span className="text-gray-900">Handyman request</span>
+                    <span className="text-blue-600 font-bold">£{displayedPrice.toFixed(2)}</span>
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -135,7 +131,7 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                                 onFocus={() => setShowSuggestions(true)}
                                 placeholder="e.g. 123 Main St, London"
                                 required
-                                autoComplete="off" // Disable browser autocomplete
+                                autoComplete="off"
                             />
                             {showSuggestions && suggestions.length > 0 && (
                                 <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
@@ -160,12 +156,11 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                         <Input
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Describe the issue..."
+                            placeholder="e.g. Hang two shelves and fix a leaking tap"
                             required
                         />
                     </div>
 
-                    {/* Live Pricing */}
                     <div className="space-y-3 rounded-xl border border-blue-100 bg-white/70 backdrop-blur-sm p-4 shadow-inner">
                         <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold text-slate-800">Live Price Breakdown</span>
@@ -191,7 +186,7 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                                 )}
                             </div>
                         ) : (
-                            <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{price}</p>
+                            <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{basePrice}</p>
                         )}
                     </div>
 
@@ -227,16 +222,16 @@ export function JobCreationForm({ category, onSubmit, onBack, loading, defaultLo
                     </div>
 
                     <div className="flex gap-4 pt-4">
-                        <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-                            Back
+                        <Button type="button" variant="ghost" onClick={onCancel} disabled={loading}>
+                            Cancel
                         </Button>
                         <Button type="submit" className="flex-1" disabled={loading}>
-                            {loading ? 'Confirming...' : `Book for £${price}`}
+                            {loading ? 'Confirming...' : `Book for £${displayedPrice.toFixed(2)}`}
                         </Button>
                     </div>
 
                     <p className="text-xs text-center text-gray-500">
-                        Price is fixed. Payment due after completion.
+                        Price locks on booking. Admin overrides require a reason.
                     </p>
                 </form>
             </CardContent>

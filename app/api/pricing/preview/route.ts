@@ -6,12 +6,13 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
         const { category, description, enableParsing = true } = body;
+        const resolvedCategory = (category as ServiceCategory) || 'HANDYMAN';
 
-        if (!category || !description) {
-            return NextResponse.json({ error: 'Missing category or description' }, { status: 400 });
+        if (!description) {
+            return NextResponse.json({ error: 'Missing description' }, { status: 400 });
         }
 
-        const result = await calculateJobPrice(category as ServiceCategory, description, enableParsing);
+        const result = await calculateJobPrice(resolvedCategory, description, enableParsing);
         return NextResponse.json(result);
     } catch (error) {
         console.error('Price preview error', error);

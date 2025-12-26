@@ -26,10 +26,12 @@ export async function calculateJobPrice(
   description: string,
   enableParsing: boolean = true
 ): Promise<PricingResult> {
+  const effectiveCategory = (category || 'HANDYMAN') as ServiceCategory;
+
   // Fallback to legacy fixed pricing if parsing disabled
   if (!enableParsing) {
     return {
-      totalPrice: PRICE_MATRIX[category],
+      totalPrice: PRICE_MATRIX[effectiveCategory],
       items: [],
       needsReview: false,
       usedFallback: true,
@@ -39,7 +41,7 @@ export async function calculateJobPrice(
 
   try {
     // Parse description to detect items
-    const parsed = await parseJobDescription(description, category);
+    const parsed = await parseJobDescription(description);
 
     // Look up pricing rules for each item
     const items: JobItemData[] = [];
@@ -48,13 +50,13 @@ export async function calculateJobPrice(
       // Try to find pricing rule
       const rule = await prisma.pricingRule.findFirst({
         where: {
-          category,
+          category: effectiveCategory,
           itemType: item.itemType,
           isActive: true,
         },
       });
 
-      const unitPrice = rule?.basePrice || PRICE_MATRIX[category];
+      const unitPrice = rule?.basePrice || PRICE_MATRIX[effectiveCategory];
       const totalPrice = unitPrice * item.quantity;
 
       items.push({
@@ -70,7 +72,7 @@ export async function calculateJobPrice(
     let totalPrice = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
     // Apply guardrails
-    const basePrice = PRICE_MATRIX[category];
+    const basePrice = PRICE_MATRIX[effectiveCategory];
     const MAX_PRICE = basePrice * 5; // 5x base price cap
     const REVIEW_THRESHOLD = basePrice * 3; // Review if > 3x base
 

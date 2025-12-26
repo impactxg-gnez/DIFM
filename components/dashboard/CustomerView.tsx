@@ -5,11 +5,9 @@ import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ServiceSelection } from './ServiceSelection';
 import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
-import { ServiceCategory } from '@/lib/constants';
 import { Plus, MapPin } from 'lucide-react';
 import { CustomerGreeting } from './CustomerGreeting';
 
@@ -18,9 +16,8 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 export function CustomerView({ user }: { user: any }) {
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
-    // Steps: LIST -> SELECT -> CREATE -> WAITING
-    const [step, setStep] = useState<'LIST' | 'SELECT' | 'CREATE' | 'WAITING'>('LIST');
-    const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
+    // Steps: LIST -> CREATE -> WAITING
+    const [step, setStep] = useState<'LIST' | 'CREATE' | 'WAITING'>('LIST');
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
     // Location Logic
@@ -60,11 +57,6 @@ export function CustomerView({ user }: { user: any }) {
         }
     }, []);
 
-    const handleCategorySelect = (category: ServiceCategory) => {
-        setSelectedCategory(category);
-        setStep('CREATE');
-    };
-
     const handleCreateJob = async (details: any) => {
         try {
             const res = await fetch('/api/jobs', {
@@ -74,7 +66,6 @@ export function CustomerView({ user }: { user: any }) {
                     ...details,
                     latitude: userCoords?.lat,
                     longitude: userCoords?.lng,
-                    category: selectedCategory,
                     price: 0 // Backend fills from Matrix, passing 0 placeholder
                 }),
             });
@@ -97,23 +88,12 @@ export function CustomerView({ user }: { user: any }) {
     };
 
     // Render Logic
-    if (step === 'SELECT') {
-        return (
-            <div className="space-y-4">
-                <Button variant="ghost" onClick={() => setStep('LIST')} className="mb-4 text-gray-900 hover:text-gray-700">← Back to Dashboard</Button>
-                <h1 className="text-2xl font-bold mb-6 text-gray-900">Select a Service</h1>
-                <ServiceSelection onSelect={handleCategorySelect} />
-            </div>
-        );
-    }
-
-    if (step === 'CREATE' && selectedCategory) {
+    if (step === 'CREATE') {
         return (
             <div className="space-y-4">
                 <JobCreationForm
-                    category={selectedCategory}
                     onSubmit={handleCreateJob}
-                    onBack={() => setStep('SELECT')}
+                    onCancel={() => setStep('LIST')}
                     loading={false}
                     defaultLocation={userLocation}
                 />
@@ -171,7 +151,7 @@ export function CustomerView({ user }: { user: any }) {
                     <Button onClick={handleCreateSimulation} variant="outline" className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50">
                         Spawn Test Job (15m delay)
                     </Button>
-                    <Button onClick={() => setStep('SELECT')} className="gap-2">
+                    <Button onClick={() => setStep('CREATE')} className="gap-2">
                         <Plus className="w-4 h-4" /> New Request
                     </Button>
                 </div>

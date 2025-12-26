@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { CANCELLATION_FEE_PERCENT } from '@/lib/constants';
+import { canTransition, JobStatus } from '@/lib/jobStateMachine';
 
 export async function POST(
     request: Request,
@@ -23,7 +24,7 @@ export async function POST(
             return NextResponse.json({ error: 'Cannot cancel finished job' }, { status: 400 });
         }
 
-        let newStatus = 'CANCELLED_FREE';
+        let newStatus: JobStatus = 'CANCELLED_FREE';
         let fee = 0;
 
         if (job.status === 'ACCEPTED' || job.status === 'IN_PROGRESS') {
@@ -32,13 +33,29 @@ export async function POST(
             fee = job.fixedPrice * CANCELLATION_FEE_PERCENT;
         }
 
+        if (!canTransition(job.status as JobStatus, newStatus)) {
+            return NextResponse.json({ error: 'Invalid transition' }, { status: 400 });
+        }
+
         // Update Job
         await prisma.$transaction(async (tx) => {
             await tx.job.update({
                 where: { id },
                 data: {
                     status: newStatus,
+                    statusUpdatedAt: new Date(),
                     cancellationReason: 'Customer Cancelled'
+                }
+            });
+
+            await tx.jobStateChange.create({
+                data: {
+                    jobId: id,
+                    fromStatus: job.status,
+                    toStatus: newStatus,
+                    reason: 'Customer Cancelled',
+                    changedById: job.customerId,
+                    changedByRole: 'CUSTOMER'
                 }
             });
 

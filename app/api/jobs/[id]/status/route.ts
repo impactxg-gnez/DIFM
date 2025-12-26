@@ -1,7 +1,8 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PLATFORM_FEE_PERCENT } from '@/lib/constants';
+import { canTransition, JobStatus } from '@/lib/jobStateMachine';
+import { cookies } from 'next/headers';
 
 export async function POST(
     request: Request,
@@ -11,55 +12,90 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status } = body;
+        const { status, reason } = body as { status: JobStatus; reason?: string };
 
-        // V2 State transition logic
-        // Only allow specific transitions
+        const cookieStore = await cookies();
+        const userId = cookieStore.get('userId')?.value;
+        const userRole = cookieStore.get('userRole')?.value;
 
-        await prisma.$transaction(async (tx) => {
+        if (!userId || !userRole) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
             const job = await tx.job.findUnique({ where: { id } });
             if (!job) throw new Error("Job not found");
 
-            // Update status
-            await tx.job.update({
+            const currentStatus = job.status as JobStatus;
+
+            if (!canTransition(currentStatus, status)) {
+                throw new Error(`Invalid transition ${currentStatus} -> ${status}`);
+            }
+
+            if (userRole === 'PROVIDER' && job.providerId !== userId) {
+                throw new Error('Not authorized for this job');
+            }
+            if (userRole === 'CUSTOMER') {
+                throw new Error('Customers cannot change status');
+            }
+
+            const now = new Date();
+
+            const updatedJob = await tx.job.update({
                 where: { id },
-                data: { status }
+                data: {
+                    status,
+                    statusUpdatedAt: now,
+                    acceptedAt: status === 'ACCEPTED' ? now : job.acceptedAt
+                }
             });
 
-            // If COMPLETED, calculate payout
+            await tx.jobStateChange.create({
+                data: {
+                    jobId: id,
+                    fromStatus: currentStatus,
+                    toStatus: status,
+                    reason,
+                    changedById: userId,
+                    changedByRole: userRole,
+                },
+            });
+
             if (status === 'COMPLETED') {
                 const price = job.fixedPrice;
                 const platformFee = price * PLATFORM_FEE_PERCENT;
                 const payout = price - platformFee;
 
-                // Create Payout Transaction
                 await tx.transaction.create({
                     data: {
                         jobId: id,
                         amount: payout,
                         type: 'PAYOUT',
-                        status: 'PENDING', // Manual execution later
+                        status: 'PENDING',
                         userId: job.providerId
                     }
                 });
 
-                // Create Fee Record (optional, but good for reporting)
                 await tx.transaction.create({
                     data: {
                         jobId: id,
                         amount: platformFee,
                         type: 'FEE',
-                        status: 'COMPLETED', // Fee is taken immediately
-                        userId: job.providerId // Fee from provider's cut effectively
+                        status: 'COMPLETED',
+                        userId: job.providerId
                     }
                 });
             }
+
+            return updatedJob;
         });
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, job: result });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Update status error', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const message = error?.message || 'Internal Server Error';
+        const statusCode = message.includes('Invalid transition') || message.includes('authorized') ? 400 : 500;
+        return NextResponse.json({ error: message }, { status: statusCode });
     }
 }

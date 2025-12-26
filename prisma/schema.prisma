@@ -10,7 +10,7 @@ datasource db {
 
 // Valid Roles: CUSTOMER, PROVIDER, ADMIN
 // Valid Categories: HANDYMAN, CLEANING, PEST_CONTROL, ELECTRICIAN, PLUMBER, CARPENTER, PAINTER, PC_REPAIR
-// Valid JobStatuses: CREATED, DISPATCHING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED_FREE, CANCELLED_CHARGED, CLOSED
+// Valid JobStatuses: CREATED, DISPATCHED, ACCEPTED, IN_PROGRESS, COMPLETED, CLOSED, CANCELLED_FREE, CANCELLED_CHARGED
 
 model User {
   id              String   @id @default(uuid())
@@ -51,10 +51,12 @@ model Job {
   // Job Specifics
   category    String    // One of the valid categories
   fixedPrice  Float
+  priceLockedAt DateTime?
   isASAP      Boolean   @default(true)
   scheduledAt DateTime? // If not ASAP
   
   status      String    @default("CREATED")
+  statusUpdatedAt DateTime @default(now())
   dispatchRadius Int    @default(5) // In km, expands over time
   
   // Timestamps
@@ -83,6 +85,8 @@ model Job {
   customerReview CustomerReview?
   adminReview    AdminReview?
   items       JobItem[]
+  stateChanges JobStateChange[]
+  priceOverrides PriceOverride[]
 }
 
 model Transaction {
@@ -154,5 +158,29 @@ model JobItem {
   
   description String?  // Parsed from customer input
   
+  createdAt   DateTime @default(now())
+}
+
+model JobStateChange {
+  id          String   @id @default(uuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id])
+  fromStatus  String
+  toStatus    String
+  reason      String?
+  changedById String?
+  changedByRole String?
+  createdAt   DateTime @default(now())
+}
+
+model PriceOverride {
+  id          String   @id @default(uuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id])
+  oldPrice    Float
+  newPrice    Float
+  reason      String
+  changedById String?
+  changedByRole String?
   createdAt   DateTime @default(now())
 }

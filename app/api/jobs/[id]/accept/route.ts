@@ -1,6 +1,6 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
 
 export async function POST(
     request: Request,
@@ -9,11 +9,13 @@ export async function POST(
     const { id } = await params;
 
     try {
-        const body = await request.json();
-        const { providerId } = body;
+        const cookieStore = await cookies();
+        const providerId = cookieStore.get('userId')?.value;
+        const role = cookieStore.get('userRole')?.value;
 
-        // Transaction to ensure race condition safety
-        // Only accept if status is DISPATCHING
+        if (!providerId || role !== 'PROVIDER') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        }
 
         try {
             const result = await prisma.$transaction(async (tx) => {
@@ -25,17 +27,28 @@ export async function POST(
                     throw new Error("Job not found");
                 }
 
-                if (job.status !== 'DISPATCHING') {
+                if (job.status !== 'DISPATCHED') {
                     throw new Error("Job is no longer available");
                 }
 
-                // Lock the job
                 const updatedJob = await tx.job.update({
                     where: { id },
                     data: {
                         status: 'ACCEPTED',
+                        statusUpdatedAt: new Date(),
                         providerId,
                         acceptedAt: new Date()
+                    }
+                });
+
+                await tx.jobStateChange.create({
+                    data: {
+                        jobId: id,
+                        fromStatus: 'DISPATCHED',
+                        toStatus: 'ACCEPTED',
+                        reason: 'Provider accepted',
+                        changedById: providerId,
+                        changedByRole: 'PROVIDER'
                     }
                 });
 
