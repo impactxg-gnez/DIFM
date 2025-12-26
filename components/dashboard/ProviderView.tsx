@@ -140,6 +140,9 @@ export function ProviderView({ user }: { user: any }) {
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
                         </p>
+                        {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && job.cancellationReason && (
+                            <div className="text-sm text-red-600 mb-3">Cancel reason: {job.cancellationReason}</div>
+                        )}
 
                         {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.latitude && (
                             <div className="mb-4">

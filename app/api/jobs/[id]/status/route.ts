@@ -40,13 +40,15 @@ export async function POST(
             }
 
             const now = new Date();
+            const cancellationReason = status.startsWith('CANCELLED') ? (reason || job.cancellationReason || 'Cancelled by admin') : job.cancellationReason;
 
             const updatedJob = await tx.job.update({
                 where: { id },
                 data: {
                     status,
                     statusUpdatedAt: now,
-                    acceptedAt: status === 'ACCEPTED' ? now : job.acceptedAt
+                    acceptedAt: status === 'ACCEPTED' ? now : job.acceptedAt,
+                    cancellationReason,
                 }
             });
 

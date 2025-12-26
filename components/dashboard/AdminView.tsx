@@ -190,7 +190,10 @@ export function AdminView({ user }: { user: any }) {
                                             size="sm"
                                             variant="outline"
                                             className="text-red-600 border-red-200 hover:bg-red-50"
-                                            onClick={() => handleOverrideStatus(job.id, 'CANCELLED_FREE')}
+                                            onClick={() => {
+                                                const cancelTarget = job.status === 'IN_PROGRESS' ? 'CANCELLED_CHARGED' : 'CANCELLED_FREE';
+                                                handleOverrideStatus(job.id, cancelTarget);
+                                            }}
                                         >
                                             Force Cancel
                                         </Button>

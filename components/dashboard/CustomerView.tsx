@@ -203,6 +203,11 @@ export function CustomerView({ user }: { user: any }) {
                                     <span>{job.location}</span>
                                     {job.provider && <span className="text-blue-600 font-medium">Pro: {job.provider.name}</span>}
                                 </div>
+                                {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && job.cancellationReason && (
+                                    <div className="mt-2 text-sm text-red-600">
+                                        Cancel reason: {job.cancellationReason}
+                                    </div>
+                                )}
                                 {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.provider?.latitude && job.latitude && (
                                     <div className="mt-4">
                                         <ProviderMap
