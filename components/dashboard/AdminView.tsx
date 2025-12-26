@@ -21,27 +21,45 @@ const tabs = [
 
 export function AdminView({ user }: { user: any }) {
     const [activeTab, setActiveTab] = useState('jobs');
+    const [cancelDialog, setCancelDialog] = useState<{ open: boolean; jobId?: string; status?: string; reason: string }>({ open: false, reason: '' });
+    const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
     const { data: jobs, mutate: mutateJobs } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
     const { data: providers, mutate: mutateProviders } = useSWR(activeTab === 'providers' ? '/api/admin/providers' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
 
     const handleOverrideStatus = async (jobId: string, newStatus: string) => {
-        if (!confirm(`Force set job ${jobId.slice(0, 6)} to ${newStatus}?`)) return;
-
-        let reason: string | undefined;
         if (newStatus.startsWith('CANCELLED')) {
-            const input = window.prompt('Enter cancellation reason');
-            if (!input) return;
-            reason = input;
+            setCancelDialog({ open: true, jobId, status: newStatus, reason: '' });
+            return;
         }
+        if (!confirm(`Force set job ${jobId.slice(0, 6)} to ${newStatus}?`)) return;
 
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus, reason })
+            body: JSON.stringify({ status: newStatus })
         });
         mutateJobs();
     };
+
+    const submitCancelDialog = async () => {
+        if (!cancelDialog.jobId || !cancelDialog.status) return;
+        if (!cancelDialog.reason.trim()) {
+            alert('Please enter a reason to cancel.');
+            return;
+        }
+        setIsSubmittingCancel(true);
+        await fetch(`/api/jobs/${cancelDialog.jobId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: cancelDialog.status, reason: cancelDialog.reason })
+        });
+        setIsSubmittingCancel(false);
+        setCancelDialog({ open: false, reason: '' });
+        mutateJobs();
+    };
+
+    const closeCancelDialog = () => setCancelDialog({ open: false, reason: '' });
 
     const handleOverrideJob = async (jobId: string, price?: number, providerId?: string) => {
         let reason: string | undefined;
@@ -279,6 +297,32 @@ export function AdminView({ user }: { user: any }) {
                     </motion.div>
                 </AnimatePresence>
             </div>
+
+            {cancelDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold text-slate-900">Cancel job</h3>
+                            <p className="text-sm text-slate-600">Provide a reason before cancelling.</p>
+                        </div>
+                        <textarea
+                            className="w-full rounded-md border border-slate-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            rows={4}
+                            placeholder="Reason for cancellation"
+                            value={cancelDialog.reason}
+                            onChange={(e) => setCancelDialog((prev) => ({ ...prev, reason: e.target.value }))}
+                        />
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={closeCancelDialog} disabled={isSubmittingCancel}>
+                                Back
+                            </Button>
+                            <Button variant="destructive" onClick={submitCancelDialog} disabled={isSubmittingCancel}>
+                                {isSubmittingCancel ? 'Cancelling...' : 'Confirm cancel'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
