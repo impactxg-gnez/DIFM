@@ -11,6 +11,7 @@ export default function DashboardPage() {
     const router = useRouter();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [locationRequested, setLocationRequested] = useState(false);
 
     useEffect(() => {
         fetch('/api/user/me')
@@ -22,6 +23,35 @@ export default function DashboardPage() {
             .catch(() => router.push('/login'))
             .finally(() => setLoading(false));
     }, [router]);
+
+    // Prompt for location as soon as user is known (on login)
+    useEffect(() => {
+        if (!user || locationRequested) return;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+        setLocationRequested(true);
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                try {
+                    await fetch('/api/user/location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                        }),
+                    });
+                } catch (e) {
+                    console.error('Failed to save location', e);
+                }
+            },
+            (error) => {
+                console.warn('Location permission denied or failed', error);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }, [user, locationRequested]);
 
     const handleLogout = async () => {
         await fetch('/api/auth/logout', { method: 'POST' });
