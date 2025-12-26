@@ -38,8 +38,9 @@ export function AdminView({ user }: { user: any }) {
     const handleOverrideJob = async (jobId: string, price?: number, providerId?: string) => {
         let reason: string | undefined;
         if (price !== undefined) {
-            reason = window.prompt('Enter reason for price override');
-            if (!reason) return;
+            const promptValue = window.prompt('Enter reason for price override');
+            if (!promptValue) return;
+            reason = promptValue;
         }
         await fetch(`/api/jobs/${jobId}/override`, {
             method: 'POST',
