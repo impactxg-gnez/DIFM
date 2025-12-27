@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { ServiceCategory, PRICE_MATRIX } from '@/lib/constants';
+import { ServiceCategory, PRICE_MATRIX, SERVICE_CATEGORIES } from '@/lib/constants';
+import { getTierByCode, TierCode, getTradeLabel } from '@/lib/pricing/matrix';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -112,6 +113,14 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
     const basePrice = PRICE_MATRIX[category];
     const displayedPrice = pricePreview?.totalPrice ?? basePrice;
 
+    const formatItemLabel = (item: any) => {
+        const tier = getTierByCode(item.itemType as TierCode);
+        const tradeLabel = item.routeCategory
+            ? SERVICE_CATEGORIES[item.routeCategory as ServiceCategory] || getTradeLabel(item.routeCategory as any)
+            : 'Visit';
+        return `${tradeLabel} — ${tier?.name || item.itemType}`;
+    };
+
     return (
         <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
@@ -170,7 +179,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                             <div className="space-y-2">
                                 {pricePreview.items.map((item: any, idx: number) => (
                                     <div key={idx} className="flex justify-between text-sm text-slate-700">
-                                        <span className="font-medium">{item.quantity}x {item.itemType}</span>
+                                        <span className="font-medium">{item.quantity}x {formatItemLabel(item)}</span>
                                         <span>£{item.totalPrice.toFixed(2)}</span>
                                     </div>
                                 ))}
@@ -184,6 +193,13 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 {pricePreview.usedFallback && (
                                     <p className="text-xs text-slate-500">Using fallback pricing</p>
                                 )}
+                                {pricePreview.routingNotes?.length ? (
+                                    <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+                                        {pricePreview.routingNotes.map((note: string, idx: number) => (
+                                            <li key={idx}>{note}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
                             </div>
                         ) : (
                             <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{basePrice}</p>

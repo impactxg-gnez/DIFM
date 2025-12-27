@@ -1,6 +1,6 @@
 import { ServiceCategory, PRICE_MATRIX } from '../constants';
 import { parseJobDescription } from './jobParser';
-import { prisma } from '../prisma';
+import { getTierByCode } from './matrix';
 
 export interface JobItemData {
   itemType: string;
@@ -8,6 +8,8 @@ export interface JobItemData {
   unitPrice: number;
   totalPrice: number;
   description: string;
+  routeCategory?: ServiceCategory;
+  requiresCapability?: boolean;
 }
 
 export interface PricingResult {
@@ -16,6 +18,9 @@ export interface PricingResult {
   needsReview: boolean;
   usedFallback: boolean;
   confidence: number;
+  primaryCategory: ServiceCategory;
+  routingNotes?: string[];
+  visits?: any[];
 }
 
 /**
@@ -36,64 +41,52 @@ export async function calculateJobPrice(
       needsReview: false,
       usedFallback: true,
       confidence: 1.0,
+      primaryCategory: effectiveCategory,
     };
   }
 
   try {
-    // Parse description to detect items
-    const parsed = await parseJobDescription(description);
+    const parsed = parseJobDescription(description);
 
-    // Look up pricing rules for each item
-    const items: JobItemData[] = [];
-    
-    for (const item of parsed.items) {
-      // Try to find pricing rule
-      const rule = await prisma.pricingRule.findFirst({
-        where: {
-          category: effectiveCategory,
-          itemType: item.itemType,
-          isActive: true,
-        },
-      });
-
-      const unitPrice = rule?.basePrice || PRICE_MATRIX[effectiveCategory];
-      const totalPrice = unitPrice * item.quantity;
-
-      items.push({
+    const items: JobItemData[] = parsed.items.map((item) => {
+      const tier = getTierByCode(item.itemType as any);
+      const routeCategory = (item.routeCategory as ServiceCategory) || effectiveCategory;
+      const unitPrice = tier?.customerPrice ?? PRICE_MATRIX[routeCategory];
+      return {
         itemType: item.itemType,
-        quantity: item.quantity,
+        quantity: 1,
         unitPrice,
-        totalPrice,
+        totalPrice: unitPrice,
         description: item.description,
-      });
+        routeCategory,
+        requiresCapability: item.requiresCapability,
+      };
+    });
+
+    // Enforce GENERAL_HOUR guardrail (max 2)
+    const generalHourCount = items.filter((i) => i.itemType === 'GENERAL_HOUR').length;
+    const routingNotes = [...(parsed.routingNotes || [])];
+    if (generalHourCount > 2) {
+      routingNotes.push('GENERAL_HOUR exceeded (max 2) - escalate to half day');
     }
 
-    // Calculate total
     let totalPrice = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
-    // Apply guardrails
-    const basePrice = PRICE_MATRIX[effectiveCategory];
-    const MAX_PRICE = basePrice * 5; // 5x base price cap
-    const REVIEW_THRESHOLD = basePrice * 3; // Review if > 3x base
-
-    const needsReview = 
-      parsed.needsReview || 
-      totalPrice > REVIEW_THRESHOLD || 
+    const needsReview =
+      parsed.needsReview ||
+      generalHourCount > 2 ||
       parsed.confidence < 0.7;
-
-    // Cap the price
-    if (totalPrice > MAX_PRICE) {
-      totalPrice = MAX_PRICE;
-    }
 
     return {
       totalPrice,
       items,
       needsReview,
-      usedFallback: false,
+      usedFallback: parsed.usedFallback,
       confidence: parsed.confidence,
+      primaryCategory: parsed.primaryCategory as ServiceCategory,
+      routingNotes,
+      visits: parsed.visits,
     };
-
   } catch (error) {
     console.error('Pricing calculation error:', error);
     
@@ -104,6 +97,7 @@ export async function calculateJobPrice(
       needsReview: true, // Flag for admin review due to error
       usedFallback: true,
       confidence: 0,
+      primaryCategory: effectiveCategory,
     };
   }
 }

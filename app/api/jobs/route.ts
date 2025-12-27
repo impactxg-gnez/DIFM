@@ -23,10 +23,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        const category: ServiceCategory = 'HANDYMAN';
-
         // Intelligent pricing
-        const pricing = await calculateJobPrice(category as ServiceCategory, description, true);
+        const pricing = await calculateJobPrice('HANDYMAN' as ServiceCategory, description, true);
+        const category: ServiceCategory = pricing.primaryCategory || 'HANDYMAN';
         const now = new Date();
 
         // If simulation, calculate provider start position (approx 10km away)

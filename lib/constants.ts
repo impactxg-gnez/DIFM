@@ -13,14 +13,14 @@ export const SERVICE_CATEGORIES = {
 export type ServiceCategory = keyof typeof SERVICE_CATEGORIES;
 
 export const PRICE_MATRIX: Record<ServiceCategory, number> = {
-    HANDYMAN: 75,      // Call out + 1hr (most common use case)
-    ELECTRICIAN: 70,   // Call out + 1hr
-    PLUMBER: 80,       // Call out + 1hr
-    CARPENTER: 65,     // Hourly rate basis (fixed for V1)
-    CLEANING: 40,      // Fixed price standard clean
-    PAINTER: 200,      // Daily rate basis (fixed for V1)
-    PEST_CONTROL: 80,  // Standard visit
-    PC_REPAIR: 50      // Diagnostic / Simple fix
+    HANDYMAN: 69,      // H2 standard job (Phase 2)
+    ELECTRICIAN: 79,   // E1 small electrical
+    PLUMBER: 89,       // P1 quick fix
+    CARPENTER: 65,     // Legacy baseline (unused in Phase 2)
+    CLEANING: 69,      // C1 standard clean
+    PAINTER: 89,       // D1 touch-ups
+    PEST_CONTROL: 80,  // Legacy baseline
+    PC_REPAIR: 50      // Legacy baseline
 };
 
 export const CATEGORY_META: Record<ServiceCategory, {
