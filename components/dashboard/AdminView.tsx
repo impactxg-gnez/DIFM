@@ -333,16 +333,18 @@ export function AdminView({ user }: { user: any }) {
                         <div className="mt-4 pt-3 border-t border-slate-200">
                             <div className="text-xs font-semibold text-slate-600 mb-2">Provider Actions</div>
                             <div className="flex gap-2 flex-wrap">
-                                {p.providerStatus === 'PENDING' && (
+                                {/* Show buttons based on current status */}
+                                {(p.providerStatus === 'PENDING' || !p.providerStatus) && (
                                     <Button
                                         size="sm"
-                                        className="bg-green-600 hover:bg-green-700"
+                                        className="bg-green-600 hover:bg-green-700 text-white"
                                         onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
                                     >
                                         ✓ Approve
                                     </Button>
                                 )}
-                                {p.providerStatus === 'ACTIVE' && (
+                                
+                                {(p.providerStatus === 'ACTIVE' || (!p.providerStatus && p.providerType)) && (
                                     <>
                                         <Button
                                             size="sm"
@@ -359,6 +361,7 @@ export function AdminView({ user }: { user: any }) {
                                         <Button
                                             size="sm"
                                             variant="destructive"
+                                            className="bg-red-600 hover:bg-red-700 text-white"
                                             onClick={() => {
                                                 if (confirm(`⚠️ Ban provider ${p.name}? This action cannot be easily undone.`)) {
                                                     handleUpdateProvider(p.id, { providerStatus: 'BANNED' });
@@ -369,19 +372,35 @@ export function AdminView({ user }: { user: any }) {
                                         </Button>
                                     </>
                                 )}
+                                
                                 {p.providerStatus === 'PAUSED' && (
-                                    <Button
-                                        size="sm"
-                                        className="bg-blue-600 hover:bg-blue-700"
-                                        onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
-                                    >
-                                        ▶ Resume
-                                    </Button>
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                            onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
+                                        >
+                                            ▶ Resume
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            className="bg-red-600 hover:bg-red-700 text-white"
+                                            onClick={() => {
+                                                if (confirm(`⚠️ Ban provider ${p.name}? This action cannot be easily undone.`)) {
+                                                    handleUpdateProvider(p.id, { providerStatus: 'BANNED' });
+                                                }
+                                            }}
+                                        >
+                                            🚫 Ban
+                                        </Button>
+                                    </>
                                 )}
+                                
                                 {p.providerStatus === 'BANNED' && (
                                     <Button
                                         size="sm"
-                                        className="bg-green-600 hover:bg-green-700"
+                                        className="bg-green-600 hover:bg-green-700 text-white"
                                         onClick={() => {
                                             if (confirm(`Reactivate banned provider ${p.name}?`)) {
                                                 handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' });
@@ -391,6 +410,7 @@ export function AdminView({ user }: { user: any }) {
                                         ✓ Reactivate
                                     </Button>
                                 )}
+                                
                                 <Button
                                     size="sm"
                                     variant="outline"
