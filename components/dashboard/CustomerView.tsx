@@ -128,7 +128,10 @@ export function CustomerView({ user }: { user: any }) {
 
     // Check for completed jobs without reviews and show prompt
     useEffect(() => {
-        const completedJob = jobs?.find((j: any) => 
+        // Ensure jobs is an array before calling find
+        if (!Array.isArray(jobs)) return;
+        
+        const completedJob = jobs.find((j: any) => 
             j.status === 'COMPLETED' && 
             !j.customerReview &&
             !reviewDialog.open
@@ -238,7 +241,14 @@ export function CustomerView({ user }: { user: any }) {
                 </div>
             </div>
 
-            {!jobs ? <p>Loading...</p> : jobs.length === 0 ? (
+            {!jobs ? (
+                <p className="text-center py-8 text-gray-500">Loading jobs...</p>
+            ) : !Array.isArray(jobs) ? (
+                <div className="text-center py-12 bg-red-50 rounded-lg border border-red-200 text-red-600">
+                    <p className="font-semibold">Error loading jobs</p>
+                    <p className="text-sm mt-1">Please refresh the page or try again later.</p>
+                </div>
+            ) : jobs.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed text-gray-400">
                     No active jobs. Start a new request!
                 </div>
