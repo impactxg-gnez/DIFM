@@ -16,12 +16,9 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
-    // Check if provider needs onboarding
-    // Only show onboarding if providerType is missing (most critical)
-    // Documents and compliance can be set later
-    const [showOnboarding, setShowOnboarding] = useState(
-        user.role === 'PROVIDER' && !user.providerType
-    );
+    // Skip onboarding for existing providers - they already have roles assigned
+    // Onboarding is disabled for now - providers can access dashboard directly
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
     // API automatically filters for provider's category and dispatch radius
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
