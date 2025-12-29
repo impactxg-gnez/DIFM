@@ -19,6 +19,7 @@ export async function POST(
 
         try {
             const result = await prisma.$transaction(async (tx) => {
+                // Milestone 2: First-accept locking - use selectForUpdate to prevent race conditions
                 const job = await tx.job.findUnique({
                     where: { id }
                 });
@@ -31,8 +32,27 @@ export async function POST(
                     throw new Error("Job is no longer available");
                 }
 
-                const updatedJob = await tx.job.update({
-                    where: { id },
+                // Check if provider is ACTIVE
+                const provider = await tx.user.findUnique({
+                    where: { id: providerId }
+                });
+
+                if (!provider || provider.providerStatus !== 'ACTIVE') {
+                    throw new Error("Provider account is not active");
+                }
+
+                // Milestone 2: Prevent double acceptance - check if already assigned
+                if (job.providerId && job.providerId !== providerId) {
+                    throw new Error("Job has already been accepted by another provider");
+                }
+
+                // Update with conditional check to prevent race conditions
+                const updatedJob = await tx.job.updateMany({
+                    where: {
+                        id,
+                        status: 'DISPATCHED',
+                        providerId: null // Only update if not already assigned
+                    },
                     data: {
                         status: 'ACCEPTED',
                         statusUpdatedAt: new Date(),
@@ -41,18 +61,31 @@ export async function POST(
                     }
                 });
 
+                if (updatedJob.count === 0) {
+                    throw new Error("Job was already accepted by another provider");
+                }
+
+                // Fetch the updated job
+                const jobResult = await tx.job.findUnique({
+                    where: { id }
+                });
+
+                if (!jobResult) {
+                    throw new Error("Failed to fetch updated job");
+                }
+
                 await tx.jobStateChange.create({
                     data: {
                         jobId: id,
                         fromStatus: 'DISPATCHED',
                         toStatus: 'ACCEPTED',
-                        reason: 'Provider accepted',
+                        reason: 'Provider accepted - first-accept lock',
                         changedById: providerId,
                         changedByRole: 'PROVIDER'
                     }
                 });
 
-                return updatedJob;
+                return jobResult;
             });
 
             return NextResponse.json(result);

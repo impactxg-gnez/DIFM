@@ -7,6 +7,7 @@ export const JOB_STATUSES = [
   'IN_PROGRESS',
   'COMPLETED',
   'CLOSED',
+  'PAID',
   'CANCELLED_FREE',
   'CANCELLED_CHARGED',
 ] as const;
@@ -14,12 +15,13 @@ export const JOB_STATUSES = [
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  CREATED: ['DISPATCHED'],
+  CREATED: ['DISPATCHED', 'CANCELLED_FREE'],
   DISPATCHED: ['ACCEPTED', 'CANCELLED_FREE'],
   ACCEPTED: ['IN_PROGRESS', 'CANCELLED_FREE', 'CANCELLED_CHARGED'],
   IN_PROGRESS: ['COMPLETED', 'CANCELLED_CHARGED'],
   COMPLETED: ['CLOSED'],
-  CLOSED: [],
+  CLOSED: ['PAID'],
+  PAID: [],
   CANCELLED_FREE: [],
   CANCELLED_CHARGED: [],
 };
@@ -29,6 +31,7 @@ const STUCK_MINUTES: Partial<Record<JobStatus, number>> = {
   DISPATCHED: 45,
   ACCEPTED: 60,
   IN_PROGRESS: 180,
+  COMPLETED: 120, // Should move to CLOSED within 2 hours
 };
 
 export function canTransition(from: JobStatus, to: JobStatus) {

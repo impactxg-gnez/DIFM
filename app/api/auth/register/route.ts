@@ -29,7 +29,10 @@ export async function POST(request: Request) {
                     name,
                     passwordHash,
                     role: role as any,
-                    isOnline: role === 'PROVIDER' ? true : false, // Default providers to online for easy testing
+                    // Milestone 2: Providers start as PENDING, must be approved by admin
+                    isOnline: false,
+                    providerStatus: role === 'PROVIDER' ? 'PENDING' : null,
+                    providerType: role === 'PROVIDER' ? 'HANDYMAN' : null, // Default to HANDYMAN, can be changed in profile
                 },
             });
 

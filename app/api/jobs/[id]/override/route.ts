@@ -36,31 +36,47 @@ export async function POST(
         return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-        const job = await tx.job.findUnique({ where: { id } });
-        if (!job) throw new Error('Job not found');
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            const job = await tx.job.findUnique({ where: { id } });
+            if (!job) {
+                throw new Error('Job not found');
+            }
 
-        const updated = await tx.job.update({
-            where: { id },
-            data: updates,
+            // Admin can override price at any job status (before or after provider acceptance)
+            // No restrictions - admin has full control
+
+            const updated = await tx.job.update({
+                where: { id },
+                data: updates,
+            });
+
+            if (fixedPrice !== undefined) {
+                // Only create override record if price actually changed
+                if (job.fixedPrice !== fixedPrice) {
+                    await tx.priceOverride.create({
+                        data: {
+                            jobId: id,
+                            oldPrice: job.fixedPrice,
+                            newPrice: fixedPrice,
+                            reason,
+                            changedById: userId || undefined,
+                            changedByRole: role,
+                        },
+                    });
+                }
+            }
+
+            return updated;
         });
 
-        if (fixedPrice !== undefined) {
-            await tx.priceOverride.create({
-                data: {
-                    jobId: id,
-                    oldPrice: job.fixedPrice,
-                    newPrice: fixedPrice,
-                    reason,
-                    changedById: userId || undefined,
-                    changedByRole: role,
-                },
-            });
-        }
-
-        return updated;
-    });
-
-    return NextResponse.json(result);
+        return NextResponse.json(result);
+    } catch (error: any) {
+        console.error('Override job error', error);
+        return NextResponse.json(
+            { error: error.message || 'Failed to override job' },
+            { status: 500 }
+        );
+    }
 }
 

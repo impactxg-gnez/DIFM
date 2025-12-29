@@ -17,13 +17,13 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { description, location, isASAP, scheduledAt, latitude, longitude, isSimulation } = body;
+        const { description, location, latitude, longitude, isSimulation, partsExpectedAtBooking } = body;
 
         if (!description || !location) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        // Intelligent pricing
+        // Phase 2: Intelligent pricing with capability detection
         const pricing = await calculateJobPrice('HANDYMAN' as ServiceCategory, description, true);
         const category: ServiceCategory = pricing.primaryCategory || 'HANDYMAN';
         const now = new Date();
@@ -42,12 +42,12 @@ export async function POST(request: Request) {
                     longitude: longitude ? parseFloat(longitude) : null,
                     category,
                     fixedPrice: pricing.totalPrice,
-                    isASAP: isASAP ?? true,
-                    scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                    isASAP: true, // Milestone 1: Always ASAP
+                    scheduledAt: null,
                     customerId,
                     status: 'CREATED',
                     statusUpdatedAt: now,
-                    priceLockedAt: now,
+                    priceLockedAt: now, // Price locks on booking
                     dispatchRadius: 5,
                     isSimulation: isSimulation ?? false,
                     needsReview: pricing.needsReview,
@@ -66,21 +66,38 @@ export async function POST(request: Request) {
                 },
             });
 
-            // Auto move to DISPATCHED to allow provider acceptance while preserving log
-            const dispatchedJob = await tx.job.update({
-                where: { id: createdJob.id },
-                data: { status: 'DISPATCHED', statusUpdatedAt: now },
-            });
+            // Determine required capability from items
+            // P1/E1 jobs can be handled by handymen with capability OR specialists
+            let requiredCapability: string | null = null;
+            for (const item of pricing.items) {
+                // If item is P1 and routed to HANDYMAN, it requires plumbing capability
+                if (item.itemType === 'P1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
+                    requiredCapability = 'HANDYMAN_PLUMBING';
+                    break;
+                }
+                // If item is E1 and routed to HANDYMAN, it requires electrical capability
+                if (item.itemType === 'E1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
+                    requiredCapability = 'HANDYMAN_ELECTRICAL';
+                    break;
+                }
+                // If category is PLUMBER/ELECTRICIAN with P1/E1, handymen with capability can also see it
+                if (category === 'PLUMBER' && item.itemType === 'P1') {
+                    requiredCapability = 'HANDYMAN_PLUMBING';
+                    break;
+                }
+                if (category === 'ELECTRICIAN' && item.itemType === 'E1') {
+                    requiredCapability = 'HANDYMAN_ELECTRICAL';
+                    break;
+                }
+            }
 
-            await tx.jobStateChange.create({
-                data: {
-                    jobId: createdJob.id,
-                    fromStatus: 'CREATED',
-                    toStatus: 'DISPATCHED',
-                    reason: 'Auto dispatch',
-                    changedById: customerId,
-                    changedByRole: 'CUSTOMER',
-                },
+            // Update job with required capability and parts tracking
+            await tx.job.update({
+                where: { id: createdJob.id },
+                data: { 
+                    requiredCapability,
+                    partsExpectedAtBooking: partsExpectedAtBooking || null
+                }
             });
 
             // Persist job items if any
@@ -97,7 +114,30 @@ export async function POST(request: Request) {
                 });
             }
 
+            // Auto move to DISPATCHED to allow provider acceptance
+            const dispatchedJob = await tx.job.update({
+                where: { id: createdJob.id },
+                data: { status: 'DISPATCHED', statusUpdatedAt: now },
+            });
+
+            await tx.jobStateChange.create({
+                data: {
+                    jobId: createdJob.id,
+                    fromStatus: 'CREATED',
+                    toStatus: 'DISPATCHED',
+                    reason: 'Auto dispatch',
+                    changedById: customerId,
+                    changedByRole: 'CUSTOMER',
+                },
+            });
+
             return dispatchedJob;
+        });
+
+        // Fetch job with items for response
+        const jobWithItems = await prisma.job.findUnique({
+            where: { id: job.id },
+            include: { items: true }
         });
 
         // Update Simulator Provider location if this is a sim
@@ -108,7 +148,7 @@ export async function POST(request: Request) {
             });
         }
 
-        return NextResponse.json(job);
+        return NextResponse.json(jobWithItems);
 
     } catch (error) {
         console.error('Create job error', error);
@@ -160,20 +200,67 @@ export async function GET(request: Request) {
         if (userRole === 'CUSTOMER') {
             whereClause.customerId = userId;
         } else if (userRole === 'PROVIDER') {
-            const myCategories = user.categories?.split(',') || [];
+            // Milestone 2: Only ACTIVE providers can see jobs
+            if (user.providerStatus !== 'ACTIVE') {
+                // Inactive providers can only see their own assigned jobs
+                whereClause.providerId = userId;
+            } else {
+                const myCategories = user.categories?.split(',') || [];
+                const myCapabilities = user.capabilities?.split(',') || [];
+                const myProviderType = user.providerType || 'HANDYMAN';
 
-            whereClause = {
-                OR: [
-                    { providerId: userId },
-                    {
-                        status: 'DISPATCHED',
-                        providerId: null,
-                        category: { in: myCategories.length ? [...myCategories, 'HANDYMAN'] : ['HANDYMAN'] }
-                        // Radius check would go here (e.g. comparing user lat/long with job)
-                        // For V1 simulation, we assume "London Base" covers all.
+                // Build dispatch filter with capability logic
+                const dispatchConditions: any[] = [];
+
+                // Jobs already assigned to this provider
+                dispatchConditions.push({ providerId: userId });
+
+                // Available jobs (DISPATCHED, not assigned)
+                const availableJobConditions: any[] = [
+                    { status: 'DISPATCHED' },
+                    { providerId: null }
+                ];
+
+                // Milestone 2: Handyman-first matching logic
+                const categoryFilters: any[] = [];
+
+                if (myProviderType === 'HANDYMAN') {
+                    // Handymen can see:
+                    // 1. HANDYMAN category jobs (default)
+                    // 2. Jobs with requiredCapability that matches their capabilities
+                    categoryFilters.push({ category: 'HANDYMAN' });
+                    
+                    // If handyman has capabilities, they can see jobs requiring those capabilities
+                    if (myCapabilities.includes('HANDYMAN_PLUMBING')) {
+                        categoryFilters.push({
+                            requiredCapability: 'HANDYMAN_PLUMBING'
+                        });
                     }
-                ]
-            };
+                    if (myCapabilities.includes('HANDYMAN_ELECTRICAL')) {
+                        categoryFilters.push({
+                            requiredCapability: 'HANDYMAN_ELECTRICAL'
+                        });
+                    }
+                } else if (myProviderType === 'SPECIALIST') {
+                    // Specialists can see jobs in their categories
+                    // They only see jobs if no handyman can handle them (handled at dispatch time)
+                    if (myCategories.length > 0) {
+                        for (const cat of myCategories) {
+                            categoryFilters.push({ category: cat });
+                        }
+                    }
+                }
+
+                if (categoryFilters.length > 0) {
+                    availableJobConditions.push({ OR: categoryFilters });
+                }
+
+                dispatchConditions.push({
+                    AND: availableJobConditions
+                });
+
+                whereClause = { OR: dispatchConditions };
+            }
         }
 
         if (status) {

@@ -1,17 +1,27 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Badge as StatusBadge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ProviderMap } from './ProviderMap';
 import { MapPin } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+import { ProviderOnboarding } from '../provider/ProviderOnboarding';
+
 export function ProviderView({ user }: { user: any }) {
+    // Check if provider needs onboarding
+    const [showOnboarding, setShowOnboarding] = useState(
+        user.role === 'PROVIDER' && 
+        (!user.providerType || user.providerStatus === 'PENDING' || !user.complianceConfirmed)
+    );
+
     // API automatically filters for provider's category and dispatch radius
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
 
@@ -88,7 +98,17 @@ export function ProviderView({ user }: { user: any }) {
         }
     };
 
+    const [completionDialog, setCompletionDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
+    const [completionNotes, setCompletionNotes] = useState('');
+    const [partsRequired, setPartsRequired] = useState<string>('');
+    const [partsNotes, setPartsNotes] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const updateStatus = async (jobId: string, status: string) => {
+        if (status === 'COMPLETED') {
+            setCompletionDialog({ open: true, jobId });
+            return;
+        }
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -96,6 +116,76 @@ export function ProviderView({ user }: { user: any }) {
         });
         mutate();
     };
+
+    const submitCompletion = async () => {
+        if (!completionDialog.jobId) return;
+        if (!completionNotes.trim()) {
+            alert('Completion notes are required');
+            return;
+        }
+        if (!partsRequired || !['YES', 'NO', 'N/A'].includes(partsRequired)) {
+            alert('Please confirm if parts were required');
+            return;
+        }
+        if (partsRequired === 'YES' && !partsNotes.trim()) {
+            alert('Please add notes about the parts used');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await fetch(`/api/jobs/${completionDialog.jobId}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'COMPLETED',
+                    completionNotes,
+                    partsRequiredAtCompletion: partsRequired,
+                    partsNotes: partsRequired === 'YES' ? partsNotes : null,
+                })
+            });
+            setCompletionDialog({ open: false });
+            setCompletionNotes('');
+            setPartsRequired('');
+            setPartsNotes('');
+            mutate();
+        } catch (e) {
+            console.error('Completion error', e);
+            alert('Failed to complete job');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Show onboarding if needed
+    if (showOnboarding) {
+        return (
+            <ProviderOnboarding 
+                user={user} 
+                onComplete={() => {
+                    setShowOnboarding(false);
+                    window.location.reload(); // Refresh to get updated user data
+                }} 
+            />
+        );
+    }
+
+    // Check if provider is active
+    if (user.providerStatus !== 'ACTIVE') {
+        return (
+            <div className="space-y-4">
+                <Card className="p-6">
+                    <h2 className="text-xl font-bold mb-2">Account Status: {user.providerStatus || 'PENDING'}</h2>
+                    <p className="text-gray-600">
+                        Your provider account is pending admin approval. You will be able to receive jobs once approved.
+                    </p>
+                    <Button onClick={() => setShowOnboarding(true)} className="mt-4">
+                        Complete Profile Setup
+                    </Button>
+                </Card>
+            </div>
+        );
+    }
 
     if (!jobs) return <div>Loading jobs...</div>;
 
@@ -173,6 +263,98 @@ export function ProviderView({ user }: { user: any }) {
                     </Card>
                 ))}
             </div>
+
+            {/* Completion Dialog */}
+            {completionDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold text-gray-900">Complete Job</h3>
+                            <p className="text-sm text-gray-600">Please provide completion details</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Completion Notes *</Label>
+                            <textarea
+                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                rows={4}
+                                placeholder="Describe what was completed..."
+                                value={completionNotes}
+                                onChange={(e) => setCompletionNotes(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Parts Required? *</Label>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant={partsRequired === 'YES' ? 'default' : 'outline'}
+                                    onClick={() => setPartsRequired('YES')}
+                                    className="flex-1"
+                                >
+                                    Yes
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={partsRequired === 'NO' ? 'default' : 'outline'}
+                                    onClick={() => setPartsRequired('NO')}
+                                    className="flex-1"
+                                >
+                                    No
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={partsRequired === 'N/A' ? 'default' : 'outline'}
+                                    onClick={() => setPartsRequired('N/A')}
+                                    className="flex-1"
+                                >
+                                    N/A
+                                </Button>
+                            </div>
+                        </div>
+
+                        {partsRequired === 'YES' && (
+                            <div className="space-y-2">
+                                <Label>Parts Notes *</Label>
+                                <textarea
+                                    className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={3}
+                                    placeholder="Describe the parts used..."
+                                    value={partsNotes}
+                                    onChange={(e) => setPartsNotes(e.target.value)}
+                                    required
+                                />
+                                <p className="text-xs text-gray-500">Photos can be added later (optional)</p>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => {
+                                    setCompletionDialog({ open: false });
+                                    setCompletionNotes('');
+                                    setPartsRequired('');
+                                    setPartsNotes('');
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button 
+                                variant="default" 
+                                onClick={submitCompletion}
+                                disabled={isSubmitting}
+                                className="bg-green-600 hover:bg-green-700"
+                            >
+                                {isSubmitting ? 'Completing...' : 'Complete Job'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

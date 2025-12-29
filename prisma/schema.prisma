@@ -10,7 +10,7 @@ datasource db {
 
 // Valid Roles: CUSTOMER, PROVIDER, ADMIN
 // Valid Categories: HANDYMAN, CLEANING, PEST_CONTROL, ELECTRICIAN, PLUMBER, CARPENTER, PAINTER, PC_REPAIR
-// Valid JobStatuses: CREATED, DISPATCHED, ACCEPTED, IN_PROGRESS, COMPLETED, CLOSED, CANCELLED_FREE, CANCELLED_CHARGED
+// Valid JobStatuses: CREATED, DISPATCHED, ACCEPTED, IN_PROGRESS, COMPLETED, CLOSED, PAID, CANCELLED_FREE, CANCELLED_CHARGED
 
 model User {
   id              String   @id @default(uuid())
@@ -19,14 +19,22 @@ model User {
   passwordHash    String
   role            String   @default("CUSTOMER")
   
-  // Provider specific
+  // Provider specific (Milestone 2)
   isOnline        Boolean  @default(false)
+  providerType    String?  // "HANDYMAN" or "SPECIALIST"
+  providerStatus  String?  // "PENDING", "ACTIVE", "PAUSED", "BANNED" - only ACTIVE can receive jobs
   categories      String?  // Comma-separated list of categories (SQLite workaround for String[])
+  capabilities    String?  // Comma-separated list of capabilities (e.g., "HANDYMAN_PLUMBING,HANDYMAN_ELECTRICAL")
+  serviceArea     String?  // Basic location coverage description
+  complianceConfirmed Boolean @default(false) // Compliance confirmation checkbox
   latitude        Float?
   longitude       Float?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  
+  // Provider documents
+  documents       ProviderDocument[]
 
   // Relations
   jobsCreated     Job[]    @relation("CustomerJobs")
@@ -71,6 +79,17 @@ model Job {
   isParsed    Boolean  @default(false)  // Whether AI parsed the description
   needsReview Boolean  @default(false)  // Admin review required
   priceOverride Float? // Manual admin override
+  requiredCapability String? // "HANDYMAN_PLUMBING", "HANDYMAN_ELECTRICAL" - for dispatch logic
+  
+  // Parts & Materials (Phase 2: non-financial tracking)
+  partsExpectedAtBooking String? // "YES", "NO", "NOT_SURE" - customer indication at booking
+  partsRequiredAtCompletion String? // "YES", "NO", "N/A" - provider confirmation at completion
+  partsNotes String? // Provider notes about parts used
+  partsPhotos String? // Comma-separated URLs or paths to photos
+  
+  // Completion evidence
+  completionNotes String? // Required notes from provider before COMPLETED status
+  completionPhotos String? // Comma-separated URLs or paths to completion photos/videos
   
   // Relations
   customerId  String
@@ -183,4 +202,14 @@ model PriceOverride {
   changedById String?
   changedByRole String?
   createdAt   DateTime @default(now())
+}
+
+model ProviderDocument {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentType String   // "ID_PROOF", "LIABILITY_INSURANCE"
+  fileUrl     String   // URL or path to uploaded document
+  uploadedAt  DateTime @default(now())
+  verifiedAt  DateTime? // When admin verified (optional for now)
 }
