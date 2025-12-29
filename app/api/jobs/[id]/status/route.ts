@@ -52,8 +52,17 @@ export async function POST(
                 if (!completionNotes || !completionNotes.trim()) {
                     throw new Error('Completion notes are required before marking job as complete');
                 }
-                if (!partsRequiredAtCompletion || !['YES', 'NO', 'N/A'].includes(partsRequiredAtCompletion)) {
-                    throw new Error('Parts confirmation is required (YES/NO/N/A)');
+                
+                // For cleaning jobs, parts are always N/A
+                // For other jobs, require parts confirmation
+                if (job.category === 'CLEANING') {
+                    // Cleaners: parts are always N/A, no confirmation needed
+                    // Auto-set to N/A if not provided
+                } else {
+                    // Non-cleaning jobs require parts confirmation
+                    if (!partsRequiredAtCompletion || !['YES', 'NO', 'N/A'].includes(partsRequiredAtCompletion)) {
+                        throw new Error('Parts confirmation is required (YES/NO/N/A)');
+                    }
                 }
             }
 
@@ -71,9 +80,10 @@ export async function POST(
                     ...(status === 'COMPLETED' && completionNotes ? {
                         completionNotes,
                         completionPhotos: completionPhotos || null,
-                        partsRequiredAtCompletion: partsRequiredAtCompletion || null,
-                        partsNotes: partsNotes || null,
-                        partsPhotos: partsPhotos || null,
+                        // For cleaning jobs, always set parts to N/A
+                        partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || null),
+                        partsNotes: job.category === 'CLEANING' ? null : (partsNotes || null),
+                        partsPhotos: job.category === 'CLEANING' ? null : (partsPhotos || null),
                     } : {}),
                 }
             });
