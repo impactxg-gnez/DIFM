@@ -28,13 +28,24 @@ export async function GET() {
         // Provider (Generic)
         await prisma.user.upsert({
             where: { email: 'provider@demo.com' },
-            update: { passwordHash, role: 'PROVIDER', categories: 'PLUMBER,ELECTRICIAN', isOnline: true },
+            update: { 
+                passwordHash, 
+                role: 'PROVIDER', 
+                categories: 'PLUMBER,ELECTRICIAN', 
+                providerType: 'SPECIALIST',
+                providerStatus: 'ACTIVE',
+                complianceConfirmed: true,
+                isOnline: true 
+            },
             create: {
                 email: 'provider@demo.com',
                 name: 'Demo Provider (General)',
                 passwordHash,
                 role: 'PROVIDER',
-                categories: 'PLUMBER,ELECTRICIAN', 
+                categories: 'PLUMBER,ELECTRICIAN',
+                providerType: 'SPECIALIST',
+                providerStatus: 'ACTIVE',
+                complianceConfirmed: true,
                 isOnline: true,
                 latitude: 51.5074,
                 longitude: -0.1278
@@ -44,13 +55,24 @@ export async function GET() {
         // Simulator Provider
         await prisma.user.upsert({
             where: { email: 'simulator@demo.com' },
-            update: { passwordHash, role: 'PROVIDER', categories: 'PLUMBER,CLEANING', isOnline: true },
+            update: { 
+                passwordHash, 
+                role: 'PROVIDER', 
+                categories: 'PLUMBER,CLEANING', 
+                providerType: 'SPECIALIST',
+                providerStatus: 'ACTIVE',
+                complianceConfirmed: true,
+                isOnline: true 
+            },
             create: {
                 email: 'simulator@demo.com',
                 name: 'Simulation Provider',
                 passwordHash,
                 role: 'PROVIDER',
                 categories: 'PLUMBER,CLEANING',
+                providerType: 'SPECIALIST',
+                providerStatus: 'ACTIVE',
+                complianceConfirmed: true,
                 isOnline: true,
                 latitude: 51.5874,
                 longitude: -0.0478,
@@ -74,17 +96,30 @@ export async function GET() {
         const londonLng = -0.1278;
 
         for (const category of SERVICE_CATEGORIES) {
+            // Determine provider type: HANDYMAN is handyman, all others are specialists
+            const providerType = category === 'HANDYMAN' ? 'HANDYMAN' : 'SPECIALIST';
+            
             for (let i = 1; i <= 5; i++) {
                 const email = `${category.toLowerCase()}_${i}@demo.com`;
                 await prisma.user.upsert({
                     where: { email },
-                    update: {},
+                    update: {
+                        // Update existing providers to be fully configured
+                        providerType,
+                        providerStatus: 'ACTIVE',
+                        complianceConfirmed: true,
+                        categories: category,
+                        isOnline: true,
+                    },
                     create: {
                         email,
                         name: `${category} Pro ${i}`,
                         passwordHash,
                         role: 'PROVIDER',
                         categories: category,
+                        providerType,
+                        providerStatus: 'ACTIVE', // Pre-approved, skip onboarding
+                        complianceConfirmed: true, // Skip onboarding
                         isOnline: true,
                         latitude: londonLat + (Math.random() - 0.5) * 0.1,
                         longitude: londonLng + (Math.random() - 0.5) * 0.1
