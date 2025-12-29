@@ -18,6 +18,15 @@ export async function GET() {
             name: true,
             role: true,
             isOnline: true,
+            // Provider-specific fields
+            providerType: true,
+            providerStatus: true,
+            categories: true,
+            capabilities: true,
+            serviceArea: true,
+            complianceConfirmed: true,
+            latitude: true,
+            longitude: true,
         }
     });
 

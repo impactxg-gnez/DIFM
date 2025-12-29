@@ -2,27 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { CustomerView } from '@/components/dashboard/CustomerView';
 import { ProviderView } from '@/components/dashboard/ProviderView';
 import { AdminView } from '@/components/dashboard/AdminView';
 
+const fetcher = (url: string) => fetch(url).then((res) => {
+    if (!res.ok) throw new Error('Unauthorized');
+    return res.json();
+});
+
 export default function DashboardPage() {
     const router = useRouter();
-    const [user, setUser] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
     const [locationRequested, setLocationRequested] = useState(false);
+    
+    // Use SWR for real-time user data updates (poll every 3 seconds)
+    const { data: user, error, isLoading } = useSWR('/api/user/me', fetcher, { 
+        refreshInterval: 3000, // Poll every 3 seconds for real-time updates
+        revalidateOnFocus: true,
+        revalidateOnReconnect: true,
+    });
 
+    // Redirect to login on error
     useEffect(() => {
-        fetch('/api/user/me')
-            .then((res) => {
-                if (!res.ok) throw new Error('Unauthorized');
-                return res.json();
-            })
-            .then((data) => setUser(data))
-            .catch(() => router.push('/login'))
-            .finally(() => setLoading(false));
-    }, [router]);
+        if (error) {
+            router.push('/login');
+        }
+    }, [error, router]);
 
     // Prompt for location as soon as user is known (on login)
     useEffect(() => {
@@ -58,7 +65,7 @@ export default function DashboardPage() {
         router.push('/login');
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
     if (!user) return null;
 
     return (
