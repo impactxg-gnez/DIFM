@@ -330,60 +330,83 @@ export function AdminView({ user }: { user: any }) {
                                 Jobs: {p._count?.jobsAssigned || 0} | Docs: {p._count?.documents || 0}
                             </div>
                         </div>
-                        <div className="flex gap-2 mt-3 flex-wrap">
-                            {p.providerStatus === 'PENDING' && (
-                                <Button
-                                    size="sm"
-                                    onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
-                                >
-                                    Approve
-                                </Button>
-                            )}
-                            {p.providerStatus === 'ACTIVE' && (
-                                <>
+                        <div className="mt-4 pt-3 border-t border-slate-200">
+                            <div className="text-xs font-semibold text-slate-600 mb-2">Provider Actions</div>
+                            <div className="flex gap-2 flex-wrap">
+                                {p.providerStatus === 'PENDING' && (
                                     <Button
                                         size="sm"
-                                        variant="outline"
-                                        onClick={() => handleUpdateProvider(p.id, { providerStatus: 'PAUSED' })}
+                                        className="bg-green-600 hover:bg-green-700"
+                                        onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
                                     >
-                                        Pause
+                                        ✓ Approve
                                     </Button>
+                                )}
+                                {p.providerStatus === 'ACTIVE' && (
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                            onClick={() => {
+                                                if (confirm(`Pause provider ${p.name}? They will not receive new jobs.`)) {
+                                                    handleUpdateProvider(p.id, { providerStatus: 'PAUSED' });
+                                                }
+                                            }}
+                                        >
+                                            ⏸ Pause
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() => {
+                                                if (confirm(`⚠️ Ban provider ${p.name}? This action cannot be easily undone.`)) {
+                                                    handleUpdateProvider(p.id, { providerStatus: 'BANNED' });
+                                                }
+                                            }}
+                                        >
+                                            🚫 Ban
+                                        </Button>
+                                    </>
+                                )}
+                                {p.providerStatus === 'PAUSED' && (
                                     <Button
                                         size="sm"
-                                        variant="destructive"
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                        onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
+                                    >
+                                        ▶ Resume
+                                    </Button>
+                                )}
+                                {p.providerStatus === 'BANNED' && (
+                                    <Button
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700"
                                         onClick={() => {
-                                            if (confirm(`Ban provider ${p.name}?`)) {
-                                                handleUpdateProvider(p.id, { providerStatus: 'BANNED' });
+                                            if (confirm(`Reactivate banned provider ${p.name}?`)) {
+                                                handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' });
                                             }
                                         }}
                                     >
-                                        Ban
+                                        ✓ Reactivate
                                     </Button>
-                                </>
-                            )}
-                            {(p.providerStatus === 'PAUSED' || p.providerStatus === 'BANNED') && (
+                                )}
                                 <Button
                                     size="sm"
-                                    onClick={() => handleUpdateProvider(p.id, { providerStatus: 'ACTIVE' })}
+                                    variant="outline"
+                                    onClick={() => {
+                                        setEditProviderData({
+                                            categories: p.categories || '',
+                                            capabilities: p.capabilities || '',
+                                            providerType: p.providerType || 'HANDYMAN',
+                                            serviceArea: p.serviceArea || ''
+                                        });
+                                        setProviderEditDialog({ open: true, provider: p });
+                                    }}
                                 >
-                                    Activate
+                                    ✏️ Edit Profile
                                 </Button>
-                            )}
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                    setEditProviderData({
-                                        categories: p.categories || '',
-                                        capabilities: p.capabilities || '',
-                                        providerType: p.providerType || 'HANDYMAN',
-                                        serviceArea: p.serviceArea || ''
-                                    });
-                                    setProviderEditDialog({ open: true, provider: p });
-                                }}
-                            >
-                                Edit
-                            </Button>
+                            </div>
                         </div>
                     </Card>
                 ))}
