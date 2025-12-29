@@ -187,9 +187,9 @@ export function ProviderView({ user }: { user: any }) {
                     <p className="text-gray-600">
                         Your provider account is pending admin approval. You will be able to receive jobs once approved.
                     </p>
-                    <Button onClick={() => setShowOnboarding(true)} className="mt-4">
-                        Complete Profile Setup
-                    </Button>
+                    <p className="text-sm text-gray-500 mt-2">
+                        Your profile has been pre-configured. Please wait for admin approval.
+                    </p>
                 </Card>
             </div>
         );
