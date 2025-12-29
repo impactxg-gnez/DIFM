@@ -10,7 +10,7 @@ import { MapPin } from 'lucide-react';
 import useSWR from 'swr';
 
 interface JobCreationFormProps {
-    onSubmit: (details: { description: string; location: string; isASAP: boolean; scheduledAt?: Date }) => void;
+    onSubmit: (details: { description: string; location: string; isASAP: boolean; scheduledAt?: Date; partsExpectedAtBooking?: string }) => void;
     onCancel: () => void;
     loading: boolean;
     defaultLocation?: string;
@@ -23,6 +23,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
     const [isASAP, setIsASAP] = useState(true);
     const [scheduledTime, setScheduledTime] = useState('');
     const [debouncedDesc, setDebouncedDesc] = useState('');
+    const [partsExpected, setPartsExpected] = useState<string>('');
 
     // Autocomplete State
     const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -106,7 +107,8 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
             description,
             location,
             isASAP,
-            scheduledAt: isASAP ? undefined : new Date(scheduledTime)
+            scheduledAt: isASAP ? undefined : new Date(scheduledTime),
+            partsExpectedAtBooking: partsExpected || undefined
         });
     };
 
@@ -235,6 +237,37 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 required={!isASAP}
                             />
                         )}
+                    </div>
+
+                    <div className="space-y-4 pt-4">
+                        <Label>Parts & Materials</Label>
+                        <div className="flex gap-2">
+                            <Button
+                                type="button"
+                                variant={partsExpected === 'YES' ? 'default' : 'outline'}
+                                onClick={() => setPartsExpected('YES')}
+                                className="flex-1"
+                            >
+                                Yes
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={partsExpected === 'NO' ? 'default' : 'outline'}
+                                onClick={() => setPartsExpected('NO')}
+                                className="flex-1"
+                            >
+                                No
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={partsExpected === 'NOT_SURE' ? 'default' : 'outline'}
+                                onClick={() => setPartsExpected('NOT_SURE')}
+                                className="flex-1"
+                            >
+                                Not sure
+                            </Button>
+                        </div>
+                        <p className="text-xs text-gray-500">Do you think parts or materials may be required?</p>
                     </div>
 
                     <div className="flex gap-4 pt-4">

@@ -12,7 +12,15 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason } = body as { status: JobStatus; reason?: string };
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos } = body as { 
+            status: JobStatus; 
+            reason?: string;
+            completionNotes?: string;
+            partsRequiredAtCompletion?: string;
+            partsNotes?: string;
+            partsPhotos?: string;
+            completionPhotos?: string;
+        };
 
         const cookieStore = await cookies();
         const userId = cookieStore.get('userId')?.value;
@@ -39,6 +47,16 @@ export async function POST(
                 throw new Error('Customers cannot change status');
             }
 
+            // Require completion notes before COMPLETED status
+            if (status === 'COMPLETED' && userRole === 'PROVIDER') {
+                if (!completionNotes || !completionNotes.trim()) {
+                    throw new Error('Completion notes are required before marking job as complete');
+                }
+                if (!partsRequiredAtCompletion || !['YES', 'NO', 'N/A'].includes(partsRequiredAtCompletion)) {
+                    throw new Error('Parts confirmation is required (YES/NO/N/A)');
+                }
+            }
+
             const now = new Date();
             const cancellationReason = status.startsWith('CANCELLED') ? (reason || job.cancellationReason || 'Cancelled by admin') : job.cancellationReason;
 
@@ -49,6 +67,14 @@ export async function POST(
                     statusUpdatedAt: now,
                     acceptedAt: status === 'ACCEPTED' ? now : job.acceptedAt,
                     cancellationReason,
+                    // Update completion evidence if provided
+                    ...(status === 'COMPLETED' && completionNotes ? {
+                        completionNotes,
+                        completionPhotos: completionPhotos || null,
+                        partsRequiredAtCompletion: partsRequiredAtCompletion || null,
+                        partsNotes: partsNotes || null,
+                        partsPhotos: partsPhotos || null,
+                    } : {}),
                 }
             });
 
