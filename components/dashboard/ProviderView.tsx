@@ -17,9 +17,10 @@ import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
     // Check if provider needs onboarding
+    // Only show onboarding if providerType is missing (most critical)
+    // Documents and compliance can be set later
     const [showOnboarding, setShowOnboarding] = useState(
-        user.role === 'PROVIDER' && 
-        (!user.providerType || user.providerStatus === 'PENDING' || !user.complianceConfirmed)
+        user.role === 'PROVIDER' && !user.providerType
     );
 
     // API automatically filters for provider's category and dispatch radius

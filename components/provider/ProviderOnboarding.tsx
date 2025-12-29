@@ -60,10 +60,17 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     categories: categories.join(','),
-                    capabilities: capabilities.join(',')
+                    capabilities: capabilities.join(','),
+                    // Auto-confirm compliance when capabilities are set (documents optional)
+                    complianceConfirmed: true
                 })
             });
-            setStep('documents');
+            // Allow skipping documents - go directly to complete if providerType and categories are set
+            if (providerType && categories.length > 0) {
+                onComplete();
+            } else {
+                setStep('documents');
+            }
         } catch (e) {
             console.error('Save capabilities error', e);
             alert('Failed to save capabilities');
@@ -307,8 +314,32 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                         </p>
                     </div>
 
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                            <strong>Status:</strong> {user.providerStatus || 'PENDING'}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                            Document upload is optional. You can upload documents later from your profile.
+                        </p>
+                    </div>
+
                     <div className="flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setStep('capabilities')}>Back</Button>
+                        <Button variant="outline" onClick={async () => {
+                            // Skip documents and mark compliance if not already set
+                            if (!user.complianceConfirmed) {
+                                try {
+                                    await fetch('/api/provider/profile', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ complianceConfirmed: true })
+                                    });
+                                } catch (e) {
+                                    console.error('Save compliance error', e);
+                                }
+                            }
+                            onComplete();
+                        }}>Skip Documents</Button>
                         <Button onClick={onComplete}>Complete</Button>
                     </div>
                 </CardContent>
