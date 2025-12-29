@@ -15,6 +15,32 @@ import { CustomerGreeting } from './CustomerGreeting';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+/**
+ * Get customer-friendly status display
+ * Don't show DISPATCHED if no provider is assigned yet
+ */
+function getCustomerStatus(job: any): string {
+    // If status is DISPATCHED but no provider assigned, show as "Looking for provider"
+    if (job.status === 'DISPATCHED' && !job.providerId) {
+        return 'Looking for provider';
+    }
+    
+    // Map other statuses to customer-friendly labels
+    const statusMap: Record<string, string> = {
+        'CREATED': 'Created',
+        'DISPATCHED': 'Provider assigned',
+        'ACCEPTED': 'Accepted by provider',
+        'IN_PROGRESS': 'In progress',
+        'COMPLETED': 'Completed',
+        'CLOSED': 'Closed',
+        'PAID': 'Paid',
+        'CANCELLED_FREE': 'Cancelled',
+        'CANCELLED_CHARGED': 'Cancelled (charged)',
+    };
+    
+    return statusMap[job.status] || job.status.replace('_', ' ');
+}
+
 export function CustomerView({ user }: { user: any }) {
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
@@ -225,9 +251,11 @@ export function CustomerView({ user }: { user: any }) {
                                     <div className="space-y-1">
                                         <Badge variant={
                                             ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
-                                                ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' : 'secondary'
+                                                ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' :
+                                                job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
+                                                ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
                                         } className="mb-2">
-                                            {job.status.replace('_', ' ')}
+                                            {getCustomerStatus(job)}
                                         </Badge>
                                         <h3 className="font-bold text-lg text-gray-900">{job.category}</h3>
                                         <p className="font-medium text-gray-800">{job.description}</p>
