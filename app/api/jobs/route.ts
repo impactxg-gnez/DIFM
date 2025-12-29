@@ -246,7 +246,14 @@ export async function GET(request: Request) {
                     // They only see jobs if no handyman can handle them (handled at dispatch time)
                     if (myCategories.length > 0) {
                         for (const cat of myCategories) {
-                            categoryFilters.push({ category: cat });
+                            // Cleaners: Only see CLEANING category jobs, never repair/installation jobs
+                            if (cat === 'CLEANING') {
+                                // Cleaners only see CLEANING jobs
+                                categoryFilters.push({ category: 'CLEANING' });
+                            } else {
+                                // Other specialists (plumber, electrician, etc.) see their category
+                                categoryFilters.push({ category: cat });
+                            }
                         }
                     }
                 }

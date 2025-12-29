@@ -598,17 +598,59 @@ export function AdminView({ user }: { user: any }) {
         );
     }, [paymentsData]);
 
+    const [configureCleanersLoading, setConfigureCleanersLoading] = useState(false);
+
+    const handleConfigureCleaners = async () => {
+        if (!confirm('Configure all 5 cleaner accounts with cleaning capabilities? This will update their provider type, categories, and capabilities.')) {
+            return;
+        }
+        setConfigureCleanersLoading(true);
+        try {
+            const res = await fetch('/api/admin/configure-cleaners', {
+                method: 'POST'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                alert(`Cleaners configured successfully!\n\n${data.cleaners.map((c: any) => `${c.name}: ${c.capabilities.length} capabilities`).join('\n')}`);
+                mutateProviders();
+            } else {
+                const error = await res.json();
+                alert(`Failed to configure cleaners: ${error.error}`);
+            }
+        } catch (e) {
+            console.error('Configure cleaners error', e);
+            alert('Failed to configure cleaners');
+        } finally {
+            setConfigureCleanersLoading(false);
+        }
+    };
+
     const categoriesContent = (
-        <div className="grid md:grid-cols-3 gap-4">
-            {Object.entries(SERVICE_CATEGORIES).map(([key, label]) => (
-                <Card key={key} className="p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-800 text-white shadow-lg border border-white/10">
-                    <div className="flex items-center justify-between">
-                        <div className="font-semibold">{label}</div>
-                        <Sparkles className="w-5 h-5 text-indigo-200" />
-                    </div>
-                    <p className="text-xs text-slate-200 mt-2">Premium-ready category configuration.</p>
-                </Card>
-            ))}
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Service Categories</h3>
+                    <p className="text-sm text-slate-500">Category configuration and management</p>
+                </div>
+                <Button
+                    onClick={handleConfigureCleaners}
+                    disabled={configureCleanersLoading}
+                    variant="outline"
+                >
+                    {configureCleanersLoading ? 'Configuring...' : '⚙️ Configure Cleaners'}
+                </Button>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+                {Object.entries(SERVICE_CATEGORIES).map(([key, label]) => (
+                    <Card key={key} className="p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-800 text-white shadow-lg border border-white/10">
+                        <div className="flex items-center justify-between">
+                            <div className="font-semibold">{label}</div>
+                            <Sparkles className="w-5 h-5 text-indigo-200" />
+                        </div>
+                        <p className="text-xs text-slate-200 mt-2">Premium-ready category configuration.</p>
+                    </Card>
+                ))}
+            </div>
         </div>
     );
 
