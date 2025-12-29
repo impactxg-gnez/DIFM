@@ -36,45 +36,48 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   const matches: JobMatchResult[] = [];
 
   // Step 1: Try to match with Handymen first
-  const handymen = activeProviders.filter(p => p.providerType === 'HANDYMAN');
-  
-  for (const handyman of handymen) {
-    const handymanCategories = handyman.categories?.split(',').filter(Boolean) || [];
-    const handymanCapabilities = handyman.capabilities?.split(',').filter(Boolean) || [];
+  // BUT: Skip handymen for CLEANING jobs (cleaners only)
+  if (job.category !== 'CLEANING') {
+    const handymen = activeProviders.filter(p => p.providerType === 'HANDYMAN');
+    
+    for (const handyman of handymen) {
+      const handymanCategories = handyman.categories?.split(',').filter(Boolean) || [];
+      const handymanCapabilities = handyman.capabilities?.split(',').filter(Boolean) || [];
 
-    // Check if handyman can handle all job items
-    let canHandle = true;
-    let matchReason = 'Handyman match';
+      // Check if handyman can handle all job items
+      let canHandle = true;
+      let matchReason = 'Handyman match';
 
-    // If job requires specific capability, check if handyman has it
-    if (job.requiredCapability) {
-      if (!handymanCapabilities.includes(job.requiredCapability)) {
-        canHandle = false;
-      } else {
-        matchReason = `Handyman with ${job.requiredCapability} capability`;
+      // If job requires specific capability, check if handyman has it
+      if (job.requiredCapability) {
+        if (!handymanCapabilities.includes(job.requiredCapability)) {
+          canHandle = false;
+        } else {
+          matchReason = `Handyman with ${job.requiredCapability} capability`;
+        }
       }
-    }
 
-    // Check category match
-    if (job.category && !handymanCategories.includes(job.category) && job.category !== 'HANDYMAN') {
-      // If job is not HANDYMAN category, handyman needs to have that category or capability
-      if (!handymanCategories.includes(job.category) && !job.requiredCapability) {
-        canHandle = false;
+      // Check category match
+      if (job.category && !handymanCategories.includes(job.category) && job.category !== 'HANDYMAN') {
+        // If job is not HANDYMAN category, handyman needs to have that category or capability
+        if (!handymanCategories.includes(job.category) && !job.requiredCapability) {
+          canHandle = false;
+        }
       }
-    }
 
-    // If job is HANDYMAN category, any handyman can potentially handle it
-    if (job.category === 'HANDYMAN' && !job.requiredCapability) {
-      canHandle = true;
-      matchReason = 'Handyman - general job';
-    }
+      // If job is HANDYMAN category, any handyman can potentially handle it
+      if (job.category === 'HANDYMAN' && !job.requiredCapability) {
+        canHandle = true;
+        matchReason = 'Handyman - general job';
+      }
 
-    if (canHandle) {
-      matches.push({
-        providerId: handyman.id,
-        providerType: 'HANDYMAN',
-        matchReason
-      });
+      if (canHandle) {
+        matches.push({
+          providerId: handyman.id,
+          providerType: 'HANDYMAN',
+          matchReason
+        });
+      }
     }
   }
 
@@ -83,15 +86,42 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
     const specialists = activeProviders.filter(p => p.providerType === 'SPECIALIST');
     
     for (const specialist of specialists) {
-      const specialistCategories = specialist.categories?.split(',').filter(Boolean) || [];
+      const specialistCategories = specialist.categories?.split(',') || [];
+      const specialistCapabilities = specialist.capabilities?.split(',').filter(Boolean) || [];
 
-      // Specialist must have the job's category
-      if (job.category && specialistCategories.includes(job.category)) {
-        matches.push({
-          providerId: specialist.id,
-          providerType: 'SPECIALIST',
-          matchReason: `Specialist - ${job.category}`
-        });
+      // Cleaners: Only match CLEANING category jobs, never repair/installation
+      if (specialistCategories.includes('CLEANING')) {
+        // Cleaner providers only see CLEANING category jobs
+        if (job.category === 'CLEANING') {
+          // Check if job requires specific cleaning capability
+          if (job.requiredCapability) {
+            // If job requires a capability (e.g., C-DEEP-BATHROOM), check if cleaner has it
+            if (specialistCapabilities.includes(job.requiredCapability)) {
+              matches.push({
+                providerId: specialist.id,
+                providerType: 'SPECIALIST',
+                matchReason: `Cleaner with ${job.requiredCapability} capability`
+              });
+            }
+          } else {
+            // General cleaning job - any cleaner can handle it
+            matches.push({
+              providerId: specialist.id,
+              providerType: 'SPECIALIST',
+              matchReason: 'Cleaner - general cleaning job'
+            });
+          }
+        }
+        // Cleaners never match non-cleaning jobs (HANDYMAN, PLUMBER, ELECTRICIAN, etc.)
+      } else {
+        // Other specialists (plumber, electrician, etc.) match their category
+        if (job.category && specialistCategories.includes(job.category)) {
+          matches.push({
+            providerId: specialist.id,
+            providerType: 'SPECIALIST',
+            matchReason: `Specialist - ${job.category}`
+          });
+        }
       }
     }
   }
@@ -118,4 +148,3 @@ export async function dispatchJob(jobId: string): Promise<string[]> {
   
   return matches.map(m => m.providerId);
 }
-
