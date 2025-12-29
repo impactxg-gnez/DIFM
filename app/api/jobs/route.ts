@@ -17,7 +17,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { description, location, isASAP, scheduledAt, latitude, longitude, isSimulation, partsExpectedAtBooking } = body;
+        const { description, location, isASAP, scheduledAt, latitude, longitude, isSimulation } = body;
 
         if (!description || !location) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
@@ -81,40 +81,6 @@ export async function POST(request: Request) {
                     changedById: customerId,
                     changedByRole: 'CUSTOMER',
                 },
-            });
-
-            // Determine required capability from items
-            // P1/E1 jobs can be handled by handymen with capability OR specialists
-            let requiredCapability: string | null = null;
-            for (const item of pricing.items) {
-                // If item is P1 and routed to HANDYMAN, it requires plumbing capability
-                if (item.itemType === 'P1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
-                    requiredCapability = 'HANDYMAN_PLUMBING';
-                    break;
-                }
-                // If item is E1 and routed to HANDYMAN, it requires electrical capability
-                if (item.itemType === 'E1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
-                    requiredCapability = 'HANDYMAN_ELECTRICAL';
-                    break;
-                }
-                // If category is PLUMBER/ELECTRICIAN with P1/E1, handymen with capability can also see it
-                if (category === 'PLUMBER' && item.itemType === 'P1') {
-                    requiredCapability = 'HANDYMAN_PLUMBING';
-                    break;
-                }
-                if (category === 'ELECTRICIAN' && item.itemType === 'E1') {
-                    requiredCapability = 'HANDYMAN_ELECTRICAL';
-                    break;
-                }
-            }
-
-            // Update job with required capability and parts tracking
-            await tx.job.update({
-                where: { id: createdJob.id },
-                data: { 
-                    requiredCapability,
-                    partsExpectedAtBooking: partsExpectedAtBooking || null
-                }
             });
 
             // Persist job items if any
@@ -195,88 +161,19 @@ export async function GET(request: Request) {
             whereClause.customerId = userId;
         } else if (userRole === 'PROVIDER') {
             const myCategories = user.categories?.split(',') || [];
-            const myCapabilities = user.capabilities?.split(',') || [];
 
-            // Build dispatch filter with capability logic
-            const dispatchConditions: any[] = [];
-
-            // Jobs already assigned to this provider
-            dispatchConditions.push({ providerId: userId });
-
-            // Available jobs (DISPATCHED, not assigned)
-            const availableJobConditions: any[] = [
-                { status: 'DISPATCHED' },
-                { providerId: null }
-            ];
-
-            // Category-based filtering with capability support
-            const categoryFilters: any[] = [];
-
-            // Standard category matching
-            if (myCategories.length > 0) {
-                // Provider has specific categories - they can see jobs in those categories
-                for (const cat of myCategories) {
-                    if (cat === 'HANDYMAN') {
-                        // Handymen can see:
-                        // 1. HANDYMAN jobs without required capability
-                        // 2. HANDYMAN jobs with capability they have
-                        const handymanFilters: any[] = [
-                            { category: 'HANDYMAN', requiredCapability: null }
-                        ];
-                        if (myCapabilities.includes('HANDYMAN_PLUMBING')) {
-                            handymanFilters.push({ category: 'HANDYMAN', requiredCapability: 'HANDYMAN_PLUMBING' });
-                        }
-                        if (myCapabilities.includes('HANDYMAN_ELECTRICAL')) {
-                            handymanFilters.push({ category: 'HANDYMAN', requiredCapability: 'HANDYMAN_ELECTRICAL' });
-                        }
-                        categoryFilters.push({ OR: handymanFilters });
-                    } else if (cat === 'PLUMBER') {
-                        // Plumbers can see:
-                        // 1. PLUMBER jobs without required capability (P2+/P3+)
-                        // 2. PLUMBER jobs with HANDYMAN_PLUMBING (P1) - specialists can always see these
-                        categoryFilters.push({
-                            category: 'PLUMBER'
-                        });
-                        // Also, handymen with plumbing capability can see P1 plumbing jobs
-                        if (myCapabilities.includes('HANDYMAN_PLUMBING')) {
-                            categoryFilters.push({
-                                category: 'PLUMBER',
-                                requiredCapability: 'HANDYMAN_PLUMBING'
-                            });
-                        }
-                    } else if (cat === 'ELECTRICIAN') {
-                        // Electricians can see:
-                        // 1. ELECTRICIAN jobs without required capability (E2+)
-                        // 2. ELECTRICIAN jobs with HANDYMAN_ELECTRICAL (E1) - specialists can always see these
-                        categoryFilters.push({
-                            category: 'ELECTRICIAN'
-                        });
-                        // Also, handymen with electrical capability can see E1 electrical jobs
-                        if (myCapabilities.includes('HANDYMAN_ELECTRICAL')) {
-                            categoryFilters.push({
-                                category: 'ELECTRICIAN',
-                                requiredCapability: 'HANDYMAN_ELECTRICAL'
-                            });
-                        }
-                    } else {
-                        // Other categories (CLEANING, PAINTER, etc.) - standard matching
-                        categoryFilters.push({ category: cat });
+            whereClause = {
+                OR: [
+                    { providerId: userId },
+                    {
+                        status: 'DISPATCHED',
+                        providerId: null,
+                        category: { in: myCategories.length ? [...myCategories, 'HANDYMAN'] : ['HANDYMAN'] }
+                        // Radius check would go here (e.g. comparing user lat/long with job)
+                        // For V1 simulation, we assume "London Base" covers all.
                     }
-                }
-            } else {
-                // Default: handyman can see handyman jobs without capability requirement
-                categoryFilters.push({ category: 'HANDYMAN', requiredCapability: null });
-            }
-
-            if (categoryFilters.length > 0) {
-                availableJobConditions.push({ OR: categoryFilters });
-            }
-
-            dispatchConditions.push({
-                AND: availableJobConditions
-            });
-
-            whereClause = { OR: dispatchConditions };
+                ]
+            };
         }
 
         if (status) {
