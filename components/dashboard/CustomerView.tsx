@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
+import { UserLocationMap } from './UserLocationMap';
 import { Plus, MapPin, Star } from 'lucide-react';
 import { CustomerGreeting } from './CustomerGreeting';
 
@@ -24,7 +25,7 @@ function getCustomerStatus(job: any): string {
     if (job.status === 'DISPATCHED' && !job.providerId) {
         return 'Looking for provider';
     }
-    
+
     // Map other statuses to customer-friendly labels
     const statusMap: Record<string, string> = {
         'CREATED': 'Created',
@@ -37,7 +38,7 @@ function getCustomerStatus(job: any): string {
         'CANCELLED_FREE': 'Cancelled',
         'CANCELLED_CHARGED': 'Cancelled (charged)',
     };
-    
+
     return statusMap[job.status] || job.status.replace('_', ' ');
 }
 
@@ -130,9 +131,9 @@ export function CustomerView({ user }: { user: any }) {
     useEffect(() => {
         // Ensure jobs is an array before calling find
         if (!Array.isArray(jobs)) return;
-        
-        const completedJob = jobs.find((j: any) => 
-            j.status === 'COMPLETED' && 
+
+        const completedJob = jobs.find((j: any) =>
+            j.status === 'COMPLETED' &&
             !j.customerReview &&
             !reviewDialog.open
         );
@@ -229,6 +230,28 @@ export function CustomerView({ user }: { user: any }) {
     return (
         <div className="space-y-8">
             <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
+
+            {/* Location Check */}
+            {userCoords && (
+                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                    <div className="flex-1 space-y-1">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-blue-500" />
+                            Location Services Active
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                            Your location is being tracked to find nearby providers.
+                        </p>
+                        <p className="text-xs text-mono text-gray-400">
+                            {userCoords.lat.toFixed(4)}, {userCoords.lng.toFixed(4)}
+                        </p>
+                    </div>
+                    <div className="w-full md:w-[250px] shrink-0">
+                        <UserLocationMap latitude={userCoords.lat} longitude={userCoords.lng} />
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-between items-center gap-4">
                 <h2 className="text-xl font-semibold text-gray-900">Your Jobs</h2>
                 <div className="flex gap-2">
@@ -262,8 +285,8 @@ export function CustomerView({ user }: { user: any }) {
                                         <Badge variant={
                                             ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
                                                 ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' :
-                                                job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
-                                                ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
+                                                    job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
+                                                        ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
                                         } className="mb-2">
                                             {getCustomerStatus(job)}
                                         </Badge>
@@ -332,11 +355,10 @@ export function CustomerView({ user }: { user: any }) {
                                         key={rating}
                                         type="button"
                                         onClick={() => setReviewRating(rating)}
-                                        className={`flex-1 p-2 rounded-md border-2 transition-colors ${
-                                            reviewRating >= rating
+                                        className={`flex-1 p-2 rounded-md border-2 transition-colors ${reviewRating >= rating
                                                 ? 'border-yellow-400 bg-yellow-50 text-yellow-600'
                                                 : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                                        }`}
+                                            }`}
                                     >
                                         <Star className={`w-5 h-5 mx-auto ${reviewRating >= rating ? 'fill-current' : ''}`} />
                                     </button>
@@ -356,8 +378,8 @@ export function CustomerView({ user }: { user: any }) {
                         </div>
 
                         <div className="flex justify-end gap-3 pt-2">
-                            <Button 
-                                variant="ghost" 
+                            <Button
+                                variant="ghost"
                                 onClick={() => {
                                     setReviewDialog({ open: false });
                                     setReviewRating(5);
@@ -367,8 +389,8 @@ export function CustomerView({ user }: { user: any }) {
                             >
                                 Skip
                             </Button>
-                            <Button 
-                                variant="default" 
+                            <Button
+                                variant="default"
                                 onClick={submitReview}
                                 disabled={isSubmittingReview}
                             >

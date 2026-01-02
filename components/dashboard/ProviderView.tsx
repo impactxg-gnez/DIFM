@@ -9,6 +9,7 @@ import { Badge as StatusBadge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ProviderMap } from './ProviderMap';
+import { UserLocationMap } from './UserLocationMap';
 import { MapPin } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -71,7 +72,7 @@ export function ProviderView({ user }: { user: any }) {
 
             // Run immediately on mount
             updateLocation();
-            
+
             // Then run every 10s
             const interval = setInterval(updateLocation, 10000);
             return () => clearInterval(interval);
@@ -121,11 +122,11 @@ export function ProviderView({ user }: { user: any }) {
             alert('Completion notes are required');
             return;
         }
-        
+
         // Find the job to check if it's a cleaning job
         const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
         const isCleaningJob = job?.category === 'CLEANING';
-        
+
         // For cleaning jobs, parts are always N/A
         // For other jobs, require parts confirmation
         if (!isCleaningJob) {
@@ -168,12 +169,12 @@ export function ProviderView({ user }: { user: any }) {
     // Show onboarding if needed
     if (showOnboarding) {
         return (
-            <ProviderOnboarding 
-                user={user} 
+            <ProviderOnboarding
+                user={user}
                 onComplete={() => {
                     setShowOnboarding(false);
                     window.location.reload(); // Refresh to get updated user data
-                }} 
+                }}
             />
         );
     }
@@ -182,6 +183,31 @@ export function ProviderView({ user }: { user: any }) {
     if (user.providerStatus !== 'ACTIVE') {
         return (
             <div className="space-y-4">
+                {/* Location Tracker for Pending Providers too */}
+                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                    <div className="flex-1 space-y-1">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-blue-500" />
+                            Location Services Active
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                            We are tracking your location to match you with nearby jobs.
+                        </p>
+                        <p className="text-xs text-mono text-gray-400">
+                            {user.latitude?.toFixed(4)}, {user.longitude?.toFixed(4)}
+                        </p>
+                    </div>
+                    <div className="w-full md:w-[250px] shrink-0">
+                        {(user.latitude && user.longitude) ? (
+                            <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
+                        ) : (
+                            <div className="h-[150px] bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                                Waiting for location...
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <Card className="p-6">
                     <h2 className="text-xl font-bold mb-2">Account Status: {user.providerStatus || 'PENDING'}</h2>
                     <p className="text-gray-600">
@@ -204,6 +230,28 @@ export function ProviderView({ user }: { user: any }) {
         <div className="grid md:grid-cols-2 gap-8">
             {/* Available Jobs Column */}
             <div className="space-y-4">
+                {/* Location Tracker */}
+                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm mb-6">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="space-y-1">
+                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-blue-500" />
+                                My Location
+                            </h3>
+                            <p className="text-xs text-mono text-gray-400">
+                                {user.latitude?.toFixed(4)}, {user.longitude?.toFixed(4)}
+                            </p>
+                        </div>
+                    </div>
+                    {(user.latitude && user.longitude) ? (
+                        <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
+                    ) : (
+                        <div className="h-[150px] bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                            Waiting for location...
+                        </div>
+                    )}
+                </div>
+
                 <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-900">
                     Available Jobs
                     <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-gray-900">{availableJobs.length}</span>
@@ -297,7 +345,7 @@ export function ProviderView({ user }: { user: any }) {
                             // Find the job to check if it's a cleaning job
                             const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
                             const isCleaningJob = job?.category === 'CLEANING';
-                            
+
                             // For cleaning jobs, parts are always N/A (don't show the field)
                             if (isCleaningJob) {
                                 return (
@@ -306,7 +354,7 @@ export function ProviderView({ user }: { user: any }) {
                                     </div>
                                 );
                             }
-                            
+
                             // For non-cleaning jobs, show parts confirmation
                             return (
                                 <>
@@ -359,8 +407,8 @@ export function ProviderView({ user }: { user: any }) {
                         })()}
 
                         <div className="flex justify-end gap-3 pt-2">
-                            <Button 
-                                variant="outline" 
+                            <Button
+                                variant="outline"
                                 onClick={() => {
                                     setCompletionDialog({ open: false });
                                     setCompletionNotes('');
@@ -371,8 +419,8 @@ export function ProviderView({ user }: { user: any }) {
                             >
                                 Cancel
                             </Button>
-                            <Button 
-                                variant="default" 
+                            <Button
+                                variant="default"
                                 onClick={submitCompletion}
                                 disabled={isSubmitting}
                                 className="bg-green-600 hover:bg-green-700"
