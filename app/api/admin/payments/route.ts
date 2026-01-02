@@ -10,7 +10,7 @@ export async function GET() {
     try {
         const cookieStore = await cookies();
         const role = cookieStore.get('userRole')?.value;
-        
+
         if (role !== 'ADMIN') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
@@ -18,8 +18,7 @@ export async function GET() {
         // Get all completed/paid jobs with their transactions
         const jobs = await prisma.job.findMany({
             where: {
-                status: { in: ['COMPLETED', 'CLOSED', 'PAID'] },
-                fixedPrice: { gt: 0 }
+                status: { in: ['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_CHARGED'] }
             },
             include: {
                 customer: { select: { name: true, email: true } },
