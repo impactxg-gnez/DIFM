@@ -154,7 +154,7 @@ export function AdminView({ user }: { user: any }) {
             return (
                 <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
                     <p className="text-slate-400">No jobs match your filters.</p>
-                    <Button variant="link" onClick={() => {
+                    <Button variant="ghost" onClick={() => {
                         setStatusFilter('ALL');
                         setCategoryFilter('ALL');
                         setDateFilter('');
