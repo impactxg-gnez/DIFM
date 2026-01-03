@@ -5,12 +5,11 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // Used for migrations against the primary (non-pgbouncer) connection
 }
 
 // Valid Roles: CUSTOMER, PROVIDER, ADMIN
 // Valid Categories: HANDYMAN, CLEANING, PEST_CONTROL, ELECTRICIAN, PLUMBER, CARPENTER, PAINTER, PC_REPAIR
-// Valid JobStatuses: CREATED, DISPATCHED, ACCEPTED, IN_PROGRESS, COMPLETED, CLOSED, PAID, CANCELLED_FREE, CANCELLED_CHARGED
+// Valid JobStatuses: CREATED, DISPATCHED, ACCEPTED, IN_PROGRESS, COMPLETED, CLOSED, PAID, CANCELLED_FREE, CANCELLED_CHARGED, DISPUTED
 
 model User {
   id              String   @id @default(uuid())
@@ -79,6 +78,8 @@ model Job {
   isParsed    Boolean  @default(false)  // Whether AI parsed the description
   needsReview Boolean  @default(false)  // Admin review required
   priceOverride Float? // Manual admin override
+  platformFeeOverride Float? // Manual admin override for platform fee
+  isRefunded Boolean @default(false)
   requiredCapability String? // "HANDYMAN_PLUMBING", "HANDYMAN_ELECTRICAL" - for dispatch logic
   
   // Parts & Materials (Phase 2: non-financial tracking)
@@ -189,6 +190,16 @@ model JobStateChange {
   reason      String?
   changedById String?
   changedByRole String?
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // "OVERRIDE_FEE", "PROVIDER_STATUS", "JOB_CANCEL", etc.
+  entityId    String   // ID of the job, provider, etc.
+  entityType  String   // "JOB", "PROVIDER", "PRICING_RULE"
+  details     String?  // JSON string or text description
+  actorId     String
   createdAt   DateTime @default(now())
 }
 

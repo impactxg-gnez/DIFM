@@ -10,6 +10,7 @@ export const JOB_STATUSES = [
   'PAID',
   'CANCELLED_FREE',
   'CANCELLED_CHARGED',
+  'DISPUTED',
 ] as const;
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
@@ -19,11 +20,12 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   DISPATCHED: ['ACCEPTED', 'CANCELLED_FREE'],
   ACCEPTED: ['IN_PROGRESS', 'CANCELLED_FREE', 'CANCELLED_CHARGED'],
   IN_PROGRESS: ['COMPLETED', 'CANCELLED_CHARGED'],
-  COMPLETED: ['CLOSED'],
+  COMPLETED: ['CLOSED', 'DISPUTED'],
   CLOSED: ['PAID'],
   PAID: [],
   CANCELLED_FREE: [],
   CANCELLED_CHARGED: [],
+  DISPUTED: ['CLOSED'],
 };
 
 const STUCK_MINUTES: Partial<Record<JobStatus, number>> = {

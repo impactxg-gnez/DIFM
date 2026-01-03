@@ -32,6 +32,27 @@ export function AdminView({ user }: { user: any }) {
     const { data: paymentsData, mutate: mutatePayments } = useSWR(activeTab === 'payments' ? '/api/admin/payments' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
 
+    // Filters
+    const [statusFilter, setStatusFilter] = useState<string>('ALL');
+    const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+    const [providerTypeFilter, setProviderTypeFilter] = useState<string>('ALL');
+    const [dateFilter, setDateFilter] = useState<string>(''); // YYYY-MM-DD
+
+    const [jobDetailDialog, setJobDetailDialog] = useState<{ open: boolean; job: any }>({ open: false, job: null });
+
+    const filteredJobs = useMemo(() => {
+        if (!jobs) return [];
+        return jobs.filter((job: any) => {
+            if (statusFilter !== 'ALL' && job.status !== statusFilter) return false;
+            if (categoryFilter !== 'ALL' && job.category !== categoryFilter) return false;
+            if (dateFilter) {
+                const jobDate = new Date(job.createdAt).toISOString().split('T')[0];
+                if (jobDate !== dateFilter) return false;
+            }
+            return true;
+        });
+    }, [jobs, statusFilter, categoryFilter, dateFilter]);
+
     const handleOverrideStatus = async (jobId: string, newStatus: string) => {
         if (newStatus.startsWith('CANCELLED')) {
             setCancelDialog({ open: true, jobId, status: newStatus, reason: '' });
@@ -97,14 +118,14 @@ export function AdminView({ user }: { user: any }) {
                     reason: overrideDialog.reason,
                 })
             });
-            
+
             if (!res.ok) {
                 const error = await res.json();
                 alert(`Failed to override price: ${error.error || 'Unknown error'}`);
                 setIsSubmittingOverride(false);
                 return;
             }
-            
+
             setOverrideDialog({ open: false, reason: '' });
             mutateJobs();
             alert('Price overridden successfully!');
@@ -129,18 +150,31 @@ export function AdminView({ user }: { user: any }) {
 
     const jobsContent = useMemo(() => {
         if (!jobs) return <div className="p-6 text-center text-slate-500">Loading jobs...</div>;
-        if (jobs.length === 0) {
+        if (filteredJobs.length === 0) {
             return (
                 <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400">No jobs currently in the system.</p>
+                    <p className="text-slate-400">No jobs match your filters.</p>
+                    <Button variant="link" onClick={() => {
+                        setStatusFilter('ALL');
+                        setCategoryFilter('ALL');
+                        setDateFilter('');
+                    }}>Clear Filters</Button>
                 </div>
             );
         }
 
         return (
             <div className="grid gap-4">
-                {jobs.map((job: any) => (
-                    <Card key={job.id} className="p-5 border border-slate-200/80 bg-white/70 backdrop-blur">
+                {filteredJobs.map((job: any) => (
+                    <Card
+                        key={job.id}
+                        className="p-5 border border-slate-200/80 bg-white/70 backdrop-blur hover:bg-white transition-colors cursor-pointer"
+                        onClick={(e) => {
+                            // Prevent click if clicking a button
+                            if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('button')) return;
+                            setJobDetailDialog({ open: true, job });
+                        }}
+                    >
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
@@ -157,126 +191,18 @@ export function AdminView({ user }: { user: any }) {
                                     <MapPin className="w-3 h-3" />
                                     {job.location}
                                 </div>
-                                {job.items?.length > 0 && (
-                                    <div className="text-xs text-slate-700 bg-slate-50 border rounded p-3 space-y-1">
-                                        {job.items.map((item: any) => (
-                                            <div key={item.id} className="flex justify-between">
-                                                <span>{item.quantity}x {item.itemType}</span>
-                                                <span>£{item.totalPrice.toFixed(2)}</span>
-                                            </div>
-                                        ))}
-                                        <div className="flex justify-between border-t pt-1 font-semibold">
-                                            <span>Total</span>
-                                            <span>£{job.fixedPrice.toFixed(2)}</span>
-                                        </div>
-                                    </div>
-                                )}
-                                {job.stateChanges?.length > 0 && (
-                                    <div className="text-xs text-slate-600 space-y-1">
-                                        <div className="font-semibold">State history</div>
-                                        {job.stateChanges.slice(-3).map((s: any) => (
-                                            <div key={s.id} className="flex justify-between">
-                                                <span>{s.fromStatus} → {s.toStatus}</span>
-                                                <span>{new Date(s.createdAt).toLocaleString()}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {job.stuckReason && <div className="text-xs text-red-600">⚠ {job.stuckReason}</div>}
                             </div>
-
-                            <div className="flex flex-col gap-2 text-right min-w-[240px]">
+                            <div className="text-right">
                                 <div className="text-xl font-black text-slate-900">£{job.fixedPrice}</div>
-                                {job.priceOverrides && job.priceOverrides.length > 0 && (
-                                    <div className="text-xs text-amber-600">
-                                        Overridden from £{job.priceOverrides[0].oldPrice.toFixed(2)}
-                                    </div>
-                                )}
-                                <div className="text-xs text-gray-500">Created: {new Date(job.createdAt).toLocaleString()}</div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                            const newPrice = prompt(`Enter new price for job ${job.id.slice(0, 8)}:\nCurrent: £${job.fixedPrice}`);
-                                            if (newPrice) {
-                                                const val = Number(newPrice);
-                                                if (!isNaN(val) && val > 0) {
-                                                    handleOverrideJob(job.id, val, undefined);
-                                                } else {
-                                                    alert('Please enter a valid price');
-                                                }
-                                            }
-                                        }}
-                                        className="text-xs"
-                                    >
-                                        Override Price
-                                    </Button>
-                                    <Input 
-                                        type="text" 
-                                        placeholder="Provider ID" 
-                                        className="text-xs"
-                                        onBlur={(e) => {
-                                            if (e.target.value.trim()) {
-                                                handleOverrideJob(job.id, undefined, e.target.value.trim());
-                                                e.target.value = '';
-                                            }
-                                        }} 
-                                    />
-                                </div>
-                                <div className="space-y-2 mt-2">
-                                    <div className="text-xs font-semibold text-slate-600">Next Valid States:</div>
-                                    <div className="flex flex-wrap gap-1">
-                                        {getNextStates(job.status as any).map((nextStatus) => (
-                                            <Button
-                                                key={nextStatus}
-                                                size="sm"
-                                                variant="outline"
-                                                className="text-xs"
-                                                onClick={() => {
-                                                    if (nextStatus.startsWith('CANCELLED')) {
-                                                        const cancelTarget = job.status === 'IN_PROGRESS' ? 'CANCELLED_CHARGED' : 'CANCELLED_FREE';
-                                                        handleOverrideStatus(job.id, cancelTarget);
-                                                    } else {
-                                                        handleOverrideStatus(job.id, nextStatus);
-                                                    }
-                                                }}
-                                            >
-                                                → {nextStatus}
-                                            </Button>
-                                        ))}
-                                        {getNextStates(job.status as any).length === 0 && (
-                                            <span className="text-xs text-slate-400">No valid transitions</span>
-                                        )}
-                                    </div>
-                                    {job.providerId && (
-                                        <div className="mt-2">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={async () => {
-                                                    if (confirm('Reassign this job? It will be returned to dispatch pool.')) {
-                                                        await fetch(`/api/jobs/${job.id}/reassign`, {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ reason: 'Admin reassignment' })
-                                                        });
-                                                        mutateJobs();
-                                                    }
-                                                }}
-                                            >
-                                                Reassign Job
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
+                                <div className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleString()}</div>
+                                <div className="text-xs text-indigo-600 mt-1 font-medium">Click for Details & Actions</div>
                             </div>
                         </div>
                     </Card>
                 ))}
             </div>
         );
-    }, [jobs]);
+    }, [jobs, filteredJobs]);
 
     const [providerEditDialog, setProviderEditDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
     const [editProviderData, setEditProviderData] = useState<any>({});
@@ -310,8 +236,8 @@ export function AdminView({ user }: { user: any }) {
                             <div className="flex flex-col gap-1 items-end">
                                 <Badge variant={
                                     p.providerStatus === 'ACTIVE' ? 'default' :
-                                    p.providerStatus === 'PENDING' ? 'secondary' :
-                                    p.providerStatus === 'PAUSED' ? 'outline' : 'destructive'
+                                        p.providerStatus === 'PENDING' ? 'secondary' :
+                                            p.providerStatus === 'PAUSED' ? 'outline' : 'destructive'
                                 }>
                                     {p.providerStatus || 'PENDING'}
                                 </Badge>
@@ -343,7 +269,7 @@ export function AdminView({ user }: { user: any }) {
                                         ✓ Approve
                                     </Button>
                                 )}
-                                
+
                                 {(p.providerStatus === 'ACTIVE' || (!p.providerStatus && p.providerType)) && (
                                     <>
                                         <Button
@@ -372,7 +298,7 @@ export function AdminView({ user }: { user: any }) {
                                         </Button>
                                     </>
                                 )}
-                                
+
                                 {p.providerStatus === 'PAUSED' && (
                                     <>
                                         <Button
@@ -396,7 +322,7 @@ export function AdminView({ user }: { user: any }) {
                                         </Button>
                                     </>
                                 )}
-                                
+
                                 {p.providerStatus === 'BANNED' && (
                                     <Button
                                         size="sm"
@@ -410,7 +336,7 @@ export function AdminView({ user }: { user: any }) {
                                         ✓ Reactivate
                                     </Button>
                                 )}
-                                
+
                                 <Button
                                     size="sm"
                                     variant="outline"
@@ -495,7 +421,7 @@ export function AdminView({ user }: { user: any }) {
 
     const paymentsContent = useMemo(() => {
         if (!paymentsData) return <div className="p-6 text-center text-slate-500">Loading payments...</div>;
-        
+
         const { payments, totals } = paymentsData;
 
         if (payments.length === 0) {
@@ -552,14 +478,14 @@ export function AdminView({ user }: { user: any }) {
                                         <div>Completed: {new Date(payment.completedAt).toLocaleDateString()}</div>
                                     </div>
                                 </div>
-                                
+
                                 <div className="flex gap-4 md:gap-6">
                                     {/* Customer Price */}
                                     <div className="text-center min-w-[100px]">
                                         <div className="text-xs text-slate-500 uppercase mb-1">Customer Paid</div>
                                         <div className="text-lg font-bold text-green-600">£{payment.customerPrice.toFixed(2)}</div>
                                     </div>
-                                    
+
                                     {/* Platform Commission */}
                                     <div className="text-center min-w-[100px] border-l border-slate-200 pl-4 md:pl-6">
                                         <div className="text-xs text-slate-500 uppercase mb-1">Platform Fee</div>
@@ -569,7 +495,7 @@ export function AdminView({ user }: { user: any }) {
                                             {payment.feeStatus}
                                         </Badge>
                                     </div>
-                                    
+
                                     {/* Provider Payout */}
                                     <div className="text-center min-w-[100px] border-l border-slate-200 pl-4 md:pl-6">
                                         <div className="text-xs text-slate-500 uppercase mb-1">Provider Gets</div>
@@ -580,7 +506,39 @@ export function AdminView({ user }: { user: any }) {
                                     </div>
                                 </div>
                             </div>
-                            
+
+                            {(payment.reviewRating || payment.partsRequired) && (
+                                <div className="mt-4 pt-4 border-t border-slate-200 grid md:grid-cols-2 gap-4">
+                                    {payment.reviewRating && (
+                                        <div>
+                                            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Customer Review</div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-bold text-slate-900">{payment.reviewRating}/5</span>
+                                                <div className="flex text-yellow-500">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <svg key={i} className={`w-3 h-3 ${i < payment.reviewRating ? 'fill-current' : 'text-slate-200'}`} viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                        </svg>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {payment.reviewComment && <p className="text-sm text-slate-600 italic mt-1">"{payment.reviewComment}"</p>}
+                                        </div>
+                                    )}
+
+                                    {payment.partsRequired && (
+                                        <div>
+                                            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Parts Used by Provider</div>
+                                            <div className="text-sm font-medium text-slate-900">
+                                                {payment.partsRequired === 'YES' ? '✅ Yes, parts used' :
+                                                    payment.partsRequired === 'NO' ? '❌ No parts used' : 'N/A'}
+                                            </div>
+                                            {payment.partsNotes && <p className="text-sm text-slate-600 mt-1 bg-slate-50 p-2 rounded border border-slate-100">{payment.partsNotes}</p>}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {payment.hasPriceOverride && payment.originalPrice && (
                                 <div className="mt-3 pt-3 border-t border-slate-200">
                                     <p className="text-xs text-amber-600">
@@ -677,18 +635,56 @@ export function AdminView({ user }: { user: any }) {
                 </Button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2">
-                {tabs.map((tab) => (
-                    <Button
-                        key={tab.id}
-                        variant={activeTab === tab.id ? 'default' : 'outline'}
-                        onClick={() => setActiveTab(tab.id)}
-                        className="gap-2"
-                    >
-                        <tab.icon className="w-4 h-4" />
-                        {tab.label}
-                    </Button>
-                ))}
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center pb-2">
+                <div className="flex gap-2 overflow-x-auto">
+                    {tabs.map((tab) => (
+                        <Button
+                            key={tab.id}
+                            variant={activeTab === tab.id ? 'default' : 'outline'}
+                            onClick={() => setActiveTab(tab.id)}
+                            className="gap-2"
+                        >
+                            <tab.icon className="w-4 h-4" />
+                            {tab.label}
+                        </Button>
+                    ))}
+                </div>
+
+                {activeTab === 'jobs' && (
+                    <div className="flex gap-2 items-center flex-wrap">
+                        <select
+                            className="p-2 rounded border border-slate-300 text-sm"
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                            <option value="ALL">All Statuses</option>
+                            <option value="CREATED">Created</option>
+                            <option value="DISPATCHED">Dispatched</option>
+                            <option value="ACCEPTED">Accepted</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="CLOSED">Closed/Paid</option>
+                            <option value="STUCK">Stuck</option>
+                            <option value="DISPUTED">Disputed</option>
+                        </select>
+                        <select
+                            className="p-2 rounded border border-slate-300 text-sm"
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                        >
+                            <option value="ALL">All Categories</option>
+                            {Object.entries(SERVICE_CATEGORIES).map(([val, label]) => (
+                                <option key={val} value={val}>{label}</option>
+                            ))}
+                        </select>
+                        <Input
+                            type="date"
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value)}
+                            className="w-auto"
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="relative min-h-[200px]">
@@ -759,6 +755,184 @@ export function AdminView({ user }: { user: any }) {
                             <Button variant="default" onClick={submitOverrideDialog} disabled={isSubmittingOverride}>
                                 {isSubmittingOverride ? 'Updating...' : 'Confirm override'}
                             </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Job Detail Dialog */}
+            {jobDetailDialog.open && jobDetailDialog.job && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h2 className="text-2xl font-bold text-slate-900">Job #{jobDetailDialog.job.id.slice(0, 8)}</h2>
+                                    <Badge variant={jobDetailDialog.job.status === 'COMPLETED' ? 'default' : 'secondary'} className="text-lg">
+                                        {jobDetailDialog.job.status}
+                                    </Badge>
+                                    {jobDetailDialog.job.isRefunded && <Badge variant="destructive" className="ml-2">REFUNDED</Badge>}
+                                </div>
+                                <p className="text-slate-500">{jobDetailDialog.job.description}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setJobDetailDialog({ open: false, job: null })}>Close</Button>
+                        </div>
+
+                        <div className="grid md:grid-cols-3 gap-6">
+                            {/* Column 1: Core Details & Timeline */}
+                            <div className="space-y-6 md:col-span-2">
+                                <Card className="p-4 bg-slate-50">
+                                    <h3 className="font-semibold mb-3">Line Items</h3>
+                                    {jobDetailDialog.job.items?.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {jobDetailDialog.job.items.map((item: any) => (
+                                                <div key={item.id} className="flex justify-between text-sm p-2 bg-white rounded border border-slate-200">
+                                                    <span>{item.quantity}x {item.itemType} {item.description && `(${item.description})`}</span>
+                                                    <span className="font-mono">£{item.totalPrice.toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : <div className="text-sm text-slate-500 italic">No line items (Flat rate?)</div>}
+                                </Card>
+
+                                <Card className="p-4">
+                                    <h3 className="font-semibold mb-3">State Timeline</h3>
+                                    <div className="space-y-4 relative border-l-2 border-slate-200 ml-2 pl-4">
+                                        {jobDetailDialog.job.stateChanges?.map((s: any) => (
+                                            <div key={s.id} className="relative">
+                                                <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-400"></div>
+                                                <div className="text-sm font-medium">{s.fromStatus} → {s.toStatus}</div>
+                                                <div className="text-xs text-slate-500">
+                                                    {new Date(s.createdAt).toLocaleString()} • {s.changedByRole}
+                                                </div>
+                                                {s.reason && <div className="text-xs text-amber-600 italic">"{s.reason}"</div>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+
+                                {/* Evidence Section */}
+                                {(jobDetailDialog.job.completionPhotos || jobDetailDialog.job.completionNotes) && (
+                                    <Card className="p-4 border-l-4 border-green-500">
+                                        <h3 className="font-semibold mb-2">Completion Evidence</h3>
+                                        {jobDetailDialog.job.completionNotes && (
+                                            <div className="mb-2">
+                                                <p className="text-xs text-slate-500 uppercase">Notes</p>
+                                                <p className="bg-slate-50 p-2 rounded text-sm">{jobDetailDialog.job.completionNotes}</p>
+                                            </div>
+                                        )}
+                                        {jobDetailDialog.job.completionPhotos && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase">Photos</p>
+                                                <a href={jobDetailDialog.job.completionPhotos} target="_blank" className="text-blue-600 underline text-sm break-all">
+                                                    {jobDetailDialog.job.completionPhotos}
+                                                </a>
+                                            </div>
+                                        )}
+                                    </Card>
+                                )}
+                            </div>
+
+                            {/* Column 2: Finances & Controls */}
+                            <div className="space-y-6">
+                                <Card className="p-4 bg-indigo-50 border-indigo-100">
+                                    <h3 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                                        <Wallet className="w-4 h-4" /> Financials
+                                    </h3>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span>Customer Price</span>
+                                            <span className="font-bold">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-indigo-700">
+                                            <div className="flex items-center gap-1">
+                                                <span>Platform Fee</span>
+                                                {jobDetailDialog.job.platformFeeOverride && <span className="text-xs bg-amber-100 px-1 rounded">Overridden</span>}
+                                            </div>
+                                            <span>
+                                                -£{(jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between pt-2 border-t border-indigo-200 font-bold text-lg">
+                                            <span>Provider Payout</span>
+                                            <span>£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</span>
+                                        </div>
+                                        <div className="pt-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="w-full text-xs"
+                                                onClick={() => {
+                                                    const newFee = prompt('Override Platform Fee (£):');
+                                                    if (newFee && !isNaN(parseFloat(newFee))) {
+                                                        // Implement Fee Override
+                                                        handleOverrideJob(jobDetailDialog.job.id, undefined, undefined); // This is just for price/provider, need new arg or function
+                                                        // TODO: Add separate fee override call
+                                                        alert('Fee override will be implemented in backend next step.');
+                                                    }
+                                                }}
+                                            >
+                                                Override Fee
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </Card>
+
+                                <Card className="p-4 border-red-100 bg-red-50/50">
+                                    <h3 className="font-semibold text-red-900 mb-3">Recovery Actions</h3>
+                                    <div className="grid gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="bg-white border-red-200 text-red-700 hover:bg-red-50 justify-start"
+                                            onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_FREE')}
+                                        >
+                                            🚫 Cancel Job (Free)
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="bg-white border-red-200 text-red-700 hover:bg-red-50 justify-start"
+                                            onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_CHARGED')}
+                                        >
+                                            💸 Cancel (Charged)
+                                        </Button>
+                                        {jobDetailDialog.job.providerId && (
+                                            <Button
+                                                variant="outline"
+                                                className="bg-white border-amber-200 text-amber-700 hover:bg-amber-50 justify-start"
+                                                onClick={async () => {
+                                                    if (confirm('Reassign this job?')) {
+                                                        await fetch(`/api/jobs/${jobDetailDialog.job.id}/reassign`, {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ reason: 'Admin Recovery' })
+                                                        });
+                                                        mutateJobs();
+                                                        setJobDetailDialog({ open: false, job: null });
+                                                    }
+                                                }}
+                                            >
+                                                🔄 Reassign Provider
+                                            </Button>
+                                        )}
+                                        <div className="pt-2 border-t border-red-200 mt-2">
+                                            <p className="text-xs text-red-600 mb-2 font-semibold">Force State Jump (Dangerous)</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {['CREATED', 'DISPATCHED', 'COMPLETED', 'CLOSED'].map(s => (
+                                                    <Button
+                                                        key={s}
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-xs h-7 px-2 border border-slate-200 bg-white"
+                                                        onClick={() => handleOverrideStatus(jobDetailDialog.job.id, s)}
+                                                    >
+                                                        {s}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Card>
+                            </div>
                         </div>
                     </div>
                 </div>

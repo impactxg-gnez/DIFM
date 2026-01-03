@@ -12,8 +12,8 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos } = body as { 
-            status: JobStatus; 
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos } = body as {
+            status: JobStatus;
             reason?: string;
             completionNotes?: string;
             partsRequiredAtCompletion?: string;
@@ -43,7 +43,7 @@ export async function POST(
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
                 throw new Error('Not authorized for this job');
             }
-            if (userRole === 'CUSTOMER') {
+            if (userRole === 'CUSTOMER' && status !== 'DISPUTED') {
                 throw new Error('Customers cannot change status');
             }
 
@@ -52,7 +52,7 @@ export async function POST(
                 if (!completionNotes || !completionNotes.trim()) {
                     throw new Error('Completion notes are required before marking job as complete');
                 }
-                
+
                 // For cleaning jobs, parts are always N/A
                 // For other jobs, require parts confirmation
                 if (job.category === 'CLEANING') {
@@ -100,8 +100,9 @@ export async function POST(
             });
 
             if (status === 'COMPLETED') {
-                const price = job.fixedPrice;
-                const platformFee = price * PLATFORM_FEE_PERCENT;
+                const price = job.priceOverride ?? job.fixedPrice;
+                // Use override fee if set, otherwise calculate default 18%
+                const platformFee = job.platformFeeOverride ?? (price * PLATFORM_FEE_PERCENT);
                 const payout = price - platformFee;
 
                 await tx.transaction.create({
@@ -121,6 +122,19 @@ export async function POST(
                         type: 'FEE',
                         status: 'COMPLETED',
                         userId: job.providerId
+                    }
+                });
+            }
+
+            // Create general AuditLog for Admin actions
+            if (userRole === 'ADMIN') {
+                await tx.auditLog.create({
+                    data: {
+                        action: 'JOB_STATUS_CHANGE',
+                        entityId: id,
+                        entityType: 'JOB',
+                        details: `Status changed from ${currentStatus} to ${status}. Reason: ${reason || 'No reason provided'}`,
+                        actorId: userId
                     }
                 });
             }

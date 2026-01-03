@@ -15,20 +15,27 @@ export async function POST(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { fixedPrice, providerId, reason } = await request.json();
+    const { fixedPrice, platformFeeOverride, providerId, reason } = await request.json();
 
     if (fixedPrice !== undefined && typeof fixedPrice !== 'number') {
         return NextResponse.json({ error: 'fixedPrice must be number' }, { status: 400 });
     }
 
-    if (fixedPrice !== undefined && (!reason || reason.trim().length === 0)) {
-        return NextResponse.json({ error: 'Reason required for price override' }, { status: 400 });
+    if (platformFeeOverride !== undefined && typeof platformFeeOverride !== 'number') {
+        return NextResponse.json({ error: 'platformFeeOverride must be number' }, { status: 400 });
+    }
+
+    if ((fixedPrice !== undefined || platformFeeOverride !== undefined) && (!reason || reason.trim().length === 0)) {
+        return NextResponse.json({ error: 'Reason required for financial overrides' }, { status: 400 });
     }
 
     const updates: any = {};
     if (fixedPrice !== undefined) {
         updates.fixedPrice = fixedPrice;
         updates.priceOverride = fixedPrice;
+    }
+    if (platformFeeOverride !== undefined) {
+        updates.platformFeeOverride = platformFeeOverride;
     }
     if (providerId) updates.providerId = providerId;
 
@@ -66,6 +73,22 @@ export async function POST(
                     });
                 }
             }
+
+            // Create AuditLog for all override actions
+            const details = [];
+            if (fixedPrice !== undefined) details.push(`Price: £${job.fixedPrice} → £${fixedPrice}`);
+            if (platformFeeOverride !== undefined) details.push(`Platform Fee Override: £${platformFeeOverride}`);
+            if (providerId) details.push(`Provider reassigned to: ${providerId}`);
+
+            await tx.auditLog.create({
+                data: {
+                    action: 'JOB_OVERRIDE',
+                    entityId: id,
+                    entityType: 'JOB',
+                    details: `${details.join(', ')}. Reason: ${reason || 'No reason provided'}`,
+                    actorId: userId || 'UNKNOWN'
+                }
+            });
 
             return updated;
         });
