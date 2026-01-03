@@ -663,8 +663,9 @@ export function AdminView({ user }: { user: any }) {
                             <option value="ACCEPTED">Accepted</option>
                             <option value="IN_PROGRESS">In Progress</option>
                             <option value="COMPLETED">Completed</option>
-                            <option value="CLOSED">Closed/Paid</option>
-                            <option value="STUCK">Stuck</option>
+                            <option value="CLOSED">Closed</option>
+                            <option value="CANCELLED_FREE">Cancelled (Free)</option>
+                            <option value="CANCELLED_CHARGED">Cancelled (Charged)</option>
                             <option value="DISPUTED">Disputed</option>
                         </select>
                         <select
