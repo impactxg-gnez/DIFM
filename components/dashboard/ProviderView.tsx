@@ -17,6 +17,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
+    console.log('ProviderView user:', user);
     // Enable onboarding if provider hasn't set up capabilities or compliance
     const [showOnboarding, setShowOnboarding] = useState(!user.capabilities || !user.complianceConfirmed);
 

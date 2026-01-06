@@ -17,7 +17,7 @@ interface ProviderOnboardingProps {
 }
 
 export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps) {
-    const [step, setStep] = useState<'profile' | 'capabilities' | 'documents' | 'complete'>('profile');
+    const [step, setStep] = useState<'profile' | 'capabilities' | 'documents'>('profile');
     const [providerType, setProviderType] = useState<string>(user.providerType || 'HANDYMAN');
     const [categories, setCategories] = useState<string[]>(user.categories?.split(',').filter(Boolean) || []);
     const [capabilities, setCapabilities] = useState<string[]>(user.capabilities?.split(',').filter(Boolean) || []);
@@ -109,14 +109,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
         }
     };
 
-    // Check if onboarding is complete
-    useEffect(() => {
-        if (user.providerStatus === 'ACTIVE') {
-            setStep('complete');
-        } else if (documents && documents.length >= 2 && complianceConfirmed) {
-            // Documents uploaded and compliance confirmed, but still pending approval
-        }
-    }, [user, documents]);
+
 
     if (step === 'profile') {
         return (
@@ -305,14 +298,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                         </div>
                     )}
 
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                        <p className="text-sm text-blue-800">
-                            <strong>Status:</strong> {user.providerStatus || 'PENDING'}
-                        </p>
-                        <p className="text-xs text-blue-600 mt-1">
-                            Your profile is pending admin approval. You will be notified once approved.
-                        </p>
-                    </div>
+
 
                     <div className="bg-blue-50 p-4 rounded-lg">
                         <p className="text-sm text-blue-800">
@@ -342,22 +328,6 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                         }}>Skip Documents</Button>
                         <Button onClick={onComplete}>Complete</Button>
                     </div>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    if (step === 'complete') {
-        return (
-            <Card className="w-full max-w-2xl mx-auto">
-                <CardHeader>
-                    <CardTitle>Profile Complete</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-center text-gray-600 mb-4">
-                        Your provider profile is {user.providerStatus === 'ACTIVE' ? 'active' : 'pending approval'}.
-                    </p>
-                    <Button onClick={onComplete} className="w-full">Continue to Dashboard</Button>
                 </CardContent>
             </Card>
         );
