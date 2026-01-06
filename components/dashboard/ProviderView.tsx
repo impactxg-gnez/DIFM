@@ -17,9 +17,8 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
-    // Skip onboarding for existing providers - they already have roles assigned
-    // Onboarding is disabled for now - providers can access dashboard directly
-    const [showOnboarding, setShowOnboarding] = useState(false);
+    // Enable onboarding if provider hasn't set up capabilities or compliance
+    const [showOnboarding, setShowOnboarding] = useState(!user.capabilities || !user.complianceConfirmed);
 
     // API automatically filters for provider's category and dispatch radius
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
@@ -99,6 +98,7 @@ export function ProviderView({ user }: { user: any }) {
 
     const [completionDialog, setCompletionDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
     const [completionNotes, setCompletionNotes] = useState('');
+    const [completionPhotos, setCompletionPhotos] = useState('');
     const [partsRequired, setPartsRequired] = useState<string>('');
     const [partsNotes, setPartsNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,6 +148,7 @@ export function ProviderView({ user }: { user: any }) {
                 body: JSON.stringify({
                     status: 'COMPLETED',
                     completionNotes,
+                    completionPhotos: completionPhotos || null,
                     // For cleaning jobs, always send N/A for parts
                     partsRequiredAtCompletion: isCleaningJob ? 'N/A' : partsRequired,
                     partsNotes: isCleaningJob ? null : (partsRequired === 'YES' ? partsNotes : null),
@@ -155,6 +156,7 @@ export function ProviderView({ user }: { user: any }) {
             });
             setCompletionDialog({ open: false });
             setCompletionNotes('');
+            setCompletionPhotos('');
             setPartsRequired('');
             setPartsNotes('');
             mutate();
@@ -341,6 +343,16 @@ export function ProviderView({ user }: { user: any }) {
                             />
                         </div>
 
+                        <div className="space-y-2">
+                            <Label>Completion Photos (URL)</Label>
+                            <Input
+                                placeholder="http://..."
+                                value={completionPhotos}
+                                onChange={(e) => setCompletionPhotos(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500">Enter a URL for now (e.g. from Google Drive/Photos)</p>
+                        </div>
+
                         {(() => {
                             // Find the job to check if it's a cleaning job
                             const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
@@ -412,6 +424,7 @@ export function ProviderView({ user }: { user: any }) {
                                 onClick={() => {
                                     setCompletionDialog({ open: false });
                                     setCompletionNotes('');
+                                    setCompletionPhotos('');
                                     setPartsRequired('');
                                     setPartsNotes('');
                                 }}

@@ -94,7 +94,7 @@ export async function POST(request: Request) {
             // Update job with required capability and parts tracking
             await tx.job.update({
                 where: { id: createdJob.id },
-                data: { 
+                data: {
                     requiredCapability,
                     partsExpectedAtBooking: partsExpectedAtBooking || null
                 }
@@ -179,7 +179,7 @@ export async function GET(request: Request) {
             const job = await prisma.job.findUnique({
                 where: { id },
                 include: {
-                    provider: { select: { name: true, latitude: true, longitude: true, id: true } },
+                    provider: { select: { name: true, latitude: true, longitude: true, id: true, providerType: true, complianceConfirmed: true } },
                     items: true,
                     stateChanges: { orderBy: { createdAt: 'asc' } },
                     priceOverrides: { orderBy: { createdAt: 'desc' } },
@@ -229,7 +229,7 @@ export async function GET(request: Request) {
                     // 1. HANDYMAN category jobs (default)
                     // 2. Jobs with requiredCapability that matches their capabilities
                     categoryFilters.push({ category: 'HANDYMAN' });
-                    
+
                     // If handyman has capabilities, they can see jobs requiring those capabilities
                     if (myCapabilities.includes('HANDYMAN_PLUMBING')) {
                         categoryFilters.push({
@@ -279,7 +279,7 @@ export async function GET(request: Request) {
             orderBy: { createdAt: 'desc' },
             include: {
                 customer: { select: { name: true } },
-                provider: { select: { id: true, name: true, latitude: true, longitude: true } },
+                provider: { select: { id: true, name: true, latitude: true, longitude: true, providerType: true, complianceConfirmed: true } },
                 items: true,
                 stateChanges: { orderBy: { createdAt: 'asc' } },
                 priceOverrides: { orderBy: { createdAt: 'desc' } },

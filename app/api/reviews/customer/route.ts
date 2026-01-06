@@ -24,22 +24,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Job must be COMPLETED to review' }, { status: 400 });
         }
 
-        // Transaction: Create review AND update job status
-        const [review, updatedJob] = await prisma.$transaction([
-            prisma.customerReview.create({
-                data: {
-                    jobId,
-                    customerId: userId,
-                    providerId: job.providerId!,
-                    rating: parseInt(rating),
-                    comment,
-                }
-            }),
-            prisma.job.update({
-                where: { id: jobId },
-                data: { status: 'CUSTOMER_REVIEWED' }
-            })
-        ]);
+        // Transaction: Create review ONLY (don't change status)
+        const review = await prisma.customerReview.create({
+            data: {
+                jobId,
+                customerId: userId,
+                providerId: job.providerId!,
+                rating: parseInt(rating),
+                comment,
+            }
+        });
 
         return NextResponse.json(review);
 

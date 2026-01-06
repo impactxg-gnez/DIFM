@@ -15,6 +15,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 const tabs = [
     { id: 'jobs', label: 'Jobs', icon: ShieldAlert },
+    { id: 'disputes', label: 'Disputes', icon: ShieldAlert },
     { id: 'providers', label: 'Providers', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'pricing', label: 'Pricing Rules', icon: Wallet },
@@ -28,6 +29,7 @@ export function AdminView({ user }: { user: any }) {
     const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; jobId?: string; price?: number; reason: string }>({ open: false, reason: '' });
     const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
     const { data: jobs, mutate: mutateJobs } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
+    const { data: disputes, mutate: mutateDisputes } = useSWR(activeTab === 'disputes' ? '/api/admin/disputes' : null, fetcher);
     const { data: providers, mutate: mutateProviders } = useSWR(activeTab === 'providers' ? '/api/admin/providers' : null, fetcher);
     const { data: paymentsData, mutate: mutatePayments } = useSWR(activeTab === 'payments' ? '/api/admin/payments' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
@@ -148,6 +150,41 @@ export function AdminView({ user }: { user: any }) {
         mutatePricing();
     };
 
+    const handleResolveDispute = async (jobId: string, resolution: string) => {
+        if (!confirm('Resolve this dispute and close the job?')) return;
+        await fetch(`/api/jobs/${jobId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: 'CLOSED',
+                disputeResolution: resolution
+            })
+        });
+        mutateDisputes();
+        mutateJobs();
+    };
+
+    const handleMarkPaid = async (jobId: string, method: 'MANUAL' | 'SIMULATED') => {
+        if (!confirm(`Mark job as PAID via ${method}?`)) return;
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method, reference: 'Admin Action' })
+            });
+            if (res.ok) {
+                alert('Payment recorded');
+                mutateJobs();
+                setJobDetailDialog({ open: false, job: null });
+            } else {
+                alert('Failed to record payment');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error recording payment');
+        }
+    };
+
     const jobsContent = useMemo(() => {
         if (!jobs) return <div className="p-6 text-center text-slate-500">Loading jobs...</div>;
         if (filteredJobs.length === 0) {
@@ -203,6 +240,61 @@ export function AdminView({ user }: { user: any }) {
             </div>
         );
     }, [jobs, filteredJobs]);
+
+    const disputesContent = useMemo(() => {
+        if (!disputes) return <div className="p-6 text-center text-slate-500">Loading disputes...</div>;
+        if (disputes.length === 0) {
+            return (
+                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
+                    <p className="text-slate-400">No active disputes.</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="grid gap-4">
+                {disputes.map((job: any) => (
+                    <Card key={job.id} className="p-5 border border-red-200 bg-red-50/30">
+                        <div className="flex justify-between items-start">
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="destructive">DISPUTED</Badge>
+                                    <span className="font-mono text-sm text-slate-500">#{job.id.slice(0, 8)}</span>
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-900">{job.disputeReason || 'Unspecified Issue'}</h3>
+                                <p className="text-slate-700 bg-white p-3 rounded border border-red-100">
+                                    "{job.disputeNotes || 'No additional notes provided.'}"
+                                </p>
+                                <div className="text-sm text-slate-500">
+                                    <span className="font-semibold">Customer:</span> {job.customer.name} •
+                                    <span className="font-semibold ml-2">Provider:</span> {job.provider?.name || 'Unassigned'}
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <Button
+                                    size="sm"
+                                    className="bg-slate-900 text-white"
+                                    onClick={() => {
+                                        const resolution = prompt('Enter resolution notes:');
+                                        if (resolution) handleResolveDispute(job.id, resolution);
+                                    }}
+                                >
+                                    Resolve & Close
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setJobDetailDialog({ open: true, job })}
+                                >
+                                    View Job Details
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+        );
+    }, [disputes]);
 
     const [providerEditDialog, setProviderEditDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
     const [editProviderData, setEditProviderData] = useState<any>({});
@@ -614,6 +706,7 @@ export function AdminView({ user }: { user: any }) {
 
     const contentMap: Record<string, JSX.Element> = {
         jobs: jobsContent,
+        disputes: disputesContent,
         providers: providersContent,
         payments: paymentsContent,
         pricing: pricingContent,
@@ -876,6 +969,33 @@ export function AdminView({ user }: { user: any }) {
                                                 Override Fee
                                             </Button>
                                         </div>
+
+                                        {!jobDetailDialog.job.customerPaidAt && ['COMPLETED', 'CUSTOMER_REVIEWED', 'CLOSED'].includes(jobDetailDialog.job.status) && (
+                                            <div className="pt-4 border-t border-indigo-200 grid grid-cols-2 gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="bg-green-600 hover:bg-green-700 text-white w-full"
+                                                    onClick={() => handleMarkPaid(jobDetailDialog.job.id, 'MANUAL')}
+                                                >
+                                                    Mark Paid
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-green-600 border-green-200 w-full"
+                                                    onClick={() => handleMarkPaid(jobDetailDialog.job.id, 'SIMULATED')}
+                                                >
+                                                    Simulate
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {jobDetailDialog.job.customerPaidAt && (
+                                            <div className="pt-2 text-center">
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                    PAID on {new Date(jobDetailDialog.job.customerPaidAt).toLocaleDateString()}
+                                                </Badge>
+                                            </div>
+                                        )}
                                     </div>
                                 </Card>
 

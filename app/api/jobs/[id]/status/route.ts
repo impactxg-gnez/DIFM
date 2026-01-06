@@ -12,7 +12,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos } = body as {
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos } = body as {
             status: JobStatus;
             reason?: string;
             completionNotes?: string;
@@ -20,6 +20,8 @@ export async function POST(
             partsNotes?: string;
             partsPhotos?: string;
             completionPhotos?: string;
+            disputeNotes?: string;
+            disputePhotos?: string;
         };
 
         const cookieStore = await cookies();
@@ -43,8 +45,18 @@ export async function POST(
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
                 throw new Error('Not authorized for this job');
             }
-            if (userRole === 'CUSTOMER' && status !== 'DISPUTED') {
-                throw new Error('Customers cannot change status');
+
+            // Allow customers to dispute completed jobs
+            if (userRole === 'CUSTOMER' && status === 'DISPUTED') {
+                if (job.customerId !== userId) {
+                    throw new Error('Not authorized for this job');
+                }
+                if (job.status !== 'COMPLETED' && job.status !== 'CUSTOMER_REVIEWED') {
+                    throw new Error('Can only dispute completed jobs');
+                }
+                // Dispute is allowed, will be handled below
+            } else if (userRole === 'CUSTOMER' && status !== 'DISPUTED') {
+                throw new Error('Customers can only dispute jobs');
             }
 
             // Require completion notes before COMPLETED status
@@ -84,6 +96,18 @@ export async function POST(
                         partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || null),
                         partsNotes: job.category === 'CLEANING' ? null : (partsNotes || null),
                         partsPhotos: job.category === 'CLEANING' ? null : (partsPhotos || null),
+                    } : {}),
+                    // Update dispute data if customer is disputing
+                    ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {
+                        disputeReason: reason || 'No reason provided',
+                        disputeNotes: disputeNotes || null,
+                        disputePhotos: disputePhotos || null,
+                        disputedAt: now,
+                    } : {}),
+                    // Update dispute resolution if admin is resolving
+                    ...(status === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
+                        disputeResolvedAt: now,
+                        disputeResolution: reason || 'Resolved by admin',
                     } : {}),
                 }
             });

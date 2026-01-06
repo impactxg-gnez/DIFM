@@ -30,7 +30,8 @@ export async function GET() {
                     orderBy: { createdAt: 'desc' },
                     take: 1 // Get the most recent override
                 },
-                items: true
+                items: true,
+                customerReview: true
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -66,7 +67,12 @@ export async function GET() {
                 // Override info
                 hasPriceOverride: job.priceOverrides.length > 0,
                 originalPrice: job.priceOverrides.length > 0 ? job.priceOverrides[0].oldPrice : null,
-                overrideReason: job.priceOverrides.length > 0 ? job.priceOverrides[0].reason : null
+                overrideReason: job.priceOverrides.length > 0 ? job.priceOverrides[0].reason : null,
+                // Parts & Review info
+                partsRequired: job.partsRequiredAtCompletion,
+                partsNotes: job.partsNotes,
+                reviewRating: job.customerReview?.rating || null,
+                reviewComment: job.customerReview?.comment || null
             };
         });
 

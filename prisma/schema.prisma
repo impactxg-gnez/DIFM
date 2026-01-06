@@ -92,6 +92,19 @@ model Job {
   completionNotes String? // Required notes from provider before COMPLETED status
   completionPhotos String? // Comma-separated URLs or paths to completion photos/videos
   
+  // Dispute tracking (Milestone 4)
+  disputeReason String? // Customer's reason for dispute
+  disputeNotes String? // Additional customer notes
+  disputePhotos String? // Comma-separated photo URLs
+  disputedAt DateTime? // When dispute was raised
+  disputeResolvedAt DateTime? // When admin resolved dispute
+  disputeResolution String? // Admin resolution notes
+  
+  // Payment tracking (Milestone 4)
+  customerPaidAt DateTime? // When customer payment was captured
+  paymentMethod String? // "MANUAL", "SIMULATED", "GATEWAY"
+  paymentReference String? // External payment reference/transaction ID
+  
   // Relations
   customerId  String
   customer    User      @relation("CustomerJobs", fields: [customerId], references: [id])

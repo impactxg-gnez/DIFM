@@ -18,6 +18,7 @@ interface JobCreationFormProps {
 }
 
 export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation = '' }: JobCreationFormProps) {
+    const [step, setStep] = useState<'DETAILS' | 'CONFIRM'>('DETAILS');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState(defaultLocation);
     const [debouncedDesc, setDebouncedDesc] = useState('');
@@ -57,10 +58,77 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
             alert('Please enter both description and location');
             return;
         }
+        setStep('CONFIRM');
+    };
+
+    const handleConfirm = () => {
         onSubmit({ description, location, partsExpectedAtBooking: partsExpected || undefined });
     };
 
     const displayedPrice = pricePreview?.totalPrice ?? 0;
+
+    if (step === 'CONFIRM') {
+        return (
+            <Card className="w-full max-w-lg mx-auto">
+                <CardHeader>
+                    <CardTitle>Confirm Your Booking</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-lg space-y-2">
+                            <h3 className="font-semibold text-gray-900 border-b pb-2">Job Summary</h3>
+                            <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
+                                <span className="text-gray-500">Service:</span>
+                                <span className="font-medium">{description}</span>
+                                <span className="text-gray-500">Location:</span>
+                                <span className="font-medium">{location}</span>
+                            </div>
+                        </div>
+
+                        {pricePreview && (
+                            <div className="bg-blue-50 p-4 rounded-lg space-y-2 border border-blue-100">
+                                <h3 className="font-semibold text-blue-900 border-b border-blue-200 pb-2">Price Breakdown</h3>
+                                <div className="space-y-1">
+                                    {pricePreview.items.map((item: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between text-sm text-blue-800">
+                                            <span>{item.quantity}x {item.description || item.itemType}</span>
+                                            <span>£{item.totalPrice.toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between font-bold text-lg text-blue-900 pt-2 border-t border-blue-200 mt-2">
+                                        <span>Total</span>
+                                        <span>£{pricePreview.totalPrice.toFixed(2)}</span>
+                                    </div>
+                                    <p className="text-xs text-blue-600 mt-1">
+                                        Price locked upon booking. Includes {partsExpected === 'YES' ? 'labour only' : 'standard labour'}.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <h4 className="font-medium text-gray-900">What happens next?</h4>
+                            <ul className="text-sm text-gray-600 space-y-2 list-disc pl-4">
+                                <li>We'll simulate finding a provider nearby.</li>
+                                <li>You'll see their name and details once assigned.</li>
+                                <li>Payment is handled after the job is complete.</li>
+                                <li>Support is available if any issues arise.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-2">
+                        <Button type="button" variant="outline" onClick={() => setStep('DETAILS')} disabled={loading}>
+                            Back
+                        </Button>
+                        <Button onClick={handleConfirm} className="flex-1" disabled={loading}>
+                            {loading ? 'Confirming...' : `Confirm & Book`}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card className="w-full max-w-lg mx-auto">
@@ -101,7 +169,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                     {pricePreview && pricePreview.items && pricePreview.items.length > 0 && (
                         <div className="space-y-3 rounded-xl border border-blue-100 bg-white/70 backdrop-blur-sm p-4 shadow-inner">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-slate-800">Price Breakdown</span>
+                                <span className="text-sm font-semibold text-slate-800">Price Estimate</span>
                                 <span className="text-xs text-slate-500">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
                             </div>
                             <div className="space-y-2">
@@ -116,11 +184,8 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 ))}
                                 <div className="flex justify-between border-t pt-2 font-semibold text-slate-900">
                                     <span>Total</span>
-                                    <span>£{pricePreview.totalPrice.toFixed(2)}</span>
+                                    <span>£{displayedPrice.toFixed(2)}</span>
                                 </div>
-                                {pricePreview.needsReview && (
-                                    <p className="text-xs text-amber-600">Flagged for admin review</p>
-                                )}
                             </div>
                         </div>
                     )}
@@ -161,7 +226,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                             Cancel
                         </Button>
                         <Button type="submit" className="flex-1" disabled={loading || displayedPrice === 0}>
-                            {loading ? 'Creating...' : `Create Job - £${displayedPrice.toFixed(2)}`}
+                            Review & Book
                         </Button>
                     </div>
 
