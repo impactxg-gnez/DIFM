@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ProviderMap } from './ProviderMap';
 import { UserLocationMap } from './UserLocationMap';
-import { MapPin } from 'lucide-react';
+import { MapPin, AlertTriangle } from 'lucide-react';
+import { CameraUpload } from '@/components/ui/CameraUpload';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -100,6 +101,8 @@ export function ProviderView({ user }: { user: any }) {
     const [completionDialog, setCompletionDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
     const [completionNotes, setCompletionNotes] = useState('');
     const [completionPhotos, setCompletionPhotos] = useState('');
+    const [completionCoords, setCompletionCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [locationWarning, setLocationWarning] = useState<string | null>(null);
     const [partsRequired, setPartsRequired] = useState<string>('');
     const [partsNotes, setPartsNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -150,6 +153,12 @@ export function ProviderView({ user }: { user: any }) {
                     status: 'COMPLETED',
                     completionNotes,
                     completionPhotos: completionPhotos || null,
+                    firstName: 'milestone5_update',
+                    // New Geolocation Fields
+                    completionLat: completionCoords?.lat,
+                    completionLng: completionCoords?.lng,
+                    completionLocationVerified: !locationWarning, // True if no warning
+
                     // For cleaning jobs, always send N/A for parts
                     partsRequiredAtCompletion: isCleaningJob ? 'N/A' : partsRequired,
                     partsNotes: isCleaningJob ? null : (partsRequired === 'YES' ? partsNotes : null),
@@ -345,13 +354,41 @@ export function ProviderView({ user }: { user: any }) {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Completion Photos (URL)</Label>
-                            <Input
-                                placeholder="http://..."
-                                value={completionPhotos}
-                                onChange={(e) => setCompletionPhotos(e.target.value)}
+                            <Label>Completion Photo *</Label>
+                            <CameraUpload
+                                onCapture={(photo, lat, lng) => {
+                                    setCompletionPhotos(photo); // In real app, this would be a URL after upload
+                                    setCompletionCoords({ lat, lng });
+
+                                    // Verify distance
+                                    const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
+                                    if (job && job.latitude && job.longitude) {
+                                        const R = 6371e3; // metres
+                                        const φ1 = lat * Math.PI / 180; // φ, λ in radians
+                                        const φ2 = job.latitude * Math.PI / 180;
+                                        const Δφ = (job.latitude - lat) * Math.PI / 180;
+                                        const Δλ = (job.longitude - lng) * Math.PI / 180;
+
+                                        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                                            Math.cos(φ1) * Math.cos(φ2) *
+                                            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                                        const d = R * c; // in metres
+
+                                        if (d > 200) { // 200m radius
+                                            setLocationWarning(`You are ${(d / 1000).toFixed(2)}km from the job site. Please simulate being closer.`);
+                                        } else {
+                                            setLocationWarning(null);
+                                        }
+                                    }
+                                }}
                             />
-                            <p className="text-xs text-gray-500">Enter a URL for now (e.g. from Google Drive/Photos)</p>
+                            {locationWarning && (
+                                <div className="text-amber-600 text-sm flex items-center gap-2 bg-amber-50 p-2 rounded">
+                                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                                    {locationWarning}
+                                </div>
+                            )}
                         </div>
 
                         {(() => {
@@ -426,6 +463,8 @@ export function ProviderView({ user }: { user: any }) {
                                     setCompletionDialog({ open: false });
                                     setCompletionNotes('');
                                     setCompletionPhotos('');
+                                    setCompletionCoords(null);
+                                    setLocationWarning(null);
                                     setPartsRequired('');
                                     setPartsNotes('');
                                 }}

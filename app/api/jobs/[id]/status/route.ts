@@ -12,7 +12,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos } = body as {
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified } = body as {
             status: JobStatus;
             reason?: string;
             completionNotes?: string;
@@ -22,6 +22,10 @@ export async function POST(
             completionPhotos?: string;
             disputeNotes?: string;
             disputePhotos?: string;
+            // Milestone 5: Geolocation
+            completionLat?: number;
+            completionLng?: number;
+            completionLocationVerified?: boolean;
         };
 
         const cookieStore = await cookies();
@@ -96,6 +100,10 @@ export async function POST(
                         partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || null),
                         partsNotes: job.category === 'CLEANING' ? null : (partsNotes || null),
                         partsPhotos: job.category === 'CLEANING' ? null : (partsPhotos || null),
+                        // Milestone 5: Geolocation
+                        completionLat: completionLat || null,
+                        completionLng: completionLng || null,
+                        completionLocationVerified: completionLocationVerified || false,
                     } : {}),
                     // Update dispute data if customer is disputing
                     ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {

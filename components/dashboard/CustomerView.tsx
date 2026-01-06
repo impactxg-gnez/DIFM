@@ -158,6 +158,9 @@ export function CustomerView({ user }: { user: any }) {
     const [reviewComment, setReviewComment] = useState('');
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+    // Track dismissed review prompts locally to prevent loops
+    const [dismissedJobIds, setDismissedJobIds] = useState<string[]>([]);
+
     // Check for completed jobs without reviews and show prompt
     useEffect(() => {
         // Ensure jobs is an array before calling find
@@ -166,7 +169,8 @@ export function CustomerView({ user }: { user: any }) {
         const completedJob = jobs.find((j: any) =>
             j.status === 'COMPLETED' &&
             !j.customerReview &&
-            !reviewDialog.open
+            !reviewDialog.open &&
+            !dismissedJobIds.includes(j.id)
         );
         if (completedJob) {
             // Show review prompt after a short delay (non-blocking)
@@ -175,7 +179,7 @@ export function CustomerView({ user }: { user: any }) {
             }, 2000);
             return () => clearTimeout(timer);
         }
-    }, [jobs, reviewDialog.open]);
+    }, [jobs, reviewDialog.open, dismissedJobIds]);
 
     const submitReview = async () => {
         if (!reviewDialog.jobId) return;
@@ -190,6 +194,8 @@ export function CustomerView({ user }: { user: any }) {
                     comment: reviewComment
                 })
             });
+            // Add to dismissed list so it doesn't pop up again before revalidation
+            setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
             setReviewDialog({ open: false });
             setReviewRating(5);
             setReviewComment('');
@@ -465,6 +471,9 @@ export function CustomerView({ user }: { user: any }) {
                             <Button
                                 variant="ghost"
                                 onClick={() => {
+                                    if (reviewDialog.jobId) {
+                                        setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
+                                    }
                                     setReviewDialog({ open: false });
                                     setReviewRating(5);
                                     setReviewComment('');

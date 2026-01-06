@@ -91,6 +91,9 @@ model Job {
   // Completion evidence
   completionNotes String? // Required notes from provider before COMPLETED status
   completionPhotos String? // Comma-separated URLs or paths to completion photos/videos
+  completionLat Float?
+  completionLng Float?
+  completionLocationVerified Boolean @default(false)
   
   // Dispute tracking (Milestone 4)
   disputeReason String? // Customer's reason for dispute
