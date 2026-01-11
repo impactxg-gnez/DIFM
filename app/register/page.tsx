@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HeroSection } from '@/components/brand/HeroSection'; // Shared branding
+import { HeroSection } from '@/components/brand/HeroSection';
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -53,16 +53,18 @@ export default function RegisterPage() {
 
             {/* Right Side: Register Form */}
             <div className="flex items-center justify-center p-6 lg:p-12 relative">
-                {/* Mobile Branding (Simplified) */}
-                <div className="lg:hidden absolute top-6 left-0 right-0 px-6 text-center">
-                    <div className="text-3xl font-black mb-2">DIFM.</div>
-                    <p className="text-gray-400 text-sm">Do it For Me</p>
-                </div>
-
-                <div className="w-full max-w-md space-y-8 mt-16 lg:mt-0">
-                    <div className="text-center lg:text-left">
-                        <h2 className="text-3xl font-bold tracking-tight">Create Account</h2>
-                        <p className="text-gray-400 mt-2">Join DIFM to get things done simply.</p>
+                <div className="w-full max-w-md space-y-8">
+                    {/* Header Branding */}
+                    <div className="text-center space-y-4">
+                        <div className="mb-4">
+                            <h1 className="text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+                                Book trusted Local Pros.<br />
+                                <span className="text-blue-500">We Handle everything.</span>
+                            </h1>
+                        </div>
+                        <p className="text-gray-400 font-medium text-sm lg:text-base">
+                            Instant Fixed Price - No Calling Around - We'll do it for you
+                        </p>
                     </div>
 
                     <form onSubmit={handleRegister} className="space-y-5">
@@ -123,7 +125,12 @@ export default function RegisterPage() {
                             {loading ? 'Creating Account...' : 'Register'}
                         </Button>
 
-                        <p className="text-center text-sm text-gray-500">
+                        {/* Tagline under button */}
+                        <p className="text-center text-gray-500 text-sm font-medium tracking-wide">
+                            Don't stress. Rest Assured. We'll do it for YOU!
+                        </p>
+
+                        <p className="text-center text-sm text-gray-500 pt-4 border-t border-white/5">
                             Already have an account? <a href="/login" className="text-blue-400 hover:text-blue-300 font-medium hover:underline">Login</a>
                         </p>
                     </form>

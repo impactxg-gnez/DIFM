@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HeroSection } from '@/components/brand/HeroSection'; // New shared branding
+import { HeroSection } from '@/components/brand/HeroSection';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -12,11 +12,6 @@ export default function LoginPage() {
     const [password, setPassword] = useState('password');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [role, setRole] = useState('CUSTOMER'); // Default role for demo purposes or strictly login
-
-    // In a real app we might not ask for role on login if the backend handles it, 
-    // but the current /api/auth/login roughly returns role. 
-    // So distinct inputs aren't needed unless we want to "toggle" default credentials.
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -60,19 +55,21 @@ export default function LoginPage() {
 
             {/* Right Side: Login Form */}
             <div className="flex items-center justify-center p-6 lg:p-12 relative">
-                {/* Mobile Branding (Simplified) */}
-                <div className="lg:hidden absolute top-6 left-0 right-0 px-6 text-center">
-                    <div className="text-3xl font-black mb-2">DIFM.</div>
-                    <p className="text-gray-400 text-sm">Do it For Me</p>
-                </div>
-
-                <div className="w-full max-w-md space-y-8 mt-16 lg:mt-0">
-                    <div className="text-center lg:text-left">
-                        <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
-                        <p className="text-gray-400 mt-2">Enter your details to access your account</p>
+                <div className="w-full max-w-md space-y-8">
+                    {/* Header Branding - Visible on Mobile too */}
+                    <div className="text-center space-y-4">
+                        <div className="mb-4">
+                            <h1 className="text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+                                Book trusted Local Pros.<br />
+                                <span className="text-blue-500">We Handle everything.</span>
+                            </h1>
+                        </div>
+                        <p className="text-gray-400 font-medium text-sm lg:text-base">
+                            Instant Fixed Price - No Calling Around - We'll do it for you
+                        </p>
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-5">
+                    <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-300">Email</label>
                             <Input
@@ -103,7 +100,12 @@ export default function LoginPage() {
                             {loading ? 'Logging in...' : 'Log in'}
                         </Button>
 
-                        <p className="text-center text-sm text-gray-500">
+                        {/* Tagline under button */}
+                        <p className="text-center text-gray-500 text-sm font-medium tracking-wide">
+                            Don't stress. Rest Assured. We'll do it for YOU!
+                        </p>
+
+                        <p className="text-center text-sm text-gray-500 pt-4 border-t border-white/5">
                             Don't have an account? <a href="/register" className="text-blue-400 hover:text-blue-300 font-medium hover:underline">Register</a>
                         </p>
                     </form>
