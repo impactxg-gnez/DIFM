@@ -270,13 +270,13 @@ export function CustomerView({ user }: { user: any }) {
 
             {/* Location Check */}
             {userCoords && (
-                <div className="bg-card p-4 rounded-xl border border-blue-900/30 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                <div className="bg-zinc-900 border-blue-500/30 flex flex-col md:flex-row gap-4 items-start md:items-center">
                     <div className="flex-1 space-y-1">
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
+                        <h3 className="font-semibold text-white flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-blue-500" />
                             Location Services Active
                         </h3>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-gray-400">
                             Your location is being tracked to find nearby providers.
                         </p>
                         <p className="text-xs text-mono text-gray-400">
@@ -299,13 +299,13 @@ export function CustomerView({ user }: { user: any }) {
             </div>
 
             {!jobs ? (
-                <p className="text-center py-8 text-muted-foreground">Loading jobs...</p>
+                <p className="text-center py-8 text-gray-400">Loading jobs...</p>
             ) : !Array.isArray(jobs) ? (
                 <div className="text-center py-12 bg-red-50 rounded-lg text-red-600">
                     <p className="font-semibold">Error loading jobs</p>
                 </div>
             ) : jobs.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed text-gray-400">
+                <div className="text-center py-12 bg-white/5 border-white/10 text-gray-400">
                     No active jobs. Start a new request!
                 </div>
             ) : (
@@ -333,7 +333,7 @@ export function CustomerView({ user }: { user: any }) {
                                     </div>
                                     <div className="text-right">
                                         <div className="font-bold text-lg text-foreground">£{job.fixedPrice}</div>
-                                        <div className="text-sm text-muted-foreground">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                                        <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
 
                                         {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
                                             <div className="mt-2">
@@ -373,19 +373,19 @@ export function CustomerView({ user }: { user: any }) {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t border-border flex flex-col md:flex-row justify-between text-sm gap-4">
+                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col md:flex-row justify-between text-sm gap-4">
                                     <div className="flex flex-col gap-1">
-                                        <span className="text-muted-foreground">Location</span>
+                                        <span className="text-gray-400">Location</span>
                                         <span className="font-medium">{job.location}</span>
                                     </div>
 
                                     {job.provider && (
-                                        <div className="bg-primary/10 p-3 rounded-lg flex items-center gap-3">
+                                        <div className="bg-white/5 border-white/10 rounded-lg flex items-center gap-3">
                                             <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
                                                 {job.provider.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-semibold text-foreground flex items-center gap-2">
+                                                <div className="font-semibold text-white flex items-center gap-2">
                                                     {job.provider.name}
                                                     {(job.provider.complianceConfirmed) && (
                                                         <span className="text-green-600 text-xs bg-green-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
@@ -402,9 +402,9 @@ export function CustomerView({ user }: { user: any }) {
                                 </div>
 
                                 {job.completionNotes && (
-                                    <div className="mt-3 bg-gray-50 p-3 rounded-lg text-sm">
+                                    <div className="mt-3 bg-white/5 rounded-lg text-sm text-gray-300">
                                         <span className="font-semibold text-gray-700">Completion Notes: </span>
-                                        <span className="text-gray-600">{job.completionNotes}</span>
+                                        <span className="text-gray-400">{job.completionNotes}</span>
                                     </div>
                                 )}
 
@@ -427,13 +427,13 @@ export function CustomerView({ user }: { user: any }) {
             {/* Review Dialog */}
             {reviewDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-border">
+                    <div className="bg-zinc-900 border-white/10">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                                 <Star className="w-5 h-5 text-yellow-500" />
                                 Rate Your Experience
                             </h3>
-                            <p className="text-sm text-gray-600">How was the service? This helps us improve.</p>
+                            <p className="text-sm text-gray-400">How was the service? This helps us improve.</p>
                         </div>
                         {/* Rating Logic... */}
                         {/* Shortened for brevity, preserving existing structure */}
@@ -459,7 +459,7 @@ export function CustomerView({ user }: { user: any }) {
                         <div className="space-y-2">
                             <Label>Comment (Optional)</Label>
                             <textarea
-                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
                                 rows={3}
                                 placeholder="Share your experience..."
                                 value={reviewComment}
@@ -497,18 +497,18 @@ export function CustomerView({ user }: { user: any }) {
             {/* Dispute Dialog */}
             {disputeDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                    <div className="bg-zinc-900 border-white/10 text-white">
                         <div className="space-y-1">
                             <h3 className="text-lg font-semibold text-gray-900 text-red-600 flex items-center gap-2">
                                 Report an Issue
                             </h3>
-                            <p className="text-sm text-gray-600">Please describe the problem with this job. Payments will be paused.</p>
+                            <p className="text-sm text-gray-400">Please describe the problem with this job. Payments will be paused.</p>
                         </div>
 
                         <div className="space-y-2">
                             <Label>What went wrong? *</Label>
                             <select
-                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-red-500"
                                 value={disputeDialog.reason}
                                 onChange={(e) => setDisputeDialog(prev => ({ ...prev, reason: e.target.value }))}
                             >
@@ -524,7 +524,7 @@ export function CustomerView({ user }: { user: any }) {
                         <div className="space-y-2">
                             <Label>Additional Details</Label>
                             <textarea
-                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-red-500"
                                 rows={4}
                                 placeholder="Please provide more details..."
                                 value={disputeDialog.notes}

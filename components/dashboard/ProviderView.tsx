@@ -196,13 +196,13 @@ export function ProviderView({ user }: { user: any }) {
         return (
             <div className="space-y-4">
                 {/* Location Tracker for Pending Providers too */}
-                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 flex flex-col md:flex-row gap-4 items-start md:items-center">
                     <div className="flex-1 space-y-1">
-                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <h3 className="font-semibold text-white flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-blue-500" />
                             Location Services Active
                         </h3>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-400">
                             We are tracking your location to match you with nearby jobs.
                         </p>
                         <p className="text-xs text-mono text-gray-400">
@@ -213,7 +213,7 @@ export function ProviderView({ user }: { user: any }) {
                         {(user.latitude && user.longitude) ? (
                             <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
                         ) : (
-                            <div className="h-[150px] bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                            <div className="h-[150px] bg-zinc-800/50 text-gray-400">
                                 Waiting for location...
                             </div>
                         )}
@@ -222,10 +222,10 @@ export function ProviderView({ user }: { user: any }) {
 
                 <Card className="p-6">
                     <h2 className="text-xl font-bold mb-2">Account Status: {user.providerStatus || 'PENDING'}</h2>
-                    <p className="text-gray-600">
+                    <p className="text-gray-400">
                         Your provider account is pending admin approval. You will be able to receive jobs once approved.
                     </p>
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="text-sm text-gray-400 mt-2">
                         Your profile has been pre-configured. Please wait for admin approval.
                     </p>
                 </Card>
@@ -243,10 +243,10 @@ export function ProviderView({ user }: { user: any }) {
             {/* Available Jobs Column */}
             <div className="space-y-4">
                 {/* Location Tracker */}
-                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm mb-6">
+                <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 mb-6">
                     <div className="flex justify-between items-start mb-4">
                         <div className="space-y-1">
-                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <h3 className="font-semibold text-white flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-blue-500" />
                                 My Location
                             </h3>
@@ -258,7 +258,7 @@ export function ProviderView({ user }: { user: any }) {
                     {(user.latitude && user.longitude) ? (
                         <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
                     ) : (
-                        <div className="h-[150px] bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                        <div className="h-[150px] bg-zinc-800/50 text-gray-400">
                             Waiting for location...
                         </div>
                     )}
@@ -269,11 +269,11 @@ export function ProviderView({ user }: { user: any }) {
                     <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-gray-900">{availableJobs.length}</span>
                 </h2>
                 {availableJobs.map((job: any) => (
-                    <Card key={job.id} className="p-4 border-l-4 border-l-yellow-400">
+                    <Card key={job.id} className="p-4 border-l-4 border-l-yellow-500/50 bg-zinc-900/50">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="font-semibold text-gray-900">{job.category} - {job.description}</h3>
-                                <p className="text-sm text-gray-500">{job.location}</p>
+                                <p className="text-sm text-gray-400">{job.location}</p>
                                 <div className="mt-2 text-lg font-bold text-blue-600">£{job.fixedPrice}</div>
                                 <p className="text-xs text-gray-400 mt-1">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</p>
                             </div>
@@ -281,7 +281,7 @@ export function ProviderView({ user }: { user: any }) {
                         <Button onClick={() => acceptJob(job.id)} className="w-full">Accept Job</Button>
                     </Card>
                 ))}
-                {availableJobs.length === 0 && <p className="text-gray-500 text-sm">No new jobs matching your skills nearby.</p>}
+                {availableJobs.length === 0 && <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>}
             </div>
 
             {/* My Active Jobs Column */}
@@ -294,12 +294,12 @@ export function ProviderView({ user }: { user: any }) {
                             <span className="text-sm font-mono font-bold text-gray-900">£{job.fixedPrice}</span>
                         </div>
                         <h3 className="font-semibold mb-1 text-gray-900">{job.description}</h3>
-                        <p className="text-sm text-gray-500 mb-4 flex items-start gap-1">
+                        <p className="text-sm text-gray-400 mb-4 flex items-start gap-1">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
                         </p>
                         {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && job.cancellationReason && (
-                            <div className="text-sm text-red-600 mb-3">Cancel reason: {job.cancellationReason}</div>
+                            <div className="text-sm text-red-400 mb-3">Cancel reason: {job.cancellationReason}</div>
                         )}
 
                         {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.latitude && (
@@ -325,7 +325,7 @@ export function ProviderView({ user }: { user: any }) {
                                 <div className="w-full text-center text-sm text-green-600 font-medium py-2">Job Done / Closed</div>
                             )}
                             {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && (
-                                <div className="w-full text-center text-sm text-red-600 font-medium py-2">Cancelled</div>
+                                <div className="w-full text-center text-sm text-red-400 font-medium py-2">Cancelled</div>
                             )}
                         </div>
                     </Card>
@@ -335,16 +335,16 @@ export function ProviderView({ user }: { user: any }) {
             {/* Completion Dialog */}
             {completionDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                    <div className="bg-zinc-900/90 border border-white/10 space-y-4">
                         <div className="space-y-1">
                             <h3 className="text-lg font-semibold text-gray-900">Complete Job</h3>
-                            <p className="text-sm text-gray-600">Please provide completion details</p>
+                            <p className="text-sm text-gray-400">Please provide completion details</p>
                         </div>
 
                         <div className="space-y-2">
                             <Label>Completion Notes *</Label>
                             <textarea
-                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
                                 rows={4}
                                 placeholder="Describe what was completed..."
                                 value={completionNotes}
@@ -400,7 +400,7 @@ export function ProviderView({ user }: { user: any }) {
                             if (isCleaningJob) {
                                 return (
                                     <div className="space-y-2">
-                                        <Label className="text-gray-500">Parts Required: N/A (Cleaning jobs)</Label>
+                                        <Label className="text-gray-400">Parts Required: N/A (Cleaning jobs)</Label>
                                     </div>
                                 );
                             }
@@ -442,14 +442,14 @@ export function ProviderView({ user }: { user: any }) {
                                         <div className="space-y-2">
                                             <Label>Parts Notes *</Label>
                                             <textarea
-                                                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
                                                 rows={3}
                                                 placeholder="Describe the parts used..."
                                                 value={partsNotes}
                                                 onChange={(e) => setPartsNotes(e.target.value)}
                                                 required
                                             />
-                                            <p className="text-xs text-gray-500">Photos can be added later (optional)</p>
+                                            <p className="text-xs text-gray-400">Photos can be added later (optional)</p>
                                         </div>
                                     )}
                                 </>
