@@ -719,11 +719,11 @@ export function AdminView({ user }: { user: any }) {
                 <div className="flex items-center gap-3">
                     <ShieldAlert className="w-7 h-7 text-indigo-500" />
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Admin Command Center</h1>
-                        <p className="text-sm text-slate-500">Premium controls, instant overrides.</p>
+                        <h1 className="text-2xl font-bold tracking-tight text-white">Admin Command Center</h1>
+                        <p className="text-sm text-gray-400">Premium controls, instant overrides.</p>
                     </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { mutateJobs(); mutateProviders(); mutatePricing(); }} className="gap-2">
+                <Button variant="outline" size="sm" onClick={() => { mutateJobs(); mutateProviders(); mutatePricing(); }} className="gap-2 border-white/20 text-white hover:bg-white/5">
                     <RefreshCw className="w-4 h-4" /> Refresh
                 </Button>
             </div>
@@ -735,7 +735,7 @@ export function AdminView({ user }: { user: any }) {
                             key={tab.id}
                             variant={activeTab === tab.id ? 'default' : 'outline'}
                             onClick={() => setActiveTab(tab.id)}
-                            className="gap-2"
+                            className={`gap-2 ${activeTab !== tab.id ? 'border-white/20 text-gray-300 hover:text-white hover:bg-white/5' : ''}`}
                         >
                             <tab.icon className="w-4 h-4" />
                             {tab.label}
@@ -746,7 +746,7 @@ export function AdminView({ user }: { user: any }) {
                 {activeTab === 'jobs' && (
                     <div className="flex gap-2 items-center flex-wrap">
                         <select
-                            className="p-2 rounded border border-slate-300 text-sm"
+                            className="p-2 rounded border border-white/20 bg-zinc-900 text-white text-sm focus:outline-none focus:border-blue-500"
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
@@ -762,7 +762,7 @@ export function AdminView({ user }: { user: any }) {
                             <option value="DISPUTED">Disputed</option>
                         </select>
                         <select
-                            className="p-2 rounded border border-slate-300 text-sm"
+                            className="p-2 rounded border border-white/20 bg-zinc-900 text-white text-sm focus:outline-none focus:border-blue-500"
                             value={categoryFilter}
                             onChange={(e) => setCategoryFilter(e.target.value)}
                         >
@@ -775,7 +775,7 @@ export function AdminView({ user }: { user: any }) {
                             type="date"
                             value={dateFilter}
                             onChange={(e) => setDateFilter(e.target.value)}
-                            className="w-auto"
+                            className="w-auto bg-zinc-900 border-white/20 text-white [color-scheme:dark]"
                         />
                     </div>
                 )}

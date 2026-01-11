@@ -16,9 +16,9 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export default function DashboardPage() {
     const router = useRouter();
     const [locationRequested, setLocationRequested] = useState(false);
-    
+
     // Use SWR for real-time user data updates (poll every 3 seconds)
-    const { data: user, error, isLoading } = useSWR('/api/user/me', fetcher, { 
+    const { data: user, error, isLoading } = useSWR('/api/user/me', fetcher, {
         refreshInterval: 3000, // Poll every 3 seconds for real-time updates
         revalidateOnFocus: true,
         revalidateOnReconnect: true,
@@ -69,18 +69,18 @@ export default function DashboardPage() {
     if (!user) return null;
 
     return (
-        <div className="min-h-screen bg-gray-50 font-sans">
-            <header className="bg-white border-b h-16 px-8 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <div className="min-h-screen bg-black font-sans selection:bg-blue-600/30">
+            <header className="bg-[#121417] border-b border-white/10 h-16 px-8 flex justify-between items-center sticky top-0 z-10 shadow-sm">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold">D</div>
-                    <h1 className="text-xl font-bold tracking-tight text-gray-900">DIFM</h1>
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">D</div>
+                    <h1 className="text-xl font-bold tracking-tight text-white">DIFM</h1>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-right hidden sm:block">
-                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                        <p className="text-xs text-gray-500 lowercase">{user.role}</p>
+                        <p className="text-sm font-medium text-white">{user.name}</p>
+                        <p className="text-xs text-gray-400 lowercase">{user.role}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-900 hover:text-gray-700">Log out</Button>
+                    <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white hover:bg-white/5">Log out</Button>
                 </div>
             </header>
 
