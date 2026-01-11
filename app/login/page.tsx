@@ -9,7 +9,7 @@ import { HeroSection } from '@/components/brand/HeroSection';
 export default function LoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState('customer@demo.com');
-    const [password, setPassword] = useState('password');
+    const [password, setPassword] = useState('password123');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
