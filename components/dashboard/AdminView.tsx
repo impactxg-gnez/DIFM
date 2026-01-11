@@ -189,7 +189,7 @@ export function AdminView({ user }: { user: any }) {
         if (!jobs) return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
         if (filteredJobs.length === 0) {
             return (
-                <div className="text-center py-16 bg-card/60 rounded-xl border border-dashed border-border">
+                <div className="text-center py-16 bg-zinc-900/60 border-white/10">
                     <p className="text-muted-foreground">No jobs match your filters.</p>
                     <Button variant="ghost" onClick={() => {
                         setStatusFilter('ALL');
@@ -205,7 +205,7 @@ export function AdminView({ user }: { user: any }) {
                 {filteredJobs.map((job: any) => (
                     <Card
                         key={job.id}
-                        className="p-5 border border-border/80 bg-card/70 backdrop-blur hover:bg-card transition-colors cursor-pointer"
+                        className="p-5 border border-white/10 bg-zinc-900/70 backdrop-blur hover:bg-card transition-colors cursor-pointer"
                         onClick={(e) => {
                             // Prevent click if clicking a button
                             if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('button')) return;
@@ -245,7 +245,7 @@ export function AdminView({ user }: { user: any }) {
         if (!disputes) return <div className="p-6 text-center text-muted-foreground">Loading disputes...</div>;
         if (disputes.length === 0) {
             return (
-                <div className="text-center py-16 bg-card/60 rounded-xl border border-dashed border-border">
+                <div className="text-center py-16 bg-zinc-900/60 border-white/10">
                     <p className="text-muted-foreground">No active disputes.</p>
                 </div>
             );
@@ -254,7 +254,7 @@ export function AdminView({ user }: { user: any }) {
         return (
             <div className="grid gap-4">
                 {disputes.map((job: any) => (
-                    <Card key={job.id} className="p-5 border border-red-200 bg-red-50/30">
+                    <Card key={job.id} className="p-5 border border-red-200 bg-red-500/10 border-red-500/30">
                         <div className="flex justify-between items-start">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
@@ -319,7 +319,7 @@ export function AdminView({ user }: { user: any }) {
         return (
             <div className="grid md:grid-cols-2 gap-4">
                 {providers.map((p: any) => (
-                    <Card key={p.id} className="p-4 bg-card/70 border border-border">
+                    <Card key={p.id} className="p-4 bg-zinc-900 border-white/10">
                         <div className="flex justify-between items-center mb-3">
                             <div>
                                 <div className="font-semibold text-foreground">{p.name}</div>
@@ -340,7 +340,7 @@ export function AdminView({ user }: { user: any }) {
                                 )}
                             </div>
                         </div>
-                        <div className="text-sm text-slate-700 space-y-1">
+                        <div className="text-sm text-gray-400 space-y-1">
                             <div>Categories: {p.categories || '—'}</div>
                             {p.capabilities && <div>Capabilities: {p.capabilities}</div>}
                             {p.serviceArea && <div>Service Area: {p.serviceArea}</div>}
@@ -348,8 +348,8 @@ export function AdminView({ user }: { user: any }) {
                                 Jobs: {p._count?.jobsAssigned || 0} | Docs: {p._count?.documents || 0}
                             </div>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-slate-200">
-                            <div className="text-xs font-semibold text-slate-600 mb-2">Provider Actions</div>
+                        <div className="mt-4 pt-3 border-t border-white/10">
+                            <div className="text-xs font-semibold text-gray-300 mb-2">Provider Actions</div>
                             <div className="flex gap-2 flex-wrap">
                                 {/* Show buttons based on current status */}
                                 {(p.providerStatus === 'PENDING' || !p.providerStatus) && (
@@ -471,12 +471,12 @@ export function AdminView({ user }: { user: any }) {
     }, [mutatePricing]);
 
     const pricingContent = useMemo(() => {
-        if (!pricingRules) return <div className="p-6 text-center text-slate-500">Loading pricing rules...</div>;
+        if (!pricingRules) return <div className="p-6 text-center text-gray-400">Loading pricing rules...</div>;
         if (pricingRules.length === 0) {
             return (
-                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400 mb-4">No pricing rules found.</p>
-                    <p className="text-sm text-slate-500 mb-4">Pricing rules need to be seeded from the pricing matrix.</p>
+                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-white/10">
+                    <p className="text-gray-500 mb-4">No pricing rules found.</p>
+                    <p className="text-sm text-gray-400 mb-4">Pricing rules need to be seeded from the pricing matrix.</p>
                     <Button onClick={handleSeedPricingRules}>
                         Seed Pricing Rules
                     </Button>
@@ -486,12 +486,12 @@ export function AdminView({ user }: { user: any }) {
         return (
             <div className="space-y-4">
                 {pricingRules.map((rule: any) => (
-                    <Card key={rule.id} className="p-4 bg-white/70 border border-slate-200">
+                    <Card key={rule.id} className="p-4 bg-white/70 border border-white/10">
                         <div className="flex items-center justify-between gap-3">
                             <div>
-                                <div className="text-sm uppercase text-slate-500">{rule.category}</div>
-                                <div className="font-semibold text-slate-900">{rule.itemType}</div>
-                                <div className="text-xs text-slate-400 mt-1">Unit: {rule.unit}</div>
+                                <div className="text-sm uppercase text-gray-400">{rule.category}</div>
+                                <div className="font-semibold text-white">{rule.itemType}</div>
+                                <div className="text-xs text-gray-500 mt-1">Unit: {rule.unit}</div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Input
@@ -512,14 +512,14 @@ export function AdminView({ user }: { user: any }) {
     }, [pricingRules, handleSeedPricingRules]);
 
     const paymentsContent = useMemo(() => {
-        if (!paymentsData) return <div className="p-6 text-center text-slate-500">Loading payments...</div>;
+        if (!paymentsData) return <div className="p-6 text-center text-gray-400">Loading payments...</div>;
 
         const { payments, totals } = paymentsData;
 
         if (payments.length === 0) {
             return (
-                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400">No completed jobs with payments yet.</p>
+                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-white/10">
+                    <p className="text-gray-500">No completed jobs with payments yet.</p>
                 </div>
             );
         }
@@ -527,24 +527,24 @@ export function AdminView({ user }: { user: any }) {
         return (
             <div className="space-y-6">
                 {/* Summary Card */}
-                <Card className="p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Payment Summary</h3>
+                <Card className="p-6 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-4">Payment Summary</h3>
                     <div className="grid md:grid-cols-4 gap-4">
-                        <div className="bg-white/80 rounded-lg p-4 border border-indigo-100">
-                            <div className="text-xs text-slate-500 uppercase mb-1">Total Jobs</div>
-                            <div className="text-2xl font-bold text-slate-900">{totals.totalJobs}</div>
+                        <div className="bg-white/5 border-white/10">
+                            <div className="text-xs text-gray-400 uppercase mb-1">Total Jobs</div>
+                            <div className="text-2xl font-bold text-white">{totals.totalJobs}</div>
                         </div>
-                        <div className="bg-white/80 rounded-lg p-4 border border-indigo-100">
-                            <div className="text-xs text-slate-500 uppercase mb-1">Total Revenue</div>
+                        <div className="bg-white/5 border-white/10">
+                            <div className="text-xs text-gray-400 uppercase mb-1">Total Revenue</div>
                             <div className="text-2xl font-bold text-green-600">£{totals.totalCustomerPrice.toFixed(2)}</div>
                         </div>
-                        <div className="bg-white/80 rounded-lg p-4 border border-indigo-100">
-                            <div className="text-xs text-slate-500 uppercase mb-1">Platform Commission</div>
+                        <div className="bg-white/5 border-white/10">
+                            <div className="text-xs text-gray-400 uppercase mb-1">Platform Commission</div>
                             <div className="text-2xl font-bold text-indigo-600">£{totals.totalPlatformCommission.toFixed(2)}</div>
-                            <div className="text-xs text-slate-400 mt-1">({(PLATFORM_FEE_PERCENT * 100).toFixed(0)}%)</div>
+                            <div className="text-xs text-gray-500 mt-1">({(PLATFORM_FEE_PERCENT * 100).toFixed(0)}%)</div>
                         </div>
-                        <div className="bg-white/80 rounded-lg p-4 border border-indigo-100">
-                            <div className="text-xs text-slate-500 uppercase mb-1">Provider Payouts</div>
+                        <div className="bg-white/5 border-white/10">
+                            <div className="text-xs text-gray-400 uppercase mb-1">Provider Payouts</div>
                             <div className="text-2xl font-bold text-blue-600">£{totals.totalProviderPayout.toFixed(2)}</div>
                         </div>
                     </div>
@@ -552,19 +552,19 @@ export function AdminView({ user }: { user: any }) {
 
                 {/* Payments List */}
                 <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-slate-900">Payment Details</h3>
+                    <h3 className="text-lg font-semibold text-white">Payment Details</h3>
                     {payments.map((payment: any) => (
-                        <Card key={payment.jobId} className="p-5 border border-slate-200/80 bg-white/70">
+                        <Card key={payment.jobId} className="p-5 border border-white/10/80 bg-white/70">
                             <div className="flex flex-col md:flex-row justify-between gap-4">
                                 <div className="flex-1 space-y-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-slate-900">Job #{payment.jobId.slice(0, 8)}</span>
+                                        <span className="font-semibold text-white">Job #{payment.jobId.slice(0, 8)}</span>
                                         <Badge variant={payment.status === 'PAID' ? 'default' : 'secondary'}>
                                             {payment.status}
                                         </Badge>
                                     </div>
-                                    <p className="text-sm text-slate-600">{payment.jobDescription}</p>
-                                    <div className="text-xs text-slate-500">
+                                    <p className="text-sm text-gray-300">{payment.jobDescription}</p>
+                                    <div className="text-xs text-gray-400">
                                         <div>Customer: {payment.customerName}</div>
                                         <div>Provider: {payment.providerName}</div>
                                         <div>Completed: {new Date(payment.completedAt).toLocaleDateString()}</div>
@@ -574,23 +574,23 @@ export function AdminView({ user }: { user: any }) {
                                 <div className="flex gap-4 md:gap-6">
                                     {/* Customer Price */}
                                     <div className="text-center min-w-[100px]">
-                                        <div className="text-xs text-slate-500 uppercase mb-1">Customer Paid</div>
+                                        <div className="text-xs text-gray-400 uppercase mb-1">Customer Paid</div>
                                         <div className="text-lg font-bold text-green-600">£{payment.customerPrice.toFixed(2)}</div>
                                     </div>
 
                                     {/* Platform Commission */}
-                                    <div className="text-center min-w-[100px] border-l border-slate-200 pl-4 md:pl-6">
-                                        <div className="text-xs text-slate-500 uppercase mb-1">Platform Fee</div>
+                                    <div className="text-center min-w-[100px] border-l border-white/10 pl-4 md:pl-6">
+                                        <div className="text-xs text-gray-400 uppercase mb-1">Platform Fee</div>
                                         <div className="text-lg font-bold text-indigo-600">£{payment.platformCommission.toFixed(2)}</div>
-                                        <div className="text-xs text-slate-400">({(PLATFORM_FEE_PERCENT * 100).toFixed(0)}%)</div>
+                                        <div className="text-xs text-gray-500">({(PLATFORM_FEE_PERCENT * 100).toFixed(0)}%)</div>
                                         <Badge variant="outline" className="mt-1 text-xs">
                                             {payment.feeStatus}
                                         </Badge>
                                     </div>
 
                                     {/* Provider Payout */}
-                                    <div className="text-center min-w-[100px] border-l border-slate-200 pl-4 md:pl-6">
-                                        <div className="text-xs text-slate-500 uppercase mb-1">Provider Gets</div>
+                                    <div className="text-center min-w-[100px] border-l border-white/10 pl-4 md:pl-6">
+                                        <div className="text-xs text-gray-400 uppercase mb-1">Provider Gets</div>
                                         <div className="text-lg font-bold text-blue-600">£{payment.providerPayout.toFixed(2)}</div>
                                         <Badge variant="outline" className="mt-1 text-xs">
                                             {payment.payoutStatus}
@@ -600,12 +600,12 @@ export function AdminView({ user }: { user: any }) {
                             </div>
 
                             {(payment.reviewRating || payment.partsRequired) && (
-                                <div className="mt-4 pt-4 border-t border-slate-200 grid md:grid-cols-2 gap-4">
+                                <div className="mt-4 pt-4 border-t border-white/10 grid md:grid-cols-2 gap-4">
                                     {payment.reviewRating && (
                                         <div>
-                                            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Customer Review</div>
+                                            <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Customer Review</div>
                                             <div className="flex items-center gap-1">
-                                                <span className="font-bold text-slate-900">{payment.reviewRating}/5</span>
+                                                <span className="font-bold text-white">{payment.reviewRating}/5</span>
                                                 <div className="flex text-yellow-500">
                                                     {[...Array(5)].map((_, i) => (
                                                         <svg key={i} className={`w-3 h-3 ${i < payment.reviewRating ? 'fill-current' : 'text-slate-200'}`} viewBox="0 0 20 20" fill="currentColor">
@@ -614,30 +614,30 @@ export function AdminView({ user }: { user: any }) {
                                                     ))}
                                                 </div>
                                             </div>
-                                            {payment.reviewComment && <p className="text-sm text-slate-600 italic mt-1">"{payment.reviewComment}"</p>}
+                                            {payment.reviewComment && <p className="text-sm text-gray-300 italic mt-1">"{payment.reviewComment}"</p>}
                                         </div>
                                     )}
 
                                     {payment.partsRequired && (
                                         <div>
-                                            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Parts Used by Provider</div>
-                                            <div className="text-sm font-medium text-slate-900">
+                                            <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Parts Used by Provider</div>
+                                            <div className="text-sm font-medium text-white">
                                                 {payment.partsRequired === 'YES' ? '✅ Yes, parts used' :
                                                     payment.partsRequired === 'NO' ? '❌ No parts used' : 'N/A'}
                                             </div>
-                                            {payment.partsNotes && <p className="text-sm text-slate-600 mt-1 bg-slate-50 p-2 rounded border border-slate-100">{payment.partsNotes}</p>}
+                                            {payment.partsNotes && <p className="text-sm text-gray-300 mt-1 bg-slate-50 p-2 rounded border border-slate-100">{payment.partsNotes}</p>}
                                         </div>
                                     )}
                                 </div>
                             )}
 
                             {payment.hasPriceOverride && payment.originalPrice && (
-                                <div className="mt-3 pt-3 border-t border-slate-200">
+                                <div className="mt-3 pt-3 border-t border-white/10">
                                     <p className="text-xs text-amber-600">
                                         ⚠️ Price was overridden: £{payment.originalPrice.toFixed(2)} → £{payment.customerPrice.toFixed(2)}
                                     </p>
                                     {payment.overrideReason && (
-                                        <p className="text-xs text-slate-500 mt-1">Reason: {payment.overrideReason}</p>
+                                        <p className="text-xs text-gray-400 mt-1">Reason: {payment.overrideReason}</p>
                                     )}
                                 </div>
                             )}
@@ -679,8 +679,8 @@ export function AdminView({ user }: { user: any }) {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Service Categories</h3>
-                    <p className="text-sm text-slate-500">Category configuration and management</p>
+                    <h3 className="text-lg font-semibold text-white">Service Categories</h3>
+                    <p className="text-sm text-gray-400">Category configuration and management</p>
                 </div>
                 <Button
                     onClick={handleConfigureCleaners}
@@ -800,11 +800,11 @@ export function AdminView({ user }: { user: any }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                     <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-slate-900">Cancel job</h3>
-                            <p className="text-sm text-slate-600">Provide a reason before cancelling.</p>
+                            <h3 className="text-lg font-semibold text-white">Cancel job</h3>
+                            <p className="text-sm text-gray-300">Provide a reason before cancelling.</p>
                         </div>
                         <textarea
-                            className="w-full rounded-md border border-slate-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-md border border-white/10 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             rows={4}
                             placeholder="Reason for cancellation"
                             value={cancelDialog.reason}
@@ -826,8 +826,8 @@ export function AdminView({ user }: { user: any }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                     <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-slate-900">Price override</h3>
-                            <p className="text-sm text-slate-600">Provide a new price and reason.</p>
+                            <h3 className="text-lg font-semibold text-white">Price override</h3>
+                            <p className="text-sm text-gray-300">Provide a new price and reason.</p>
                         </div>
                         <Input
                             type="number"
@@ -836,7 +836,7 @@ export function AdminView({ user }: { user: any }) {
                             placeholder="New price"
                         />
                         <textarea
-                            className="w-full rounded-md border border-slate-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-md border border-white/10 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             rows={4}
                             placeholder="Reason for override"
                             value={overrideDialog.reason}
@@ -861,13 +861,13 @@ export function AdminView({ user }: { user: any }) {
                         <div className="flex justify-between items-start">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
-                                    <h2 className="text-2xl font-bold text-slate-900">Job #{jobDetailDialog.job.id.slice(0, 8)}</h2>
+                                    <h2 className="text-2xl font-bold text-white">Job #{jobDetailDialog.job.id.slice(0, 8)}</h2>
                                     <Badge variant={jobDetailDialog.job.status === 'COMPLETED' ? 'default' : 'secondary'} className="text-lg">
                                         {jobDetailDialog.job.status}
                                     </Badge>
                                     {jobDetailDialog.job.isRefunded && <Badge variant="destructive" className="ml-2">REFUNDED</Badge>}
                                 </div>
-                                <p className="text-slate-500">{jobDetailDialog.job.description}</p>
+                                <p className="text-gray-400">{jobDetailDialog.job.description}</p>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setJobDetailDialog({ open: false, job: null })}>Close</Button>
                         </div>
@@ -880,23 +880,23 @@ export function AdminView({ user }: { user: any }) {
                                     {jobDetailDialog.job.items?.length > 0 ? (
                                         <div className="space-y-2">
                                             {jobDetailDialog.job.items.map((item: any) => (
-                                                <div key={item.id} className="flex justify-between text-sm p-2 bg-white rounded border border-slate-200">
+                                                <div key={item.id} className="flex justify-between text-sm p-2 bg-white rounded border border-white/10">
                                                     <span>{item.quantity}x {item.itemType} {item.description && `(${item.description})`}</span>
                                                     <span className="font-mono">£{item.totalPrice.toFixed(2)}</span>
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : <div className="text-sm text-slate-500 italic">No line items (Flat rate?)</div>}
+                                    ) : <div className="text-sm text-gray-400 italic">No line items (Flat rate?)</div>}
                                 </Card>
 
                                 <Card className="p-4">
                                     <h3 className="font-semibold mb-3">State Timeline</h3>
-                                    <div className="space-y-4 relative border-l-2 border-slate-200 ml-2 pl-4">
+                                    <div className="space-y-4 relative border-l-2 border-white/10 ml-2 pl-4">
                                         {jobDetailDialog.job.stateChanges?.map((s: any) => (
                                             <div key={s.id} className="relative">
                                                 <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-400"></div>
                                                 <div className="text-sm font-medium">{s.fromStatus} → {s.toStatus}</div>
-                                                <div className="text-xs text-slate-500">
+                                                <div className="text-xs text-gray-400">
                                                     {new Date(s.createdAt).toLocaleString()} • {s.changedByRole}
                                                 </div>
                                                 {s.reason && <div className="text-xs text-amber-600 italic">"{s.reason}"</div>}
@@ -911,13 +911,13 @@ export function AdminView({ user }: { user: any }) {
                                         <h3 className="font-semibold mb-2">Completion Evidence</h3>
                                         {jobDetailDialog.job.completionNotes && (
                                             <div className="mb-2">
-                                                <p className="text-xs text-slate-500 uppercase">Notes</p>
+                                                <p className="text-xs text-gray-400 uppercase">Notes</p>
                                                 <p className="bg-slate-50 p-2 rounded text-sm">{jobDetailDialog.job.completionNotes}</p>
                                             </div>
                                         )}
                                         {jobDetailDialog.job.completionPhotos && (
                                             <div>
-                                                <p className="text-xs text-slate-500 uppercase">Photos</p>
+                                                <p className="text-xs text-gray-400 uppercase">Photos</p>
                                                 <a href={jobDetailDialog.job.completionPhotos} target="_blank" className="text-blue-600 underline text-sm break-all">
                                                     {jobDetailDialog.job.completionPhotos}
                                                 </a>
@@ -1043,7 +1043,7 @@ export function AdminView({ user }: { user: any }) {
                                                         key={s}
                                                         size="sm"
                                                         variant="ghost"
-                                                        className="text-xs h-7 px-2 border border-slate-200 bg-white"
+                                                        className="text-xs h-7 px-2 border border-white/10 bg-white"
                                                         onClick={() => handleOverrideStatus(jobDetailDialog.job.id, s)}
                                                     >
                                                         {s}
@@ -1068,7 +1068,7 @@ export function AdminView({ user }: { user: any }) {
                             <div>
                                 <label className="text-sm font-medium mb-1 block">Provider Type</label>
                                 <select
-                                    className="w-full rounded-md border border-slate-200 p-2 text-sm"
+                                    className="w-full rounded-md border border-white/10 p-2 text-sm"
                                     value={editProviderData.providerType || 'HANDYMAN'}
                                     onChange={(e) => setEditProviderData({ ...editProviderData, providerType: e.target.value })}
                                 >
