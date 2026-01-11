@@ -26,10 +26,8 @@ export default function LoginPage() {
             });
 
             if (res.ok) {
-                const data = await res.json();
-                if (data.role === 'ADMIN') router.push('/admin');
-                else if (data.role === 'PROVIDER') router.push('/dashboard/provider');
-                else router.push('/dashboard/customer');
+                // All roles share the unified dashboard at /dashboard
+                router.push('/dashboard');
             } else {
                 const err = await res.json();
                 setError(err.error || 'Login failed');
