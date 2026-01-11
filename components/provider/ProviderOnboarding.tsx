@@ -260,7 +260,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                                 Upload
                             </Button>
                         </div>
-                        <p className="text-xs text-gray-500">For Milestone 2, enter a URL. File upload can be added later.</p>
+                        <p className="text-xs text-muted-foreground">For Milestone 2, enter a URL. File upload can be added later.</p>
                     </div>
 
                     <div className="space-y-2">
@@ -289,7 +289,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                             <Label>Uploaded Documents</Label>
                             <div className="space-y-1">
                                 {documents.map((doc: any) => (
-                                    <div key={doc.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div key={doc.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                                         <span className="text-sm">{doc.documentType}</span>
                                         <Badge variant="outline">{new Date(doc.uploadedAt).toLocaleDateString()}</Badge>
                                     </div>
@@ -300,11 +300,11 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
 
 
 
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                        <p className="text-sm text-blue-800">
+                    <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
+                        <p className="text-sm text-primary">
                             <strong>Status:</strong> {user.providerStatus || 'PENDING'}
                         </p>
-                        <p className="text-xs text-blue-600 mt-1">
+                        <p className="text-xs text-primary/80 mt-1">
                             Document upload is optional. You can upload documents later from your profile.
                         </p>
                     </div>

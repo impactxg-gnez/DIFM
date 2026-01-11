@@ -270,13 +270,13 @@ export function CustomerView({ user }: { user: any }) {
 
             {/* Location Check */}
             {userCoords && (
-                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                <div className="bg-card p-4 rounded-xl border border-blue-900/30 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
                     <div className="flex-1 space-y-1">
-                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <h3 className="font-semibold text-foreground flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-blue-500" />
                             Location Services Active
                         </h3>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground">
                             Your location is being tracked to find nearby providers.
                         </p>
                         <p className="text-xs text-mono text-gray-400">
@@ -287,7 +287,7 @@ export function CustomerView({ user }: { user: any }) {
             )}
 
             <div className="flex justify-between items-center gap-4">
-                <h2 className="text-xl font-semibold text-gray-900">Your Jobs</h2>
+                <h2 className="text-xl font-semibold text-foreground">Your Jobs</h2>
                 <div className="flex gap-2">
                     <Button onClick={handleCreateSimulation} variant="outline" className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50">
                         Spawn Test Job (15m delay)
@@ -299,7 +299,7 @@ export function CustomerView({ user }: { user: any }) {
             </div>
 
             {!jobs ? (
-                <p className="text-center py-8 text-gray-500">Loading jobs...</p>
+                <p className="text-center py-8 text-muted-foreground">Loading jobs...</p>
             ) : !Array.isArray(jobs) ? (
                 <div className="text-center py-12 bg-red-50 rounded-lg text-red-600">
                     <p className="font-semibold">Error loading jobs</p>
@@ -328,12 +328,12 @@ export function CustomerView({ user }: { user: any }) {
                                                 <Badge variant="destructive">Under Review</Badge>
                                             )}
                                         </div>
-                                        <h3 className="font-bold text-lg text-gray-900">{job.category}</h3>
-                                        <p className="font-medium text-gray-800">{job.description}</p>
+                                        <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
+                                        <p className="font-medium text-foreground/80">{job.description}</p>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-bold text-lg text-gray-900">£{job.fixedPrice}</div>
-                                        <div className="text-sm text-gray-500">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                                        <div className="font-bold text-lg text-foreground">£{job.fixedPrice}</div>
+                                        <div className="text-sm text-muted-foreground">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
 
                                         {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
                                             <div className="mt-2">
@@ -373,19 +373,19 @@ export function CustomerView({ user }: { user: any }) {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t flex flex-col md:flex-row justify-between text-sm gap-4">
+                                <div className="mt-4 pt-4 border-t border-border flex flex-col md:flex-row justify-between text-sm gap-4">
                                     <div className="flex flex-col gap-1">
-                                        <span className="text-gray-500">Location</span>
+                                        <span className="text-muted-foreground">Location</span>
                                         <span className="font-medium">{job.location}</span>
                                     </div>
 
                                     {job.provider && (
-                                        <div className="bg-blue-50 p-3 rounded-lg flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                                        <div className="bg-primary/10 p-3 rounded-lg flex items-center gap-3">
+                                            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
                                                 {job.provider.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-semibold text-gray-900 flex items-center gap-2">
+                                                <div className="font-semibold text-foreground flex items-center gap-2">
                                                     {job.provider.name}
                                                     {(job.provider.complianceConfirmed) && (
                                                         <span className="text-green-600 text-xs bg-green-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
@@ -426,10 +426,10 @@ export function CustomerView({ user }: { user: any }) {
 
             {/* Review Dialog */}
             {reviewDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-border">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                                 <Star className="w-5 h-5 text-yellow-500" />
                                 Rate Your Experience
                             </h3>

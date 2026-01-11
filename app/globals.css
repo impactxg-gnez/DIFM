@@ -2,47 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Dark Theme by default */
+    --background: 12 14% 17%; /* #121417 - Landing Page bg */
+    --foreground: 0 0% 100%; /* White */
+
+    --card: 222 14% 17%; /* Same as background or slightly lighter? Landing page used #1c212c/90 */
+    /* Let's match the landing page card: #1c212c -> 221 23% 14% approx */
+    --card: 221 23% 14%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 221 23% 14%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 221 83% 53%; /* #2563eb blue-600 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 19% 27%; /* gray-800 */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 19% 27%;
+    --muted-foreground: 215 20.2% 65.1%; /* gray-400 */
+
+    --accent: 217 19% 27%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 19% 27%;
+    --input: 217 19% 27%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.5rem;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  /* High contrast label overrides */
+  label {
+    @apply text-foreground font-medium;
+  }
+
+  input, textarea, select {
+    @apply bg-background border-input text-foreground placeholder:text-muted-foreground;
+  }
+  
+  input:disabled, textarea:disabled, button:disabled {
+    @apply opacity-50 cursor-not-allowed bg-muted;
+  }
+  
+  /* Ensure proper contrast for headings */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-foreground;
+  }
 }
 
-/* Improved contrast for better visibility */
-label {
-  color: rgb(31, 41, 55); /* text-gray-800 */
-  font-weight: 500;
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: rgb(107, 114, 128); /* text-gray-500 - darker than default */
-  opacity: 1;
-}
-
-input:disabled,
-textarea:disabled,
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: rgb(243, 244, 246); /* bg-gray-100 */
-}
-
-/* Ensure active inputs are clearly visible */
-input:not(:disabled),
-textarea:not(:disabled) {
-  color: rgb(17, 24, 39); /* text-gray-900 */
-}
 

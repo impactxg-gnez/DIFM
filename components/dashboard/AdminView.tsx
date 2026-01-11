@@ -157,7 +157,7 @@ export function AdminView({ user }: { user: any }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 status: 'CLOSED',
-                disputeResolution: resolution
+                reason: resolution // API expects 'reason', maps it to disputeResolution
             })
         });
         mutateDisputes();
@@ -186,11 +186,11 @@ export function AdminView({ user }: { user: any }) {
     };
 
     const jobsContent = useMemo(() => {
-        if (!jobs) return <div className="p-6 text-center text-slate-500">Loading jobs...</div>;
+        if (!jobs) return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
         if (filteredJobs.length === 0) {
             return (
-                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400">No jobs match your filters.</p>
+                <div className="text-center py-16 bg-card/60 rounded-xl border border-dashed border-border">
+                    <p className="text-muted-foreground">No jobs match your filters.</p>
                     <Button variant="ghost" onClick={() => {
                         setStatusFilter('ALL');
                         setCategoryFilter('ALL');
@@ -205,7 +205,7 @@ export function AdminView({ user }: { user: any }) {
                 {filteredJobs.map((job: any) => (
                     <Card
                         key={job.id}
-                        className="p-5 border border-slate-200/80 bg-white/70 backdrop-blur hover:bg-white transition-colors cursor-pointer"
+                        className="p-5 border border-border/80 bg-card/70 backdrop-blur hover:bg-card transition-colors cursor-pointer"
                         onClick={(e) => {
                             // Prevent click if clicking a button
                             if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('button')) return;
@@ -222,17 +222,17 @@ export function AdminView({ user }: { user: any }) {
                                     {job.needsReview && <Badge variant="destructive">Needs Review</Badge>}
                                     {job.isStuck && <Badge variant="destructive">Stuck</Badge>}
                                 </div>
-                                <h3 className="font-bold text-lg">{job.category}</h3>
-                                <p className="text-sm text-gray-700">{job.description}</p>
-                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
+                                <p className="text-sm text-muted-foreground">{job.description}</p>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <MapPin className="w-3 h-3" />
                                     {job.location}
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="text-xl font-black text-slate-900">£{job.fixedPrice}</div>
-                                <div className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleString()}</div>
-                                <div className="text-xs text-indigo-600 mt-1 font-medium">Click for Details & Actions</div>
+                                <div className="text-xl font-black text-foreground">£{job.fixedPrice}</div>
+                                <div className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</div>
+                                <div className="text-xs text-primary mt-1 font-medium">Click for Details & Actions</div>
                             </div>
                         </div>
                     </Card>
@@ -242,11 +242,11 @@ export function AdminView({ user }: { user: any }) {
     }, [jobs, filteredJobs]);
 
     const disputesContent = useMemo(() => {
-        if (!disputes) return <div className="p-6 text-center text-slate-500">Loading disputes...</div>;
+        if (!disputes) return <div className="p-6 text-center text-muted-foreground">Loading disputes...</div>;
         if (disputes.length === 0) {
             return (
-                <div className="text-center py-16 bg-white/60 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400">No active disputes.</p>
+                <div className="text-center py-16 bg-card/60 rounded-xl border border-dashed border-border">
+                    <p className="text-muted-foreground">No active disputes.</p>
                 </div>
             );
         }
@@ -259,13 +259,13 @@ export function AdminView({ user }: { user: any }) {
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
                                     <Badge variant="destructive">DISPUTED</Badge>
-                                    <span className="font-mono text-sm text-slate-500">#{job.id.slice(0, 8)}</span>
+                                    <span className="font-mono text-sm text-muted-foreground">#{job.id.slice(0, 8)}</span>
                                 </div>
-                                <h3 className="font-bold text-lg text-slate-900">{job.disputeReason || 'Unspecified Issue'}</h3>
-                                <p className="text-slate-700 bg-white p-3 rounded border border-red-100">
+                                <h3 className="font-bold text-lg text-foreground">{job.disputeReason || 'Unspecified Issue'}</h3>
+                                <p className="text-foreground bg-card p-3 rounded border border-destructive/20">
                                     "{job.disputeNotes || 'No additional notes provided.'}"
                                 </p>
-                                <div className="text-sm text-slate-500">
+                                <div className="text-sm text-muted-foreground">
                                     <span className="font-semibold">Customer:</span> {job.customer.name} •
                                     <span className="font-semibold ml-2">Provider:</span> {job.provider?.name || 'Unassigned'}
                                 </div>
@@ -315,15 +315,15 @@ export function AdminView({ user }: { user: any }) {
     };
 
     const providersContent = useMemo(() => {
-        if (!providers) return <div className="p-6 text-center text-slate-500">Loading providers...</div>;
+        if (!providers) return <div className="p-6 text-center text-muted-foreground">Loading providers...</div>;
         return (
             <div className="grid md:grid-cols-2 gap-4">
                 {providers.map((p: any) => (
-                    <Card key={p.id} className="p-4 bg-white/70 border border-slate-200">
+                    <Card key={p.id} className="p-4 bg-card/70 border border-border">
                         <div className="flex justify-between items-center mb-3">
                             <div>
-                                <div className="font-semibold text-slate-900">{p.name}</div>
-                                <div className="text-xs text-slate-500">{p.email}</div>
+                                <div className="font-semibold text-foreground">{p.name}</div>
+                                <div className="text-xs text-muted-foreground">{p.email}</div>
                             </div>
                             <div className="flex flex-col gap-1 items-end">
                                 <Badge variant={

@@ -75,27 +75,27 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-lg space-y-2">
-                            <h3 className="font-semibold text-gray-900 border-b pb-2">Job Summary</h3>
+                        <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+                            <h3 className="font-semibold text-foreground border-b border-border pb-2">Job Summary</h3>
                             <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
-                                <span className="text-gray-500">Service:</span>
+                                <span className="text-muted-foreground">Service:</span>
                                 <span className="font-medium">{description}</span>
-                                <span className="text-gray-500">Location:</span>
+                                <span className="text-muted-foreground">Location:</span>
                                 <span className="font-medium">{location}</span>
                             </div>
                         </div>
 
                         {pricePreview && (
-                            <div className="bg-blue-50 p-4 rounded-lg space-y-2 border border-blue-100">
-                                <h3 className="font-semibold text-blue-900 border-b border-blue-200 pb-2">Price Breakdown</h3>
+                            <div className="bg-primary/10 p-4 rounded-lg space-y-2 border border-primary/20">
+                                <h3 className="font-semibold text-primary border-b border-primary/20 pb-2">Price Breakdown</h3>
                                 <div className="space-y-1">
                                     {pricePreview.items.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between text-sm text-blue-800">
+                                        <div key={idx} className="flex justify-between text-sm text-primary/80">
                                             <span>{item.quantity}x {item.description || item.itemType}</span>
                                             <span>£{item.totalPrice.toFixed(2)}</span>
                                         </div>
                                     ))}
-                                    <div className="flex justify-between font-bold text-lg text-blue-900 pt-2 border-t border-blue-200 mt-2">
+                                    <div className="flex justify-between font-bold text-lg text-primary pt-2 border-t border-primary/20 mt-2">
                                         <span>Total</span>
                                         <span>£{pricePreview.totalPrice.toFixed(2)}</span>
                                     </div>
@@ -107,8 +107,8 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                         )}
 
                         <div className="space-y-3">
-                            <h4 className="font-medium text-gray-900">What happens next?</h4>
-                            <ul className="text-sm text-gray-600 space-y-2 list-disc pl-4">
+                            <h4 className="font-medium text-foreground">What happens next?</h4>
+                            <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
                                 <li>We'll simulate finding a provider nearby.</li>
                                 <li>You'll see their name and details once assigned.</li>
                                 <li>Payment is handled after the job is complete.</li>
@@ -134,7 +134,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
         <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                    <span className="text-gray-900">New Job Request</span>
+                    <span className="text-foreground">New Job Request</span>
                     {displayedPrice > 0 && (
                         <span className="text-blue-600 font-bold">£{displayedPrice.toFixed(2)}</span>
                     )}
@@ -151,7 +151,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                             required
                             className="text-base"
                         />
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground">
                             Describe your request in plain English
                         </p>
                     </div>
@@ -167,14 +167,14 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                     </div>
 
                     {pricePreview && pricePreview.items && pricePreview.items.length > 0 && (
-                        <div className="space-y-3 rounded-xl border border-blue-100 bg-white/70 backdrop-blur-sm p-4 shadow-inner">
+                        <div className="space-y-3 rounded-xl border border-primary/20 bg-background/50 backdrop-blur-sm p-4 shadow-inner">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-slate-800">Price Estimate</span>
-                                <span className="text-xs text-slate-500">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
+                                <span className="text-sm font-semibold text-foreground">Price Estimate</span>
+                                <span className="text-xs text-muted-foreground">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
                             </div>
                             <div className="space-y-2">
                                 {pricePreview.items.map((item: any, idx: number) => (
-                                    <div key={idx} className="flex justify-between text-sm text-slate-700">
+                                    <div key={idx} className="flex justify-between text-sm text-muted-foreground">
                                         <span className="font-medium">
                                             {item.quantity > 1 ? `${item.quantity}x ` : ''}
                                             {item.description || item.itemType}
@@ -218,7 +218,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 Not sure
                             </Button>
                         </div>
-                        <p className="text-xs text-gray-500">Do you think parts or materials may be required? (Pricing assumes labour only)</p>
+                        <p className="text-xs text-muted-foreground">Do you think parts or materials may be required? (Pricing assumes labour only)</p>
                     </div>
 
                     <div className="flex gap-4 pt-4">
