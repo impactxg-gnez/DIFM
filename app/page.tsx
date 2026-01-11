@@ -183,10 +183,22 @@ export default function LandingPage() {
                     </Button>
                 </motion.div>
 
-                {/* Footer Tagline */}
-                <p className="mt-8 text-gray-500 text-sm font-medium tracking-wide">
-                    Don't stress. Rest Assured. We'll do it for YOU!
-                </p>
+                {/* Footer Links */}
+                <div className="mt-16 text-center space-y-6">
+                    <p className="text-gray-500 text-sm font-medium tracking-wide">
+                        Don't stress. Rest Assured. We'll do it for YOU!
+                    </p>
+
+                    <div className="flex justify-center gap-6 text-sm text-gray-400">
+                        <a href="#" className="hover:text-blue-400 transition-colors">About us</a>
+                        <span className="text-gray-700">•</span>
+                        <a href="#" className="hover:text-blue-400 transition-colors">How it works</a>
+                        <span className="text-gray-700">•</span>
+                        <a href="#" className="hover:text-blue-400 transition-colors">FAQs</a>
+                        <span className="text-gray-700">•</span>
+                        <a href="#" className="hover:text-blue-400 transition-colors">Trust & Safety</a>
+                    </div>
+                </div>
 
             </main>
         </div>
