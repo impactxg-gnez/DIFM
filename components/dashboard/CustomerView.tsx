@@ -393,24 +393,6 @@ export function CustomerView({ user }: { user: any }) {
                     <div className="space-y-4">
                         <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
 
-                        {/* Location Check */}
-                        {userCoords && (
-                            <div className="bg-zinc-900 border-blue-500/30 flex flex-col md:flex-row gap-4 items-start md:items-center p-4 rounded-lg border">
-                                <div className="flex-1 space-y-1">
-                                    <h3 className="font-semibold text-white flex items-center gap-2">
-                                        <MapPin className="w-4 h-4 text-blue-500" />
-                                        Location Services Active
-                                    </h3>
-                                    <p className="text-sm text-gray-400">
-                                        Your location is being tracked to find nearby providers.
-                                    </p>
-                                    <p className="text-xs text-mono text-gray-400">
-                                        {userCoords.lat.toFixed(4)}, {userCoords.lng.toFixed(4)}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
                         <JobCreationForm
                             onSubmit={handleCreateJob}
                             onCancel={() => setActiveTab('STATUS')}
@@ -526,6 +508,19 @@ export function CustomerView({ user }: { user: any }) {
 
     return (
         <div className="pb-20">
+            {/* Header Bar with Location */}
+            {userCoords && userLocation && (
+                <div className="mb-6 flex items-center justify-between">
+                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-4 py-2 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-blue-500" />
+                        <div>
+                            <p className="text-xs text-gray-400">Current Location</p>
+                            <p className="text-sm text-white font-medium">{userLocation}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {renderContent()}
 
             {/* Bottom Navigation */}
