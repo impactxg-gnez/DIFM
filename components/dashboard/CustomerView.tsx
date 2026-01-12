@@ -12,8 +12,7 @@ import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
 import { UserLocationMap } from './UserLocationMap';
-import { Plus, MapPin, Star, LogOut } from 'lucide-react';
-import { CustomerGreeting } from './CustomerGreeting';
+import { Plus, MapPin, Star, LogOut, ArrowLeft, Edit2, Check, X } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -59,8 +58,17 @@ export function CustomerView({ user }: { user: any }) {
     const [userLocation, setUserLocation] = useState<string>('');
     const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isLocating, setIsLocating] = useState(false);
+    const [isEditingLocation, setIsEditingLocation] = useState(false);
+    const [editedLocation, setEditedLocation] = useState('');
 
     useEffect(() => {
+        // Check for saved preferred location first
+        const savedLocation = localStorage.getItem('preferredLocation');
+        if (savedLocation) {
+            setUserLocation(savedLocation);
+            return;
+        }
+
         // Auto-grab location on mount (page load)
         if (navigator.geolocation && !userLocation) {
             setIsLocating(true);
@@ -391,25 +399,12 @@ export function CustomerView({ user }: { user: any }) {
             case 'NEW_TASK':
                 return (
                     <div className="space-y-4">
-                        <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
-
                         <JobCreationForm
                             onSubmit={handleCreateJob}
                             onCancel={() => setActiveTab('STATUS')}
                             loading={false}
                             defaultLocation={userLocation}
                         />
-
-                        {/* Test Job Button */}
-                        <div className="flex justify-center pt-4">
-                            <Button
-                                onClick={handleCreateSimulation}
-                                variant="outline"
-                                className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50"
-                            >
-                                Spawn Test Job (15m delay)
-                            </Button>
-                        </div>
                     </div>
                 );
 
@@ -506,18 +501,69 @@ export function CustomerView({ user }: { user: any }) {
         }
     };
 
+    const handleSaveLocation = () => {
+        if (editedLocation.trim()) {
+            setUserLocation(editedLocation);
+            localStorage.setItem('preferredLocation', editedLocation);
+            setIsEditingLocation(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditingLocation(false);
+        setEditedLocation('');
+    };
+
     return (
         <div className="pb-20">
-            {/* Header Bar with Location */}
-            {userCoords && userLocation && (
-                <div className="mb-6 flex items-center justify-between">
-                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-4 py-2 flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-blue-500" />
-                        <div>
-                            <p className="text-xs text-gray-400">Current Location</p>
-                            <p className="text-sm text-white font-medium">{userLocation}</p>
+            {/* Header Bar with Editable Location */}
+            {userLocation && (
+                <div className="mb-6 flex items-center gap-3">
+                    {!isEditingLocation ? (
+                        <>
+                            <div className="bg-zinc-900 border border-white/10 rounded-lg px-4 py-2 flex items-center gap-2 cursor-pointer hover:border-blue-500/50 transition-colors" onClick={() => {
+                                setIsEditingLocation(true);
+                                setEditedLocation(userLocation);
+                            }}>
+                                <MapPin className="w-4 h-4 text-blue-500" />
+                                <div>
+                                    <p className="text-xs text-gray-400">Current Location</p>
+                                    <p className="text-sm text-white font-medium">{userLocation}</p>
+                                </div>
+                                <Edit2 className="w-3 h-3 text-gray-500 ml-2" />
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-400">
+                                <ArrowLeft className="w-4 h-4" />
+                                <span className="text-sm">Change location</span>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="bg-zinc-900 border border-blue-500/50 rounded-lg px-4 py-2 flex items-center gap-2 flex-1">
+                            <MapPin className="w-4 h-4 text-blue-500" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-400 mb-1">Edit Location</p>
+                                <Input
+                                    value={editedLocation}
+                                    onChange={(e) => setEditedLocation(e.target.value)}
+                                    placeholder="e.g. 221B Baker Street, London"
+                                    className="bg-zinc-800 border-white/10 text-white h-8"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveLocation();
+                                        if (e.key === 'Escape') handleCancelEdit();
+                                    }}
+                                />
+                            </div>
+                            <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={handleSaveLocation} className="h-8 w-8 p-0 text-green-500 hover:text-green-400">
+                                    <Check className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={handleCancelEdit} className="h-8 w-8 p-0 text-red-500 hover:text-red-400">
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
