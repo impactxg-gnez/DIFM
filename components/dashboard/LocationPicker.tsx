@@ -30,10 +30,11 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [showSavedList, setShowSavedList] = useState(false);
     const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+    const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
 
-    const autocompleteService = useRef<any>(null);
-    const placesService = useRef<any>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const retryCount = useRef(0);
+    const maxRetries = 20;
 
     // Load saved locations from localStorage
     useEffect(() => {
@@ -43,30 +44,28 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
         }
     }, []);
 
-    // Initialize Google Places Autocomplete
+    // Wait for Google Maps to load
     useEffect(() => {
-        const initializeGooglePlaces = () => {
+        const checkGoogleMaps = () => {
             if (typeof window !== 'undefined' && window.google?.maps?.places) {
-                try {
-                    autocompleteService.current = new window.google.maps.places.AutocompleteService();
-                    const mapDiv = document.createElement('div');
-                    placesService.current = new window.google.maps.places.PlacesService(mapDiv);
-                    console.log('Google Places initialized successfully');
-                } catch (error) {
-                    console.error('Error initializing Google Places:', error);
-                }
+                setIsGoogleLoaded(true);
+                console.log('✅ Google Maps Places API ready');
             } else {
-                // Retry after a short delay if Google Maps isn't loaded yet
-                console.log('Waiting for Google Maps API to load...');
-                setTimeout(initializeGooglePlaces, 500);
+                retryCount.current += 1;
+                if (retryCount.current < maxRetries) {
+                    console.log(`⏳ Waiting for Google Maps... (${retryCount.current}/${maxRetries})`);
+                    setTimeout(checkGoogleMaps, 500);
+                } else {
+                    console.error('❌ Google Maps failed to load. Check console for errors.');
+                }
             }
         };
 
-        initializeGooglePlaces();
+        checkGoogleMaps();
     }, []);
 
-    // Handle search input changes
-    const handleSearchChange = (value: string) => {
+    // Handle search input changes with new AutocompleteSuggestion API
+    const handleSearchChange = async (value: string) => {
         setSearchInput(value);
 
         if (!value.trim()) {
@@ -75,48 +74,48 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
             return;
         }
 
-        if (!autocompleteService.current) {
-            console.warn('Google Places Autocomplete not initialized yet');
+        if (!isGoogleLoaded || !window.google?.maps?.places) {
+            console.warn('⚠️ Google Maps not loaded yet');
             return;
         }
 
-        autocompleteService.current.getPlacePredictions(
-            { input: value },
-            (predictions: any[], status: any) => {
-                console.log('Autocomplete status:', status, 'Predictions:', predictions);
-                if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-                    setSuggestions(predictions);
-                    setShowSuggestions(true);
-                } else {
-                    console.warn('No predictions or error:', status);
-                    setSuggestions([]);
-                    setShowSuggestions(false);
-                }
+        try {
+            console.log('🔍 Searching for:', value);
+
+            // Use the new AutocompleteSuggestion API
+            const { suggestions: results } = await window.google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+                input: value,
+                includedPrimaryTypes: ['geocode', 'establishment'],
+            });
+
+            console.log('📍 Found', results?.length || 0, 'suggestions');
+
+            if (results && results.length > 0) {
+                setSuggestions(results);
+                setShowSuggestions(true);
+            } else {
+                setSuggestions([]);
+                setShowSuggestions(false);
             }
-        );
+        } catch (error) {
+            console.error('❌ Autocomplete error:', error);
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
     };
 
     // Handle suggestion selection
-    const handleSuggestionSelect = (suggestion: any) => {
-        setSearchInput(suggestion.description);
+    const handleSuggestionSelect = async (suggestion: any) => {
+        const address = suggestion.placePrediction?.text?.text || '';
+        setSearchInput(address);
         setShowSuggestions(false);
 
-        // Get place details
-        if (placesService.current) {
-            placesService.current.getDetails(
-                { placeId: suggestion.place_id },
-                (place: any, status: any) => {
-                    if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-                        setSelectedLocation({
-                            id: Date.now().toString(),
-                            name: '',
-                            address: suggestion.description,
-                            placeId: suggestion.place_id
-                        });
-                    }
-                }
-            );
-        }
+        setSelectedLocation({
+            id: Date.now().toString(),
+            name: '',
+            address: address,
+            placeId: suggestion.placePrediction?.placeId
+        });
     };
 
     // Save location
@@ -196,6 +195,12 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
                 </Button>
             </div>
 
+            {!isGoogleLoaded && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-xs text-yellow-500">⏳ Loading Google Maps...</p>
+                </div>
+            )}
+
             {/* Saved Locations Dropdown */}
             {savedLocations.length > 0 && !editingLocationId && (
                 <div className="space-y-2">
@@ -260,19 +265,20 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
                         placeholder="Start typing an address..."
                         className="bg-zinc-800 border-white/10 text-white"
                         autoFocus={!editingLocationId}
+                        disabled={!isGoogleLoaded}
                     />
 
                     {/* Suggestions Dropdown */}
                     {showSuggestions && suggestions.length > 0 && (
                         <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-white/10 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {suggestions.map((suggestion) => (
+                            {suggestions.map((suggestion, index) => (
                                 <div
-                                    key={suggestion.place_id}
+                                    key={suggestion.placePrediction?.placeId || index}
                                     className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-white/5 last:border-0"
                                     onClick={() => handleSuggestionSelect(suggestion)}
                                 >
-                                    <p className="text-sm text-white">{suggestion.structured_formatting.main_text}</p>
-                                    <p className="text-xs text-gray-400">{suggestion.structured_formatting.secondary_text}</p>
+                                    <p className="text-sm text-white">{suggestion.placePrediction?.text?.text}</p>
+                                    <p className="text-xs text-gray-400">{suggestion.placePrediction?.structuredFormat?.secondaryText?.text}</p>
                                 </div>
                             ))}
                         </div>
