@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,8 +12,9 @@ import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
 import { UserLocationMap } from './UserLocationMap';
-import { Plus, MapPin, Star } from 'lucide-react';
+import { Plus, MapPin, Star, LogOut } from 'lucide-react';
 import { CustomerGreeting } from './CustomerGreeting';
+import { BottomNav } from './BottomNav';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -43,7 +45,11 @@ function getCustomerStatus(job: any): string {
 }
 
 export function CustomerView({ user }: { user: any }) {
+    const router = useRouter();
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
+
+    // Tab navigation state
+    const [activeTab, setActiveTab] = useState<'NEW_TASK' | 'STATUS' | 'HISTORY' | 'ACCOUNT'>('NEW_TASK');
 
     // Steps: LIST -> CREATE -> WAITING
     const [step, setStep] = useState<'LIST' | 'CREATE' | 'WAITING'>('LIST');
@@ -208,30 +214,10 @@ export function CustomerView({ user }: { user: any }) {
         }
     };
 
-    // Render Logic
-    if (step === 'CREATE') {
-        return (
-            <div className="space-y-4">
-                <JobCreationForm
-                    onSubmit={handleCreateJob}
-                    onCancel={() => setStep('LIST')}
-                    loading={false}
-                    defaultLocation={userLocation}
-                />
-            </div>
-        );
-    }
-
-
-    if (step === 'WAITING' && activeJobId) {
-        return (
-            <DispatchTimer
-                jobId={activeJobId}
-                onCompleted={() => setStep('LIST')}
-                onCancel={() => handleCancelJob()}
-            />
-        );
-    }
+    const handleLogout = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        router.push('/login');
+    };
 
     const handleCreateSimulation = async () => {
         // Find customer's current location to spawn provider 15 mins (approx 7-8km) away
@@ -263,181 +249,301 @@ export function CustomerView({ user }: { user: any }) {
         }
     };
 
-    // Default: LIST
-    return (
-        <div className="space-y-8">
-            <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
+    // Filter jobs for Status and History tabs
+    const activeJobs = Array.isArray(jobs) ? jobs.filter((j: any) =>
+        !['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
+    ) : [];
 
-            {/* Location Check */}
-            {userCoords && (
-                <div className="bg-zinc-900 border-blue-500/30 flex flex-col md:flex-row gap-4 items-start md:items-center">
-                    <div className="flex-1 space-y-1">
-                        <h3 className="font-semibold text-white flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-blue-500" />
-                            Location Services Active
-                        </h3>
-                        <p className="text-sm text-gray-400">
-                            Your location is being tracked to find nearby providers.
-                        </p>
-                        <p className="text-xs text-mono text-gray-400">
-                            {userCoords.lat.toFixed(4)}, {userCoords.lng.toFixed(4)}
-                        </p>
+    const historyJobs = Array.isArray(jobs) ? jobs.filter((j: any) =>
+        ['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
+    ) : [];
+
+    // Render job card helper
+    const renderJobCard = (job: any) => (
+        <Card key={job.id} className="overflow-hidden">
+            <div className="p-6">
+                <div className="flex justify-between items-start mb-2 gap-4">
+                    <div className="space-y-1">
+                        <div className="flex gap-2 mb-2">
+                            <Badge variant={
+                                ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
+                                    ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' :
+                                        job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
+                                            ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
+                            }>
+                                {getCustomerStatus(job)}
+                            </Badge>
+                            {job.status === 'DISPUTED' && (
+                                <Badge variant="destructive">Under Review</Badge>
+                            )}
+                        </div>
+                        <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
+                        <p className="font-medium text-foreground/80">{job.description}</p>
                     </div>
-                </div>
-            )}
+                    <div className="text-right">
+                        <div className="font-bold text-lg text-foreground">£{job.fixedPrice}</div>
+                        <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
 
-            <div className="flex justify-between items-center gap-4">
-                <h2 className="text-xl font-semibold text-foreground">Your Jobs</h2>
-                <div className="flex gap-2">
-                    <Button onClick={handleCreateSimulation} variant="outline" className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50">
-                        Spawn Test Job (15m delay)
-                    </Button>
-                    <Button onClick={() => setStep('CREATE')} className="gap-2">
-                        <Plus className="w-4 h-4" /> New Request
-                    </Button>
-                </div>
-            </div>
+                        {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
+                            <div className="mt-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                    onClick={() => handleCancelJob(job.id)}
+                                >
+                                    Cancel order
+                                </Button>
+                            </div>
+                        )}
 
-            {!jobs ? (
-                <p className="text-center py-8 text-gray-400">Loading jobs...</p>
-            ) : !Array.isArray(jobs) ? (
-                <div className="text-center py-12 bg-red-50 rounded-lg text-red-600">
-                    <p className="font-semibold">Error loading jobs</p>
-                </div>
-            ) : jobs.length === 0 ? (
-                <div className="text-center py-12 bg-white/5 border-white/10 text-gray-400">
-                    No active jobs. Start a new request!
-                </div>
-            ) : (
-                <div className="grid gap-4">
-                    {jobs.map((job: any) => (
-                        <Card key={job.id} className="overflow-hidden">
-                            <div className="p-6">
-                                <div className="flex justify-between items-start mb-2 gap-4">
-                                    <div className="space-y-1">
-                                        <div className="flex gap-2 mb-2">
-                                            <Badge variant={
-                                                ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
-                                                    ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' :
-                                                        job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
-                                                            ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
-                                            }>
-                                                {getCustomerStatus(job)}
-                                            </Badge>
-                                            {job.status === 'DISPUTED' && (
-                                                <Badge variant="destructive">Under Review</Badge>
-                                            )}
-                                        </div>
-                                        <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
-                                        <p className="font-medium text-foreground/80">{job.description}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="font-bold text-lg text-foreground">£{job.fixedPrice}</div>
-                                        <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
-
-                                        {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
-                                            <div className="mt-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="text-red-600 border-red-200 hover:bg-red-50"
-                                                    onClick={() => handleCancelJob(job.id)}
-                                                >
-                                                    Cancel order
-                                                </Button>
-                                            </div>
-                                        )}
-
-                                        {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && (
-                                            <div className="mt-2 text-right space-y-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                                                    onClick={() => setDisputeDialog({ open: true, jobId: job.id, reason: '', notes: '' })}
-                                                >
-                                                    Report Issue
-                                                </Button>
-                                                {!job.customerReview && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="block ml-auto text-blue-600"
-                                                        onClick={() => setReviewDialog({ open: true, jobId: job.id })}
-                                                    >
-                                                        Review Service
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col md:flex-row justify-between text-sm gap-4">
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-gray-400">Location</span>
-                                        <span className="font-medium">{job.location}</span>
-                                    </div>
-
-                                    {job.provider && (
-                                        <div className="bg-white/5 border-white/10 rounded-lg flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                                                {job.provider.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div className="font-semibold text-white flex items-center gap-2">
-                                                    {job.provider.name}
-                                                    {(job.provider.complianceConfirmed) && (
-                                                        <span className="text-green-600 text-xs bg-green-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                                                            ✓ Verified
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-blue-700">
-                                                    {job.provider.providerType || 'Service Provider'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {job.completionNotes && (
-                                    <div className="mt-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                                        <span className="font-semibold text-gray-700">Completion Notes: </span>
-                                        <span className="text-gray-400">{job.completionNotes}</span>
-                                    </div>
-                                )}
-
-                                {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.provider?.latitude && job.latitude && (
-                                    <div className="mt-4">
-                                        <ProviderMap
-                                            providerLat={job.provider.latitude}
-                                            providerLon={job.provider.longitude}
-                                            jobLat={job.latitude}
-                                            jobLon={job.longitude}
-                                        />
-                                    </div>
+                        {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && (
+                            <div className="mt-2 text-right space-y-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                                    onClick={() => setDisputeDialog({ open: true, jobId: job.id, reason: '', notes: '' })}
+                                >
+                                    Report Issue
+                                </Button>
+                                {!job.customerReview && (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="block ml-auto text-blue-600"
+                                        onClick={() => setReviewDialog({ open: true, jobId: job.id })}
+                                    >
+                                        Review Service
+                                    </Button>
                                 )}
                             </div>
-                        </Card>
-                    ))}
+                        )}
+                    </div>
                 </div>
-            )}
+
+                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col md:flex-row justify-between text-sm gap-4">
+                    <div className="flex flex-col gap-1">
+                        <span className="text-gray-400">Location</span>
+                        <span className="font-medium">{job.location}</span>
+                    </div>
+
+                    {job.provider && (
+                        <div className="bg-white/5 border-white/10 rounded-lg flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                                {job.provider.name.charAt(0)}
+                            </div>
+                            <div>
+                                <div className="font-semibold text-white flex items-center gap-2">
+                                    {job.provider.name}
+                                    {(job.provider.complianceConfirmed) && (
+                                        <span className="text-green-600 text-xs bg-green-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                            ✓ Verified
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs text-blue-700">
+                                    {job.provider.providerType || 'Service Provider'}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {job.completionNotes && (
+                    <div className="mt-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                        <span className="font-semibold text-gray-700">Completion Notes: </span>
+                        <span className="text-gray-400">{job.completionNotes}</span>
+                    </div>
+                )}
+
+                {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.provider?.latitude && job.latitude && (
+                    <div className="mt-4">
+                        <ProviderMap
+                            providerLat={job.provider.latitude}
+                            providerLon={job.provider.longitude}
+                            jobLat={job.latitude}
+                            jobLon={job.longitude}
+                        />
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+
+    // Render content based on active tab
+    const renderContent = () => {
+        // Handle WAITING state (dispatch timer)
+        if (step === 'WAITING' && activeJobId) {
+            return (
+                <DispatchTimer
+                    jobId={activeJobId}
+                    onCompleted={() => {
+                        setStep('LIST');
+                        setActiveTab('STATUS');
+                    }}
+                    onCancel={() => handleCancelJob()}
+                />
+            );
+        }
+
+        switch (activeTab) {
+            case 'NEW_TASK':
+                return (
+                    <div className="space-y-4">
+                        <CustomerGreeting onSetLocation={(loc) => setUserLocation(loc)} />
+
+                        {/* Location Check */}
+                        {userCoords && (
+                            <div className="bg-zinc-900 border-blue-500/30 flex flex-col md:flex-row gap-4 items-start md:items-center p-4 rounded-lg border">
+                                <div className="flex-1 space-y-1">
+                                    <h3 className="font-semibold text-white flex items-center gap-2">
+                                        <MapPin className="w-4 h-4 text-blue-500" />
+                                        Location Services Active
+                                    </h3>
+                                    <p className="text-sm text-gray-400">
+                                        Your location is being tracked to find nearby providers.
+                                    </p>
+                                    <p className="text-xs text-mono text-gray-400">
+                                        {userCoords.lat.toFixed(4)}, {userCoords.lng.toFixed(4)}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        <JobCreationForm
+                            onSubmit={handleCreateJob}
+                            onCancel={() => setActiveTab('STATUS')}
+                            loading={false}
+                            defaultLocation={userLocation}
+                        />
+
+                        {/* Test Job Button */}
+                        <div className="flex justify-center pt-4">
+                            <Button
+                                onClick={handleCreateSimulation}
+                                variant="outline"
+                                className="border-dashed border-blue-400 text-blue-600 hover:bg-blue-50"
+                            >
+                                Spawn Test Job (15m delay)
+                            </Button>
+                        </div>
+                    </div>
+                );
+
+            case 'STATUS':
+                return (
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-2xl font-bold text-white">Active Jobs</h2>
+                            <Button onClick={() => setActiveTab('NEW_TASK')} className="gap-2">
+                                <Plus className="w-4 h-4" /> New Request
+                            </Button>
+                        </div>
+
+                        {!jobs ? (
+                            <p className="text-center py-8 text-gray-400">Loading jobs...</p>
+                        ) : activeJobs.length === 0 ? (
+                            <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
+                                No active jobs. Start a new request!
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {activeJobs.map(renderJobCard)}
+                            </div>
+                        )}
+                    </div>
+                );
+
+            case 'HISTORY':
+                return (
+                    <div className="space-y-4">
+                        <h2 className="text-2xl font-bold text-white">Job History</h2>
+
+                        {!jobs ? (
+                            <p className="text-center py-8 text-gray-400">Loading jobs...</p>
+                        ) : historyJobs.length === 0 ? (
+                            <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
+                                No past jobs yet.
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {historyJobs.map(renderJobCard)}
+                            </div>
+                        )}
+                    </div>
+                );
+
+            case 'ACCOUNT':
+                return (
+                    <div className="space-y-6">
+                        <h2 className="text-2xl font-bold text-white">Account</h2>
+
+                        <Card>
+                            <CardContent className="p-6 space-y-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
+                                        {user.name?.charAt(0) || 'U'}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-semibold text-white">{user.name}</h3>
+                                        <p className="text-sm text-gray-400">{user.email}</p>
+                                        <p className="text-xs text-gray-500 uppercase mt-1">{user.role}</p>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-white/10 pt-4">
+                                    <h4 className="font-semibold text-white mb-2">Account Information</h4>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">Member since</span>
+                                            <span className="text-white">{new Date(user.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">Total jobs</span>
+                                            <span className="text-white">{jobs?.length || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    onClick={handleLogout}
+                                    variant="destructive"
+                                    className="w-full gap-2"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Log Out
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                );
+
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div className="pb-20">
+            {renderContent()}
+
+            {/* Bottom Navigation */}
+            <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
             {/* Review Dialog */}
             {reviewDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-zinc-900 border-white/10">
-                        <div className="space-y-1">
+                    <div className="bg-zinc-900 border-white/10 p-6 rounded-lg max-w-md w-full mx-4">
+                        <div className="space-y-1 mb-4">
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                                 <Star className="w-5 h-5 text-yellow-500" />
                                 Rate Your Experience
                             </h3>
                             <p className="text-sm text-gray-400">How was the service? This helps us improve.</p>
                         </div>
-                        {/* Rating Logic... */}
-                        {/* Shortened for brevity, preserving existing structure */}
-                        <div className="space-y-2">
+
+                        <div className="space-y-2 mb-4">
                             <Label>Rating</Label>
                             <div className="flex gap-2">
                                 {[1, 2, 3, 4, 5].map((rating) => (
@@ -456,10 +562,10 @@ export function CustomerView({ user }: { user: any }) {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 mb-4">
                             <Label>Comment (Optional)</Label>
                             <textarea
-                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
+                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-blue-500 p-2"
                                 rows={3}
                                 placeholder="Share your experience..."
                                 value={reviewComment}
@@ -497,18 +603,18 @@ export function CustomerView({ user }: { user: any }) {
             {/* Dispute Dialog */}
             {disputeDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-zinc-900 border-white/10 text-white">
-                        <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-gray-900 text-red-600 flex items-center gap-2">
+                    <div className="bg-zinc-900 border-white/10 text-white p-6 rounded-lg max-w-md w-full mx-4">
+                        <div className="space-y-1 mb-4">
+                            <h3 className="text-lg font-semibold text-red-600 flex items-center gap-2">
                                 Report an Issue
                             </h3>
                             <p className="text-sm text-gray-400">Please describe the problem with this job. Payments will be paused.</p>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 mb-4">
                             <Label>What went wrong? *</Label>
                             <select
-                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-red-500"
+                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
                                 value={disputeDialog.reason}
                                 onChange={(e) => setDisputeDialog(prev => ({ ...prev, reason: e.target.value }))}
                             >
@@ -521,10 +627,10 @@ export function CustomerView({ user }: { user: any }) {
                             </select>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 mb-4">
                             <Label>Additional Details</Label>
                             <textarea
-                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-red-500"
+                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
                                 rows={4}
                                 placeholder="Please provide more details..."
                                 value={disputeDialog.notes}
