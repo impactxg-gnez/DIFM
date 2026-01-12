@@ -45,30 +45,50 @@ export function LocationPicker({ currentLocation, onLocationChange, onClose }: L
 
     // Initialize Google Places Autocomplete
     useEffect(() => {
-        if (typeof window !== 'undefined' && window.google) {
-            autocompleteService.current = new window.google.maps.places.AutocompleteService();
-            const mapDiv = document.createElement('div');
-            placesService.current = new window.google.maps.places.PlacesService(mapDiv);
-        }
+        const initializeGooglePlaces = () => {
+            if (typeof window !== 'undefined' && window.google?.maps?.places) {
+                try {
+                    autocompleteService.current = new window.google.maps.places.AutocompleteService();
+                    const mapDiv = document.createElement('div');
+                    placesService.current = new window.google.maps.places.PlacesService(mapDiv);
+                    console.log('Google Places initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing Google Places:', error);
+                }
+            } else {
+                // Retry after a short delay if Google Maps isn't loaded yet
+                console.log('Waiting for Google Maps API to load...');
+                setTimeout(initializeGooglePlaces, 500);
+            }
+        };
+
+        initializeGooglePlaces();
     }, []);
 
     // Handle search input changes
     const handleSearchChange = (value: string) => {
         setSearchInput(value);
 
-        if (!value.trim() || !autocompleteService.current) {
+        if (!value.trim()) {
             setSuggestions([]);
             setShowSuggestions(false);
+            return;
+        }
+
+        if (!autocompleteService.current) {
+            console.warn('Google Places Autocomplete not initialized yet');
             return;
         }
 
         autocompleteService.current.getPlacePredictions(
             { input: value },
             (predictions: any[], status: any) => {
+                console.log('Autocomplete status:', status, 'Predictions:', predictions);
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
                     setSuggestions(predictions);
                     setShowSuggestions(true);
                 } else {
+                    console.warn('No predictions or error:', status);
                     setSuggestions([]);
                     setShowSuggestions(false);
                 }
