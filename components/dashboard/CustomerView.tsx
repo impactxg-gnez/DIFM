@@ -625,7 +625,7 @@ export function CustomerView({ user }: { user: any }) {
                         </div>
                     </div>
                 )
-            }
+            })()}
 
             {/* Dispute Dialog */}
             {disputeDialog.open && (
