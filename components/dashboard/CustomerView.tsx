@@ -184,7 +184,8 @@ export function CustomerView({ user }: { user: any }) {
             j.status === 'COMPLETED' &&
             !j.customerReview &&
             !reviewDialog.open &&
-            !dismissedJobIds.includes(j.id)
+            !dismissedJobIds.includes(j.id) &&
+            j.description // Only show if job has a description (actual service)
         );
         if (completedJob) {
             // Show review prompt after a short delay (non-blocking)
@@ -544,73 +545,87 @@ export function CustomerView({ user }: { user: any }) {
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
             {/* Review Dialog */}
-            {reviewDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-zinc-900 border-white/10 p-6 rounded-lg max-w-md w-full mx-4">
-                        <div className="space-y-1 mb-4">
-                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <Star className="w-5 h-5 text-yellow-500" />
-                                Rate Your Experience
-                            </h3>
-                            <p className="text-sm text-gray-400">How was the service? This helps us improve.</p>
-                        </div>
+            {reviewDialog.open && (() => {
+                const jobToReview = jobs?.find((j: any) => j.id === reviewDialog.jobId);
+                if (!jobToReview) return null;
 
-                        <div className="space-y-2 mb-4">
-                            <Label>Rating</Label>
-                            <div className="flex gap-2">
-                                {[1, 2, 3, 4, 5].map((rating) => (
-                                    <button
-                                        key={rating}
-                                        type="button"
-                                        onClick={() => setReviewRating(rating)}
-                                        className={`flex-1 p-2 rounded-md border-2 transition-colors ${reviewRating >= rating
-                                            ? 'border-yellow-400 bg-yellow-50 text-yellow-600'
-                                            : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                                            }`}
-                                    >
-                                        <Star className={`w-5 h-5 mx-auto ${reviewRating >= rating ? 'fill-current' : ''}`} />
-                                    </button>
-                                ))}
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-zinc-900 border border-white/10 p-6 rounded-lg max-w-md w-full mx-4">
+                            <div className="space-y-1 mb-4">
+                                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                    <Star className="w-5 h-5 text-yellow-500" />
+                                    Rate Your Experience
+                                </h3>
+                                <p className="text-sm text-gray-400">How was the service? This helps us improve.</p>
+                                {jobToReview.description && (
+                                    <div className="mt-3 p-3 bg-zinc-800 rounded-lg border border-white/5">
+                                        <p className="text-xs text-gray-500 mb-1">Service</p>
+                                        <p className="text-sm text-white font-medium">{jobToReview.description}</p>
+                                        {jobToReview.provider && (
+                                            <p className="text-xs text-gray-400 mt-1">Provider: {jobToReview.provider.name}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2 mb-4">
+                                <Label>Rating</Label>
+                                <div className="flex gap-2">
+                                    {[1, 2, 3, 4, 5].map((rating) => (
+                                        <button
+                                            key={rating}
+                                            type="button"
+                                            onClick={() => setReviewRating(rating)}
+                                            className={`flex-1 p-2 rounded-md border-2 transition-colors ${reviewRating >= rating
+                                                ? 'border-yellow-400 bg-yellow-50 text-yellow-600'
+                                                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            <Star className={`w-5 h-5 mx-auto ${reviewRating >= rating ? 'fill-current' : ''}`} />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 mb-4">
+                                <Label>Comment (Optional)</Label>
+                                <textarea
+                                    className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-blue-500 p-2"
+                                    rows={3}
+                                    placeholder="Share your experience..."
+                                    value={reviewComment}
+                                    onChange={(e) => setReviewComment(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                        if (reviewDialog.jobId) {
+                                            setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
+                                        }
+                                        setReviewDialog({ open: false });
+                                        setReviewRating(5);
+                                        setReviewComment('');
+                                    }}
+                                    disabled={isSubmittingReview}
+                                >
+                                    Skip
+                                </Button>
+                                <Button
+                                    variant="default"
+                                    onClick={submitReview}
+                                    disabled={isSubmittingReview}
+                                >
+                                    {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+                                </Button>
                             </div>
                         </div>
-
-                        <div className="space-y-2 mb-4">
-                            <Label>Comment (Optional)</Label>
-                            <textarea
-                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-blue-500 p-2"
-                                rows={3}
-                                placeholder="Share your experience..."
-                                value={reviewComment}
-                                onChange={(e) => setReviewComment(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-3 pt-2">
-                            <Button
-                                variant="ghost"
-                                onClick={() => {
-                                    if (reviewDialog.jobId) {
-                                        setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
-                                    }
-                                    setReviewDialog({ open: false });
-                                    setReviewRating(5);
-                                    setReviewComment('');
-                                }}
-                                disabled={isSubmittingReview}
-                            >
-                                Skip
-                            </Button>
-                            <Button
-                                variant="default"
-                                onClick={submitReview}
-                                disabled={isSubmittingReview}
-                            >
-                                {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
-                            </Button>
-                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Dispute Dialog */}
             {disputeDialog.open && (
