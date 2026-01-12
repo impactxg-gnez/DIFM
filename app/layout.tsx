@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { GoogleMapsLoader } from "@/components/GoogleMapsLoader";
 
 export const metadata: Metadata = {
     title: "DIFM - Do It For Me",
@@ -14,6 +15,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className="antialiased">
+                <GoogleMapsLoader />
                 {children}
             </body>
         </html>
