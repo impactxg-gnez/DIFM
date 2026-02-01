@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
@@ -10,16 +10,55 @@ export default function Home() {
     const [locationText, setLocationText] = useState('Location');
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
-    // Placeholder state for pricing - in real app this would depend on search selection
-    const [showPrice, setShowPrice] = useState(true);
+    // Search & Pricing State
+    const [description, setDescription] = useState('');
+    const [debouncedDesc, setDebouncedDesc] = useState('');
+    const [pricePreview, setPricePreview] = useState<any>(null);
+    const [isPricingLoading, setIsPricingLoading] = useState(false);
+
+    // Debounce description input
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedDesc(description);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [description]);
+
+    // Fetch Price Prediction
+    useEffect(() => {
+        const fetchPrice = async () => {
+            if (!debouncedDesc.trim()) {
+                setPricePreview(null);
+                return;
+            }
+
+            setIsPricingLoading(true);
+            try {
+                const res = await fetch('/api/pricing/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: 'HANDYMAN', description: debouncedDesc }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setPricePreview(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch price:', error);
+            } finally {
+                setIsPricingLoading(false);
+            }
+        };
+
+        fetchPrice();
+    }, [debouncedDesc]);
 
     const handleLocationClick = () => {
         setIsLoadingLocation(true);
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    // Placeholder success
-                    setLocationText('London');
+                    setLocationText('London'); // Placeholder
                     setIsLoadingLocation(false);
                 },
                 (error) => {
@@ -29,9 +68,21 @@ export default function Home() {
                 }
             );
         } else {
-            console.error('Geolocation is not supported by this browser.');
             setIsLoadingLocation(false);
         }
+    };
+
+    const handleAddressClick = () => {
+        // TODO: Open Address Entry Modal
+        console.log('Open Address Modal');
+    };
+
+    const handleBookNow = () => {
+        router.push('/finding-pro');
+    };
+
+    const handleMediaClick = (type: 'mic' | 'camera') => {
+        alert(`${type === 'mic' ? 'Voice Note' : 'Camera'} upload coming soon!`);
     };
 
     return (
@@ -96,17 +147,19 @@ export default function Home() {
                         </p>
                     </div>
 
-                    {/* Search Bar */}
-                    <div className="w-full bg-[#1E1E20] border border-white/10 rounded-2xl h-[52px] flex items-center px-4">
+                    {/* Search Bar - Dynamic Input */}
+                    <div className="w-full bg-[#1E1E20] border border-white/10 rounded-2xl h-[52px] flex items-center px-4 transition-colors focus-within:border-blue-500/50">
                         <Search className="w-5 h-5 text-gray-500 mr-3" />
                         <input
                             type="text"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
                             placeholder="What needs doing?"
                             className="bg-transparent text-white placeholder:text-gray-500 text-sm flex-1 outline-none"
                         />
                         <div className="flex items-center gap-3 pl-3 border-l border-white/10 ml-2">
-                            <Mic className="w-4 h-4 text-gray-400" />
-                            <Camera className="w-4 h-4 text-gray-400" />
+                            <Mic className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleMediaClick('mic')} />
+                            <Camera className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleMediaClick('camera')} />
                         </div>
                     </div>
 
@@ -131,23 +184,30 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* Upfront Price Card (Placeholder - only visible if showPrice is true) */}
-                    {showPrice && (
-                        <div className="bg-[#D9D9D9] rounded-[24px] p-4 text-black relative overflow-hidden mt-2">
+                    {/* Upfront Price Card - Dynamic */}
+                    {(pricePreview || isPricingLoading) && (
+                        <div className="bg-[#D9D9D9] rounded-[24px] p-4 text-black relative overflow-hidden mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-start mb-6">
-                                <div className="flex flex-col">
+                                <div className="flex flex-col max-w-[70%]">
                                     <span className="text-[10px] font-bold text-black/70 uppercase tracking-wider">Upfront Price</span>
-                                    <span className="text-[11px] font-semibold text-black/80 mt-1">Plumbing - Quick Fix (&lt; 45 min)</span>
+                                    <span className="text-[11px] font-semibold text-black/80 mt-1 truncate">
+                                        {isPricingLoading ? 'Calculating...' : (pricePreview?.items?.[0]?.description || description || 'Custom Job')}
+                                    </span>
                                     <span className="text-[10px] text-black/50">Price locked when you book</span>
                                 </div>
-                                <div className="text-right flex flex-col items-end">
-                                    <span className="text-[#007AFF] font-bold text-sm">£85.00</span>
-                                    <span className="text-[#007AFF] text-[9px] font-bold cursor-pointer hover:underline">Change &gt;</span>
+                                <div className="text-right flex flex-col items-end shrink-0">
+                                    <span className="text-[#007AFF] font-bold text-sm">
+                                        {isPricingLoading ? '...' : `£${pricePreview?.totalPrice?.toFixed(2) || '0.00'}`}
+                                    </span>
+                                    {!isPricingLoading && <span className="text-[#007AFF] text-[9px] font-bold cursor-pointer hover:underline">Change &gt;</span>}
                                 </div>
                             </div>
 
                             {/* Enter Address Button (Inside the card bottom) */}
-                            <div className="w-full h-[48px] bg-black/10 rounded-[16px] flex items-center justify-center cursor-pointer hover:bg-black/15 transition-colors">
+                            <div
+                                onClick={handleAddressClick}
+                                className="w-full h-[48px] bg-black/10 rounded-[16px] flex items-center justify-center cursor-pointer hover:bg-black/15 transition-colors"
+                            >
                                 <span className="text-black font-bold text-sm">Enter address...</span>
                             </div>
                         </div>
@@ -156,7 +216,10 @@ export default function Home() {
 
                 {/* Floating Action Button */}
                 <div className="mt-8">
-                    <Button className="px-8 h-[56px] bg-[#007AFF] hover:bg-[#006ee6] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2">
+                    <Button
+                        onClick={handleBookNow}
+                        className="px-8 h-[56px] bg-[#007AFF] hover:bg-[#006ee6] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2"
+                    >
                         <CheckCircle className="w-5 h-5 text-white" />
                         <span className="text-base font-bold text-white">Book Now</span>
                     </Button>
