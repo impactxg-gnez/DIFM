@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 interface AddressModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (address: string) => void;
+    onSave: (address: string, label?: string) => void;
 }
 
 export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
@@ -64,9 +64,12 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
     const handleSave = () => {
         if (!address.trim()) return;
         const fullAddress = `${address}${apt ? `, ${apt}` : ''}`;
-        onSave(fullAddress);
+        const finalLabel = label === 'Other' ? (customLabel || 'Other') : label;
+        onSave(fullAddress, finalLabel);
         onClose();
     };
+
+    const labels = ['Home', 'Office', 'Other'];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -131,14 +134,8 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
                     <div className="space-y-3">
                         <label className="text-xs font-bold text-white/40 tracking-wider">SAVE AS (OPTIONAL)</label>
                         <div className="flex flex-col gap-3">
-                            <Input
-                                value={customLabel}
-                                onChange={(e) => setCustomLabel(e.target.value)}
-                                placeholder="Label name"
-                                className="h-[56px] px-5 bg-black/20 border-white/5 rounded-2xl text-white placeholder:text-white/20 focus-visible:ring-blue-500/50"
-                            />
                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-                                {['Home', 'Office', 'Gym', 'Other'].map((l) => (
+                                {labels.map((l) => (
                                     <button
                                         key={l}
                                         onClick={() => setLabel(l)}
@@ -151,6 +148,17 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Custom Label Input - Only if Other is selected */}
+                            {label === 'Other' && (
+                                <Input
+                                    value={customLabel}
+                                    onChange={(e) => setCustomLabel(e.target.value)}
+                                    placeholder="Name this location (e.g. My Studio)"
+                                    className="h-[56px] px-5 bg-black/20 border-white/5 rounded-2xl text-white placeholder:text-white/20 focus-visible:ring-blue-500/50 animate-in fade-in slide-in-from-top-2"
+                                    autoFocus
+                                />
+                            )}
                         </div>
                     </div>
                 </div>

@@ -81,8 +81,12 @@ export default function Home() {
         setIsAddressModalOpen(true);
     };
 
-    const handleAddressSave = (address: string) => {
+    const handleAddressSave = (address: string, label?: string) => {
+        // If a label exists (e.g. "Home"), we could use it, but for now stick to address
+        // Or format it: "Home: 123 St..."
+        // User said "save it for future use", implying we might just want to store it in state for now.
         setSelectedAddress(address);
+        console.log('Saved Address:', address, 'Label:', label);
     };
 
     const handleBookNow = () => {
