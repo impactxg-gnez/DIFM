@@ -6,29 +6,20 @@ import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { JobCreationForm } from './JobCreationForm';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
-import { UserLocationMap } from './UserLocationMap';
-import { Plus, MapPin, Star, LogOut, ArrowLeft } from 'lucide-react';
+import { Plus, Star, LogOut, ArrowLeft, MapPin } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { LocationPicker } from './LocationPicker';
+import { HomeSearchInterface } from './HomeSearchInterface';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-/**
- * Get customer-friendly status display
- * Don't show DISPATCHED if no provider is assigned yet
- */
 function getCustomerStatus(job: any): string {
-    // If status is DISPATCHED but no provider assigned, show as "Looking for provider"
     if (job.status === 'DISPATCHED' && !job.providerId) {
         return 'Looking for provider';
     }
-
-    // Map other statuses to customer-friendly labels
     const statusMap: Record<string, string> = {
         'CREATED': 'Created',
         'DISPATCHED': 'Provider assigned',
@@ -40,7 +31,6 @@ function getCustomerStatus(job: any): string {
         'CANCELLED_FREE': 'Cancelled',
         'CANCELLED_CHARGED': 'Cancelled (charged)',
     };
-
     return statusMap[job.status] || job.status.replace('_', ' ');
 }
 
@@ -48,10 +38,7 @@ export function CustomerView({ user }: { user: any }) {
     const router = useRouter();
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
-    // Tab navigation state
     const [activeTab, setActiveTab] = useState<'NEW_TASK' | 'STATUS' | 'HISTORY' | 'ACCOUNT'>('NEW_TASK');
-
-    // Steps: LIST -> CREATE -> WAITING
     const [step, setStep] = useState<'LIST' | 'CREATE' | 'WAITING'>('LIST');
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
@@ -61,44 +48,59 @@ export function CustomerView({ user }: { user: any }) {
     const [isLocating, setIsLocating] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
 
+    // Initial Load & Pending Job Check
     useEffect(() => {
-        // Check for saved preferred location first
+        // 1. Location
         const savedLocation = localStorage.getItem('preferredLocation');
         if (savedLocation) {
             setUserLocation(savedLocation);
-            return;
-        }
-
-        // Auto-grab location on mount (page load)
-        if (navigator.geolocation && !userLocation) {
+        } else if (navigator.geolocation && !userLocation) {
             setIsLocating(true);
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const { latitude, longitude } = position.coords;
                     setUserCoords({ lat: latitude, lng: longitude });
                     try {
-                        // Free reverse geocoding via OpenStreetMap (Nominatim)
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                         if (res.ok) {
                             const data = await res.json();
-                            // Construct simple address
                             const address = data.display_name.split(',').slice(0, 3).join(', ');
                             setUserLocation(address);
                         }
                     } catch (e) {
-                        console.error("Geocoding failed", e);
                         setUserLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
                     } finally {
                         setIsLocating(false);
                     }
                 },
-                (error) => {
-                    console.error("Location permission denied or failed", error);
-                    setIsLocating(false);
-                }
+                (error) => setIsLocating(false)
             );
         }
+
+        // 2. Check Pending Job from Landing Page
+        const pendingJobStr = localStorage.getItem('pendingJob');
+        if (pendingJobStr) {
+            try {
+                const pendingJob = JSON.parse(pendingJobStr);
+                // Clear it so we don't duplicate
+                localStorage.removeItem('pendingJob');
+
+                // Create the job immediately
+                createPendingJob(pendingJob);
+            } catch (e) {
+                console.error("Failed to parse pending job", e);
+            }
+        }
     }, []);
+
+    const createPendingJob = async (jobData: any) => {
+        handleCreateJob({
+            description: jobData.description,
+            location: jobData.address || userLocation || 'Unknown Location',
+            category: 'HANDYMAN', // Default or derive
+            price: jobData.pricePrediction?.totalPrice || 0
+        });
+    };
 
     const handleCreateJob = async (details: any) => {
         try {
@@ -107,15 +109,15 @@ export function CustomerView({ user }: { user: any }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...details,
-                    latitude: userCoords?.lat,
-                    longitude: userCoords?.lng,
-                    partsExpectedAtBooking: details.partsExpectedAtBooking
+                    latitude: userCoords?.lat || 51.5074, // Default to London if missing for now
+                    longitude: userCoords?.lng || -0.1278,
                 }),
             });
             if (res.ok) {
                 const job = await res.json();
                 setActiveJobId(job.id);
                 setStep('WAITING');
+                setActiveTab('STATUS'); // Switch to status tab
                 mutate();
             }
         } catch (e) {
@@ -128,14 +130,15 @@ export function CustomerView({ user }: { user: any }) {
         if (!targetId) return;
         const confirmed = window.confirm('Cancel this job?');
         if (!confirmed) return;
+
         await fetch(`/api/jobs/${targetId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'CANCELLED_FREE' })
         });
-        if (!jobId) {
-            setStep('LIST');
-        }
+
+        setStep('LIST');
+        setActiveJobId(null);
         mutate();
     };
 
@@ -171,24 +174,14 @@ export function CustomerView({ user }: { user: any }) {
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-
-    // Track dismissed review prompts locally to prevent loops
     const [dismissedJobIds, setDismissedJobIds] = useState<string[]>([]);
 
-    // Check for completed jobs without reviews and show prompt
     useEffect(() => {
-        // Ensure jobs is an array before calling find
         if (!Array.isArray(jobs)) return;
-
         const completedJob = jobs.find((j: any) =>
-            j.status === 'COMPLETED' &&
-            !j.customerReview &&
-            !reviewDialog.open &&
-            !dismissedJobIds.includes(j.id) &&
-            j.description // Only show if job has a description (actual service)
+            j.status === 'COMPLETED' && !j.customerReview && !reviewDialog.open && !dismissedJobIds.includes(j.id) && j.description
         );
         if (completedJob) {
-            // Show review prompt after a short delay (non-blocking)
             const timer = setTimeout(() => {
                 setReviewDialog({ open: true, jobId: completedJob.id });
             }, 2000);
@@ -209,7 +202,6 @@ export function CustomerView({ user }: { user: any }) {
                     comment: reviewComment
                 })
             });
-            // Add to dismissed list so it doesn't pop up again before revalidation
             setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
             setReviewDialog({ open: false });
             setReviewRating(5);
@@ -217,7 +209,6 @@ export function CustomerView({ user }: { user: any }) {
             mutate();
         } catch (e) {
             console.error('Review submission error', e);
-            alert('Failed to submit review');
         } finally {
             setIsSubmittingReview(false);
         }
@@ -228,37 +219,6 @@ export function CustomerView({ user }: { user: any }) {
         router.push('/login');
     };
 
-    const handleCreateSimulation = async () => {
-        // Find customer's current location to spawn provider 15 mins (approx 7-8km) away
-        let lat = userCoords?.lat || 51.5074;
-        let lng = userCoords?.lng || -0.1278;
-
-        try {
-            const res = await fetch('/api/jobs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    description: "Simulation: Fix a leaking pipe",
-                    location: userLocation || "London, UK",
-                    latitude: lat,
-                    longitude: lng,
-                    category: 'PLUMBER',
-                    isSimulation: true,
-                    price: 0
-                }),
-            });
-            if (res.ok) {
-                const job = await res.json();
-                setActiveJobId(job.id);
-                setStep('WAITING');
-                mutate();
-            }
-        } catch (e) {
-            console.error("Sim creation failed", e);
-        }
-    };
-
-    // Filter jobs for Status and History tabs
     const activeJobs = Array.isArray(jobs) ? jobs.filter((j: any) =>
         !['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
@@ -267,129 +227,59 @@ export function CustomerView({ user }: { user: any }) {
         ['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
 
-    // Render job card helper
     const renderJobCard = (job: any) => (
-        <Card key={job.id} className="overflow-hidden">
+        <Card key={job.id} className="overflow-hidden bg-[#1E1E20] border-white/10 text-white">
             <div className="p-6">
                 <div className="flex justify-between items-start mb-2 gap-4">
                     <div className="space-y-1">
                         <div className="flex gap-2 mb-2">
-                            <Badge variant={
-                                ['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' :
-                                    ['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) ? 'destructive' :
-                                        job.status === 'DISPATCHED' && !job.providerId ? 'secondary' :
-                                            ['ACCEPTED', 'IN_PROGRESS'].includes(job.status) ? 'default' : 'secondary'
-                            }>
+                            <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
                                 {getCustomerStatus(job)}
                             </Badge>
-                            {job.status === 'DISPUTED' && (
-                                <Badge variant="destructive">Under Review</Badge>
-                            )}
                         </div>
-                        <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
-                        <p className="font-medium text-foreground/80">{job.description}</p>
+                        <h3 className="font-bold text-lg">{job.category}</h3>
+                        <p className="font-medium text-white/80">{job.description}</p>
                     </div>
                     <div className="text-right">
-                        <div className="font-bold text-lg text-foreground">£{job.fixedPrice}</div>
+                        <div className="font-bold text-lg">£{job.fixedPrice}</div>
                         <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
-
                         {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
-                            <div className="mt-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-red-600 border-red-200 hover:bg-red-50"
-                                    onClick={() => handleCancelJob(job.id)}
-                                >
-                                    Cancel order
-                                </Button>
-                            </div>
+                            <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
+                                Cancel
+                            </Button>
                         )}
-
-                        {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && (
-                            <div className="mt-2 text-right space-y-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                                    onClick={() => setDisputeDialog({ open: true, jobId: job.id, reason: '', notes: '' })}
-                                >
-                                    Report Issue
-                                </Button>
-                                {!job.customerReview && (
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="block ml-auto text-blue-600"
-                                        onClick={() => setReviewDialog({ open: true, jobId: job.id })}
-                                    >
-                                        Review Service
-                                    </Button>
-                                )}
-                            </div>
+                        {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && !job.customerReview && (
+                            <Button size="sm" variant="ghost" className="mt-2 text-blue-400" onClick={() => setReviewDialog({ open: true, jobId: job.id })}>
+                                Review Service
+                            </Button>
                         )}
                     </div>
                 </div>
-
-                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col md:flex-row justify-between text-sm gap-4">
-                    <div className="flex flex-col gap-1">
-                        <span className="text-gray-400">Location</span>
-                        <span className="font-medium">{job.location}</span>
-                    </div>
-
-                    {job.provider && (
-                        <div className="bg-white/5 border-white/10 rounded-lg flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                                {job.provider.name.charAt(0)}
-                            </div>
-                            <div>
-                                <div className="font-semibold text-white flex items-center gap-2">
-                                    {job.provider.name}
-                                    {(job.provider.complianceConfirmed) && (
-                                        <span className="text-green-600 text-xs bg-green-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                                            ✓ Verified
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="text-xs text-blue-700">
-                                    {job.provider.providerType || 'Service Provider'}
-                                </div>
-                            </div>
+                {/* Provider Info */}
+                {job.provider && (
+                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 font-bold">
+                            {job.provider.name.charAt(0)}
                         </div>
-                    )}
-                </div>
-
-                {job.completionNotes && (
-                    <div className="mt-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                        <span className="font-semibold text-gray-700">Completion Notes: </span>
-                        <span className="text-gray-400">{job.completionNotes}</span>
-                    </div>
-                )}
-
-                {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.provider?.latitude && job.latitude && (
-                    <div className="mt-4">
-                        <ProviderMap
-                            providerLat={job.provider.latitude}
-                            providerLon={job.provider.longitude}
-                            jobLat={job.latitude}
-                            jobLon={job.longitude}
-                        />
+                        <div>
+                            <div className="font-semibold">{job.provider.name}</div>
+                            <div className="text-xs text-blue-400">Verified Pro</div>
+                        </div>
                     </div>
                 )}
             </div>
         </Card>
     );
 
-    // Render content based on active tab
     const renderContent = () => {
-        // Handle WAITING state (dispatch timer)
-        if (step === 'WAITING' && activeJobId) {
+        // If we in active job "finding" state
+        if (step === 'WAITING' && activeJobId && activeTab === 'STATUS') {
             return (
                 <DispatchTimer
                     jobId={activeJobId}
                     onCompleted={() => {
                         setStep('LIST');
-                        setActiveTab('STATUS');
+                        mutate();
                     }}
                     onCancel={() => handleCancelJob()}
                 />
@@ -399,152 +289,83 @@ export function CustomerView({ user }: { user: any }) {
         switch (activeTab) {
             case 'NEW_TASK':
                 return (
-                    <div className="space-y-4">
-                        <JobCreationForm
-                            onSubmit={handleCreateJob}
-                            onCancel={() => setActiveTab('STATUS')}
-                            loading={false}
-                            defaultLocation={userLocation}
+                    <div className="-mt-[100px]">
+                        <HomeSearchInterface
+                            onBookNow={(data) => handleCreateJob({
+                                description: data.description,
+                                location: data.address || userLocation || 'Unknown',
+                                category: 'HANDYMAN',
+                                price: data.pricePrediction?.totalPrice || 0
+                            })}
+                            initialLocation={userLocation}
                         />
                     </div>
                 );
 
             case 'STATUS':
                 return (
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-bold text-white">Active Jobs</h2>
-                            <Button onClick={() => setActiveTab('NEW_TASK')} className="gap-2">
-                                <Plus className="w-4 h-4" /> New Request
-                            </Button>
-                        </div>
-
-                        {!jobs ? (
-                            <p className="text-center py-8 text-gray-400">Loading jobs...</p>
-                        ) : activeJobs.length === 0 ? (
+                    <div className="space-y-4 pt-8 text-white">
+                        <h2 className="text-2xl font-bold">Active Jobs</h2>
+                        {activeJobs.length === 0 ? (
                             <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
-                                No active jobs. Start a new request!
+                                No active jobs.
                             </div>
                         ) : (
-                            <div className="grid gap-4">
-                                {activeJobs.map(renderJobCard)}
-                            </div>
+                            <div className="grid gap-4">{activeJobs.map(renderJobCard)}</div>
                         )}
                     </div>
                 );
 
             case 'HISTORY':
                 return (
-                    <div className="space-y-4">
-                        <h2 className="text-2xl font-bold text-white">Job History</h2>
-
-                        {!jobs ? (
-                            <p className="text-center py-8 text-gray-400">Loading jobs...</p>
-                        ) : historyJobs.length === 0 ? (
+                    <div className="space-y-4 pt-8 text-white">
+                        <h2 className="text-2xl font-bold">Job History</h2>
+                        {historyJobs.length === 0 ? (
                             <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
-                                No past jobs yet.
+                                No past jobs.
                             </div>
                         ) : (
-                            <div className="grid gap-4">
-                                {historyJobs.map(renderJobCard)}
-                            </div>
+                            <div className="grid gap-4">{historyJobs.map(renderJobCard)}</div>
                         )}
                     </div>
                 );
 
             case 'ACCOUNT':
                 return (
-                    <div className="space-y-6">
-                        <h2 className="text-2xl font-bold text-white">Account</h2>
-
-                        <Card>
+                    <div className="space-y-6 pt-8 text-white">
+                        <h2 className="text-2xl font-bold">Account</h2>
+                        <Card className="bg-[#1E1E20] border-white/10 text-white">
                             <CardContent className="p-6 space-y-6">
                                 <div className="flex items-center gap-4">
                                     <div className="h-16 w-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
                                         {user.name?.charAt(0) || 'U'}
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-semibold text-white">{user.name}</h3>
+                                        <h3 className="text-xl font-semibold">{user.name}</h3>
                                         <p className="text-sm text-gray-400">{user.email}</p>
-                                        <p className="text-xs text-gray-500 uppercase mt-1">{user.role}</p>
                                     </div>
                                 </div>
-
-                                <div className="border-t border-white/10 pt-4">
-                                    <h4 className="font-semibold text-white mb-2">Account Information</h4>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Member since</span>
-                                            <span className="text-white">{new Date(user.createdAt).toLocaleDateString()}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Total jobs</span>
-                                            <span className="text-white">{jobs?.length || 0}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Button
-                                    onClick={handleLogout}
-                                    variant="destructive"
-                                    className="w-full gap-2"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    Log Out
+                                <Button onClick={handleLogout} variant="destructive" className="w-full gap-2">
+                                    <LogOut className="w-4 h-4" /> Log Out
                                 </Button>
                             </CardContent>
                         </Card>
                     </div>
                 );
-
-            default:
-                return null;
+            default: return null;
         }
     };
 
-    const handleLocationChange = (newLocation: string) => {
-        setUserLocation(newLocation);
-        localStorage.setItem('preferredLocation', newLocation);
-    };
-
     return (
-        <div className="pb-20">
-            {/* Header Bar with Location */}
-            {userLocation && (
-                <div className="mb-6">
-                    {!showLocationPicker ? (
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="bg-zinc-900 border border-white/10 rounded-lg px-4 py-2 flex items-center gap-2 cursor-pointer hover:border-blue-500/50 transition-colors"
-                                onClick={() => setShowLocationPicker(true)}
-                            >
-                                <MapPin className="w-4 h-4 text-blue-500" />
-                                <div>
-                                    <p className="text-xs text-gray-400">Current Location</p>
-                                    <p className="text-sm text-white font-medium">{userLocation}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-400">
-                                <ArrowLeft className="w-4 h-4" />
-                                <span className="text-sm">Change location</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <LocationPicker
-                            currentLocation={userLocation}
-                            onLocationChange={handleLocationChange}
-                            onClose={() => setShowLocationPicker(false)}
-                        />
-                    )}
-                </div>
-            )}
+        <div className="pb-20 min-h-screen">
+            {/* We want the background on the dashboard too */}
+            <div className="fixed inset-0 bg-cover bg-center z-[-1]" style={{ backgroundImage: 'url(/home-bg.jpg)' }} />
+            <div className="fixed inset-0 bg-black/60 z-[-1]" />
 
             {renderContent()}
 
-            {/* Bottom Navigation */}
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-            {/* Review Dialog */}
             {reviewDialog.open && (() => {
                 const jobToReview = jobs?.find((j: any) => j.id === reviewDialog.jobId);
                 if (!jobToReview) return null;
@@ -558,19 +379,9 @@ export function CustomerView({ user }: { user: any }) {
                                     Rate Your Experience
                                 </h3>
                                 <p className="text-sm text-gray-400">How was the service? This helps us improve.</p>
-                                {jobToReview.description && (
-                                    <div className="mt-3 p-3 bg-zinc-800 rounded-lg border border-white/5">
-                                        <p className="text-xs text-gray-500 mb-1">Service</p>
-                                        <p className="text-sm text-white font-medium">{jobToReview.description}</p>
-                                        {jobToReview.provider && (
-                                            <p className="text-xs text-gray-400 mt-1">Provider: {jobToReview.provider.name}</p>
-                                        )}
-                                    </div>
-                                )}
                             </div>
-
                             <div className="space-y-2 mb-4">
-                                <Label>Rating</Label>
+                                <Label className="text-white">Rating</Label>
                                 <div className="flex gap-2">
                                     {[1, 2, 3, 4, 5].map((rating) => (
                                         <button
@@ -579,7 +390,7 @@ export function CustomerView({ user }: { user: any }) {
                                             onClick={() => setReviewRating(rating)}
                                             className={`flex-1 p-2 rounded-md border-2 transition-colors ${reviewRating >= rating
                                                 ? 'border-yellow-400 bg-yellow-50 text-yellow-600'
-                                                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                                                : 'border-white/10 text-gray-400 hover:border-gray-500'
                                                 }`}
                                         >
                                             <Star className={`w-5 h-5 mx-auto ${reviewRating >= rating ? 'fill-current' : ''}`} />
@@ -587,9 +398,8 @@ export function CustomerView({ user }: { user: any }) {
                                     ))}
                                 </div>
                             </div>
-
                             <div className="space-y-2 mb-4">
-                                <Label>Comment (Optional)</Label>
+                                <Label className="text-white">Comment (Optional)</Label>
                                 <textarea
                                     className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-blue-500 p-2"
                                     rows={3}
@@ -598,88 +408,45 @@ export function CustomerView({ user }: { user: any }) {
                                     onChange={(e) => setReviewComment(e.target.value)}
                                 />
                             </div>
-
                             <div className="flex justify-end gap-3 pt-2">
                                 <Button
                                     variant="ghost"
+                                    className="text-white hover:bg-white/10"
                                     onClick={() => {
                                         if (reviewDialog.jobId) {
                                             setDismissedJobIds(prev => [...prev, reviewDialog.jobId!]);
                                         }
                                         setReviewDialog({ open: false });
-                                        setReviewRating(5);
-                                        setReviewComment('');
                                     }}
-                                    disabled={isSubmittingReview}
                                 >
                                     Skip
                                 </Button>
-                                <Button
-                                    variant="default"
-                                    onClick={submitReview}
-                                    disabled={isSubmittingReview}
-                                >
-                                    {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
-                                </Button>
+                                <Button onClick={submitReview}>Submit Review</Button>
                             </div>
                         </div>
                     </div>
-                )
+                );
             })()}
 
-            {/* Dispute Dialog */}
             {disputeDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                     <div className="bg-zinc-900 border-white/10 text-white p-6 rounded-lg max-w-md w-full mx-4">
-                        <div className="space-y-1 mb-4">
-                            <h3 className="text-lg font-semibold text-red-600 flex items-center gap-2">
-                                Report an Issue
-                            </h3>
-                            <p className="text-sm text-gray-400">Please describe the problem with this job. Payments will be paused.</p>
-                        </div>
-
+                        <h3 className="text-lg font-semibold text-red-500 mb-4">Report Issue</h3>
                         <div className="space-y-2 mb-4">
-                            <Label>What went wrong? *</Label>
+                            <Label>Reason</Label>
                             <select
-                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
+                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white p-2"
                                 value={disputeDialog.reason}
                                 onChange={(e) => setDisputeDialog(prev => ({ ...prev, reason: e.target.value }))}
                             >
                                 <option value="">Select a reason...</option>
                                 <option value="Incomplete work">Incomplete work</option>
                                 <option value="Poor quality">Poor quality</option>
-                                <option value="Damage caused">Damage caused</option>
-                                <option value="Unprofessional behaviour">Unprofessional behaviour</option>
-                                <option value="Other">Other</option>
                             </select>
                         </div>
-
-                        <div className="space-y-2 mb-4">
-                            <Label>Additional Details</Label>
-                            <textarea
-                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
-                                rows={4}
-                                placeholder="Please provide more details..."
-                                value={disputeDialog.notes}
-                                onChange={(e) => setDisputeDialog(prev => ({ ...prev, notes: e.target.value }))}
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-3 pt-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setDisputeDialog({ open: false, reason: '', notes: '' })}
-                                disabled={isSubmittingDispute}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                onClick={submitDispute}
-                                disabled={isSubmittingDispute || !disputeDialog.reason}
-                            >
-                                {isSubmittingDispute ? 'Reporting...' : 'Report Issue'}
-                            </Button>
+                        <div className="flex justify-end gap-3">
+                            <Button variant="ghost" onClick={() => setDisputeDialog({ open: false, reason: '', notes: '' })}>Cancel</Button>
+                            <Button variant="destructive" onClick={submitDispute}>Report</Button>
                         </div>
                     </div>
                 </div>
