@@ -69,7 +69,7 @@ export default function DashboardPage() {
     if (!user) return null;
 
     return (
-        <div className="min-h-screen bg-black font-sans selection:bg-blue-600/30">
+        <div className="min-h-screen bg-[#1E1E20] font-sans selection:bg-blue-600/30">
             {/* Header - Hidden for Customers */}
             {user.role !== 'CUSTOMER' && (
                 <header className="bg-[#121417] border-b border-white/10 h-16 px-8 flex justify-between items-center sticky top-0 z-10 shadow-sm">
@@ -87,7 +87,7 @@ export default function DashboardPage() {
                 </header>
             )}
 
-            <main className={user.role === 'CUSTOMER' ? 'p-6 sm:p-10' : 'max-w-5xl mx-auto p-6 sm:p-10'}>
+            <main className={user.role === 'CUSTOMER' ? 'p-0' : 'max-w-5xl mx-auto p-6 sm:p-10'}>
                 {user.role === 'CUSTOMER' && <CustomerView user={user} />}
                 {user.role === 'PROVIDER' && <ProviderView user={user} />}
                 {user.role === 'ADMIN' && <AdminView user={user} />}

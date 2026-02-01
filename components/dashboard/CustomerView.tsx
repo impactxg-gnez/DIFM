@@ -304,7 +304,7 @@ export function CustomerView({ user }: { user: any }) {
 
             case 'STATUS':
                 return (
-                    <div className="space-y-4 pt-8 text-white">
+                    <div className="space-y-4 pt-8 px-6 text-white pb-24">
                         <h2 className="text-2xl font-bold">Active Jobs</h2>
                         {activeJobs.length === 0 ? (
                             <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
@@ -318,7 +318,7 @@ export function CustomerView({ user }: { user: any }) {
 
             case 'HISTORY':
                 return (
-                    <div className="space-y-4 pt-8 text-white">
+                    <div className="space-y-4 pt-8 px-6 text-white pb-24">
                         <h2 className="text-2xl font-bold">Job History</h2>
                         {historyJobs.length === 0 ? (
                             <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
@@ -332,7 +332,7 @@ export function CustomerView({ user }: { user: any }) {
 
             case 'ACCOUNT':
                 return (
-                    <div className="space-y-6 pt-8 text-white">
+                    <div className="space-y-6 pt-8 px-6 text-white pb-24">
                         <h2 className="text-2xl font-bold">Account</h2>
                         <Card className="bg-[#1E1E20] border-white/10 text-white">
                             <CardContent className="p-6 space-y-6">
