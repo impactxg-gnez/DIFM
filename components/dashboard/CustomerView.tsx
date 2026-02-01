@@ -358,10 +358,6 @@ export function CustomerView({ user }: { user: any }) {
 
     return (
         <div className="pb-20 min-h-screen">
-            {/* We want the background on the dashboard too */}
-            <div className="fixed inset-0 bg-cover bg-center z-[-1]" style={{ backgroundImage: 'url(/home-bg.jpg)' }} />
-            <div className="fixed inset-0 bg-black/60 z-[-1]" />
-
             {renderContent()}
 
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

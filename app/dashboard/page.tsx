@@ -69,29 +69,42 @@ export default function DashboardPage() {
     if (!user) return null;
 
     return (
-        <div className="min-h-screen bg-[#1E1E20] font-sans selection:bg-blue-600/30">
-            {/* Header - Hidden for Customers */}
-            {user.role !== 'CUSTOMER' && (
-                <header className="bg-[#121417] border-b border-white/10 h-16 px-8 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">D</div>
-                        <h1 className="text-xl font-bold tracking-tight text-white">DIFM</h1>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm font-medium text-white">{user.name}</p>
-                            <p className="text-xs text-gray-400 lowercase">{user.role}</p>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white hover:bg-white/5">Log out</Button>
-                    </div>
-                </header>
-            )}
+        <div className="min-h-screen font-sans selection:bg-blue-600/30 relative">
+            {/* Background Texture */}
+            <div
+                className="fixed inset-0 bg-cover bg-center z-0"
+                style={{
+                    backgroundImage: 'url(/dashboard-bg.jpg)',
+                }}
+            />
+            {/* Dark Overlay */}
+            <div className="fixed inset-0 bg-black/60 z-0" />
 
-            <main className={user.role === 'CUSTOMER' ? 'p-0' : 'max-w-5xl mx-auto p-6 sm:p-10'}>
-                {user.role === 'CUSTOMER' && <CustomerView user={user} />}
-                {user.role === 'PROVIDER' && <ProviderView user={user} />}
-                {user.role === 'ADMIN' && <AdminView user={user} />}
-            </main>
+            {/* Content Wrapper */}
+            <div className="relative z-10">
+                {/* Header - Hidden for Customers */}
+                {user.role !== 'CUSTOMER' && (
+                    <header className="bg-[#121417] border-b border-white/10 h-16 px-8 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">D</div>
+                            <h1 className="text-xl font-bold tracking-tight text-white">DIFM</h1>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right hidden sm:block">
+                                <p className="text-sm font-medium text-white">{user.name}</p>
+                                <p className="text-xs text-gray-400 lowercase">{user.role}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white hover:bg-white/5">Log out</Button>
+                        </div>
+                    </header>
+                )}
+
+                <main className={user.role === 'CUSTOMER' ? 'p-0' : 'max-w-5xl mx-auto p-6 sm:p-10'}>
+                    {user.role === 'CUSTOMER' && <CustomerView user={user} />}
+                    {user.role === 'PROVIDER' && <ProviderView user={user} />}
+                    {user.role === 'ADMIN' && <AdminView user={user} />}
+                </main>
+            </div>
         </div>
     );
 }
