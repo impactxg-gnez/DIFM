@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { MapPin, ArrowRight, CheckCircle, Search, Mic, Camera } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
+// import { motion } from 'framer-motion'; 
 
 export default function Home() {
     const router = useRouter();
@@ -16,9 +16,8 @@ export default function Home() {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    // For now, minimal implementation to show it works
-                    // In a real app, reverse geocode here
-                    setLocationText('London'); // Placeholder for success
+                    // Placeholder success
+                    setLocationText('London');
                     setIsLoadingLocation(false);
                 },
                 (error) => {
@@ -34,167 +33,139 @@ export default function Home() {
     };
 
     return (
-        <div className="relative w-full h-screen overflow-hidden bg-black font-sans text-white">
-            {/* Background Image Placeholder */}
-            {/* Replace 'url(...)' with actual image path or Next.js Image component */}
+        <div className="relative w-full h-screen overflow-hidden bg-[#1E1E20] font-sans text-white">
+            {/* Background Texture */}
             <div
                 className="absolute inset-0 bg-cover bg-center z-0"
                 style={{
-                    backgroundImage: 'url(/path/to/WhatsApp_Image_2026-01-18.jpg)', // Update this path
-                    opacity: 0.6
+                    backgroundImage: 'url(/home-bg.jpg)',
                 }}
             />
-            {/* Fallback dark overlay if image fails or to improve text contrast */}
-            <div className="absolute inset-0 bg-black/40 z-0" />
-
+            {/* Dark Overlay to ensure text readability matching screenshot */}
+            <div className="absolute inset-0 bg-black/50 z-0" />
 
             {/* Top Navigation */}
             <div className="absolute top-8 right-6 z-20 flex gap-4">
-                {/* Location Button */}
                 <button
                     onClick={handleLocationClick}
-                    className="flex items-center justify-center px-4 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-sm hover:bg-white/10 transition-all font-semibold text-sm text-white/60 tracking-wide"
+                    className="flex items-center justify-center px-6 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-md hover:bg-white/10 transition-all font-semibold text-sm text-white/80 tracking-wide"
                 >
                     {isLoadingLocation ? 'Locating...' : locationText}
                 </button>
-
-                {/* Login Button */}
                 <button
                     onClick={() => router.push('/login')}
-                    className="flex items-center justify-center px-4 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-sm hover:bg-white/10 transition-all font-semibold text-sm text-white/60 tracking-wide"
+                    className="flex items-center justify-center px-6 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-md hover:bg-white/10 transition-all font-semibold text-sm text-white/80 tracking-wide"
                 >
                     Login
                 </button>
             </div>
 
-            {/* Main Content Card - "Overlay+Border+Shadow+OverlayBlur" */}
-            <div className="absolute top-[290px] left-4 right-4 md:left-[34px] md:right-[19px] md:w-[393px] md:mx-auto h-auto min-h-[380px] bg-[#1E1E20]/40 border border-white/10 rounded-[40px] backdrop-blur-[20px] shadow-[inset_0px_25px_50px_-12px_rgba(0,0,0,0.7)] flex flex-col p-7 z-10 box-border gap-7">
+            {/* Hero Graphic - Centered at top */}
+            <div className="absolute top-[12%] left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex flex-col items-center">
+                <img
+                    src="/hero-graphic.png"
+                    alt="DIFM Hero"
+                    className="w-full h-full object-contain drop-shadow-2xl"
+                />
+            </div>
 
-                {/* Icons/Graphic Placeholder (Untitled design (3) 1) */}
-                {/* Assuming this is some hero graphic or mechanic illustration */}
-                <div className="absolute -top-[200px] left-1/2 -translate-x-1/2 w-[191px] h-[191px] bg-contain bg-no-repeat bg-center opacity-90"
-                    style={{ backgroundImage: 'url(/path/to/Untitled_design_3.png)' }} // Update path
-                >
-                    {/* Placeholder content if image missing */}
-                    <div className="w-full h-full flex items-center justify-center text-xs text-center text-white/20 border border-white/10 rounded-full">
-                        Hero Graphic
-                    </div>
-                </div>
+            {/* Fixed Upfront Price Tagline - Below graphic */}
+            <div className="absolute top-[35%] w-full text-center z-10">
+                <span className="text-white/60 text-sm font-medium tracking-wide">Fixed Upfront Price. No Calling Around</span>
+            </div>
 
+            {/* Bottom Card - The main interaction area */}
+            <div className="absolute bottom-[-20px] left-0 right-0 h-[62%] bg-[#121212] rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t border-white/5 p-6 flex flex-col items-center z-20">
 
-                {/* Text: Fixed Upfront Price. No Calling Around */}
-                <div className="absolute -top-[20px] left-1/2 -translate-x-1/2 w-max text-center">
-                    <span className="text-white/40 text-sm font-medium">Fixed Upfront Price. No Calling Around</span>
-                </div>
-
-
-                {/* Heading Section */}
-                <div className="flex flex-col gap-2 mt-4 text-center">
-                    <h2 className="text-[28px] font-bold leading-8 tracking-tight text-white">
+                {/* Heading */}
+                <div className="text-center mt-6 mb-6">
+                    <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-2">
                         Book trusted local pros.<br />
                         We handle everything
-                    </h2>
-                    <p className="text-[11px] text-white/40 font-medium">
+                    </h1>
+                    <p className="text-white/40 text-xs md:text-sm">
                         Fix a leaking tap, paint a bedroom, clean a 1 bed flat...
                     </p>
                 </div>
 
-                {/* Search Bar / Action Input */}
-                <div className="relative w-full bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between h-[66px]">
+                {/* Search Bar */}
+                <div className="w-full max-w-md bg-[#1E1E20] border border-white/5 rounded-2xl h-[56px] flex items-center px-4 mb-8">
+                    <Search className="w-5 h-5 text-gray-400 mr-3" />
+                    <input
+                        type="text"
+                        placeholder="What needs doing?"
+                        className="bg-transparent text-white placeholder:text-gray-500 text-base flex-1 outline-none"
+                    />
+                    <div className="flex items-center gap-3 pl-3 border-l border-white/10 ml-2">
+                        <Mic className="w-5 h-5 text-gray-400" />
+                        <Camera className="w-5 h-5 text-gray-400" />
+                    </div>
+                </div>
+
+                {/* Checklist items */}
+                <div className="w-full max-w-md space-y-4 mb-8 pl-2">
                     <div className="flex items-center gap-3">
-                        {/* Search Icon */}
-                        <Search className="w-6 h-6 text-white/40" />
-                        <span className="text-white/60 font-medium text-base">What needs doing?</span>
+                        <div className="bg-blue-600/20 p-1 rounded-full"><CheckCircle className="w-4 h-4 text-blue-500" /></div>
+                        <span className="text-white font-semibold text-sm">Vetted Local Pros</span>
                     </div>
-                    <div className="flex items-center gap-3 border-l border-white/10 pl-3">
-                        <Mic className="w-5 h-5 text-white/40" />
-                        <Camera className="w-5 h-5 text-white/40" />
-                    </div>
-                </div>
-
-                {/* Features List */}
-                <div className="flex flex-col gap-4 pl-2">
-                    {/* Vetted Local Pros */}
-                    <div className="flex items-center gap-4">
-                        <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-[18px] h-[18px] text-blue-600 fill-blue-600/20" />
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-600/20 p-1 rounded-full"><CheckCircle className="w-4 h-4 text-blue-500" /></div>
+                        <div className="flex flex-col">
+                            <span className="text-white font-semibold text-sm leading-none">Fixed Upfront Pricing</span>
+                            <span className="text-white/30 text-[10px] mt-0.5">No Quotes</span>
                         </div>
-                        <span className="text-white font-semibold text-[15px]">Vetted Local Pros</span>
                     </div>
-
-                    {/* Fixed Upfront Pricing */}
-                    <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-4">
-                            <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
-                                <CheckCircle className="w-[18px] h-[18px] text-blue-600 fill-blue-600/20" />
-                            </div>
-                            <span className="text-white font-semibold text-[15px]">Fixed Upfront Pricing</span>
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-600/20 p-1 rounded-full">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500 w-4 h-4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                         </div>
-                        <span className="pl-[44px] text-xs text-white/40">No Quotes</span>
+                        <span className="text-white font-semibold text-sm">We handle no-shows, issues and disputes</span>
                     </div>
+                </div>
 
-                    {/* We handle no-shows */}
-                    <div className="flex items-center gap-4">
-                        <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
-                            {/* Shield Icon styling */}
-                            <div className="relative w-[18px] h-[18px]">
-                                <svg width="18" height="22" viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M9 20.3636C9 20.3636 15.75 16.9545 15.75 10.1364V4.45455L9 1.04545L2.25 4.45455V10.1364C2.25 16.9545 9 20.3636 9 20.3636Z" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                            </div>
-                        </div>
-                        <span className="text-white font-semibold text-xs">We handle no-shows, issues and disputes</span>
+                {/* Example Price Card - Hovering above Address */}
+                <div className="w-full max-w-[340px] bg-white/90 rounded-[24px] p-4 flex items-center justify-between mb-0 overflow-hidden relative z-30 shadow-lg">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-black/70">Upfront Price</span>
+                        <span className="text-[11px] font-semibold text-black/60">Plumbing - Quick Fix (&lt; 45 min)</span>
+                        <span className="text-[10px] text-black/40 mt-1">Price locked when you book</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <span className="text-blue-600 font-bold text-sm">£85.00</span>
+                        <span className="text-blue-500 text-[9px] font-bold cursor-pointer">Change &gt;</span>
+                    </div>
+                </div>
+
+                {/* Enter Address Bar (Visual overlap with Price Card in design, implementing as stacked for now to be safe) */}
+                <div className="w-full max-w-[340px] bg-white/80 h-[40px] rounded-b-[24px] -mt-5 pt-6 pb-2 px-4 flex items-center justify-center backdrop-blur-sm z-20 mb-8">
+                    <span className="text-black font-bold text-sm">Enter address...</span>
+                </div>
+
+                {/* Book Now Button */}
+                <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 z-40">
+                    <Button className="w-[160px] h-[52px] bg-[#007AFF] hover:bg-[#006ee6] rounded-full shadow-[0px_4px_20px_rgba(0,122,255,0.5)] flex items-center justify-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-white" />
+                        <span className="text-base font-bold text-white">Book Now</span>
+                    </Button>
+                </div>
+
+                {/* Footer visual text */}
+                <div className="absolute bottom-4 w-full text-center space-y-2">
+                    <p className="text-white/30 textxs">Don't Stress. Rest Assured. We'll do it for you.</p>
+                    <div className="flex justify-center gap-3 text-[10px] text-white/30">
+                        <span>About Us</span>
+                        <span>How It Works</span>
+                        <span>FAQs</span>
+                        <span>Trust & Safety</span>
                     </div>
                 </div>
             </div>
 
-            {/* Example Price / Booking Flow (Bottom Card Layer) */}
-            <div className="absolute top-[535px] left-4 right-4 md:left-[58px] md:w-[291px] h-[103px] bg-[#D9D9D9]/60 rounded-[22px] backdrop-blur-md p-4 text-black z-10 flex flex-col justify-between hidden md:flex">
-                {/* This section matches "Rectangle 1" and its content from Figma, seemingly an active booking placeholder or promo */}
-                <div className="flex justify-between items-start">
-                    <div>
-                        <div className="text-[10px] font-semibold opacity-60">Plumbing - Quick Fix (&lt;45 min)</div>
-                        <div className="text-[12px] font-bold mt-0.5">Enter address...</div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-[12px] font-bold">Upfront Price</div>
-                        <div className="text-[12px] font-bold text-blue-600">£85.00</div>
-                        <div className="text-[8px] font-bold text-blue-600">Change &gt;</div>
-                    </div>
-                </div>
-                <div className="text-[10px] opacity-60 font-semibold border-t border-black/10 pt-1 mt-1">
-                    Price locked when you book
-                </div>
-            </div>
-
-            {/* Book Now Button Floating */}
-            <div className="absolute top-[697px] left-1/2 -translate-x-1/2 z-20">
-                <Button className="w-[146px] h-[56px] bg-[#007AFF] hover:bg-[#006ee6] rounded-full shadow-[0px_8px_25px_rgba(0,122,255,0.4)] flex items-center justify-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                    <span className="text-[15px] font-bold text-white">Book Now</span>
-                </Button>
-            </div>
-
-            {/* Footer Text */}
-            <div className="absolute bottom-16 w-full text-center z-10 space-y-4 px-4">
-                <p className="text-sm font-medium text-white/40">Don't Stress. Rest Assured. We'll do it for you.</p>
-                <div className="flex justify-center flex-wrap gap-4 text-sm font-medium text-white/40">
-                    <span>About Us</span>
-                    <span>How It Works</span>
-                    <span>FAQs</span>
-                    <span>Trust & Safety</span>
-                </div>
-            </div>
-
-            {/* CSS to ensure fonts and utilities map correctly if not standard Tailwind */}
+            {/* Global Styles */}
             <style jsx global>{`
-                /* Add Manrope font if needed, or use sans-serif default */
-                @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
-                body {
-                    font-family: 'Manrope', sans-serif;
-                }
+                @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+                body { font-family: 'Manrope', sans-serif; }
             `}</style>
         </div>
     );
 }
-
