@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { X, ChevronLeft, Map, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Map, CheckCircle, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -17,11 +17,52 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
     const [label, setLabel] = useState('Home');
     const [customLabel, setCustomLabel] = useState('');
 
+    // Autocomplete State
+    const [predictions, setPredictions] = useState<any[]>([]);
+    const [showPredictions, setShowPredictions] = useState(false);
+    const autocompleteService = useRef<any>(null);
+
+    // Initialize Service
+    useEffect(() => {
+        if (isOpen && window.google && !autocompleteService.current) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setAddress(value);
+
+        if (!value.trim() || !autocompleteService.current) {
+            setPredictions([]);
+            setShowPredictions(false);
+            return;
+        }
+
+        autocompleteService.current.getPlacePredictions(
+            { input: value },
+            (results: any[], status: any) => {
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+                    setPredictions(results);
+                    setShowPredictions(true);
+                } else {
+                    setPredictions([]);
+                    setShowPredictions(false);
+                }
+            }
+        );
+    };
+
+    const handlePredictionSelect = (prediction: any) => {
+        setAddress(prediction.description);
+        setPredictions([]);
+        setShowPredictions(false);
+    };
 
     const handleSave = () => {
         if (!address.trim()) return;
-        // Combine details for now, or pass structured object
         const fullAddress = `${address}${apt ? `, ${apt}` : ''}`;
         onSave(fullAddress);
         onClose();
@@ -29,10 +70,10 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md bg-[#1E1E20] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-full max-w-md bg-[#1E1E20] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
 
                 {/* Header */}
-                <div className="p-6 pb-2">
+                <div className="p-6 pb-2 shrink-0">
                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors mb-6">
                         <ChevronLeft className="w-6 h-6 text-white" />
                     </button>
@@ -42,21 +83,37 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
                     </div>
                 </div>
 
-                {/* Form Content */}
-                <div className="p-6 space-y-6">
+                {/* Scrollable Content */}
+                <div className="p-6 space-y-6 overflow-y-auto">
 
                     {/* Search Address */}
-                    <div className="space-y-3">
+                    <div className="space-y-3 relative">
                         <label className="text-xs font-bold text-white/40 tracking-wider">SEARCH ADDRESS</label>
                         <div className="relative">
                             <Input
                                 value={address}
-                                onChange={(e) => setAddress(e.target.value)}
+                                onChange={handleInputChange}
                                 placeholder="Street name, area or landmark..."
                                 className="h-[56px] pl-5 pr-12 bg-black/20 border-white/5 rounded-2xl text-white placeholder:text-white/20 focus-visible:ring-blue-500/50"
                             />
                             <Map className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
                         </div>
+
+                        {/* Predictions Dropdown */}
+                        {showPredictions && predictions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-[#1E1E20] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-[200px] overflow-y-auto">
+                                {predictions.map((prediction) => (
+                                    <div
+                                        key={prediction.place_id}
+                                        onClick={() => handlePredictionSelect(prediction)}
+                                        className="p-4 hover:bg-white/5 cursor-pointer flex items-center gap-3 transition-colors border-b border-white/5 last:border-0"
+                                    >
+                                        <MapPin className="w-4 h-4 text-white/40 shrink-0" />
+                                        <span className="text-sm text-white/80 line-clamp-1">{prediction.description}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Additional Details */}
@@ -99,7 +156,7 @@ export function AddressModal({ isOpen, onClose, onSave }: AddressModalProps) {
                 </div>
 
                 {/* Footer Actions */}
-                <div className="p-6 pt-2 flex gap-4">
+                <div className="p-6 pt-2 flex gap-4 shrink-0 mt-auto">
                     <Button
                         onClick={onClose}
                         variant="ghost"
