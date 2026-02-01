@@ -1,206 +1,200 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import useSWR from 'swr';
-import { Search, MapPin, CheckCircle, Mic, Camera, ArrowRight, X } from 'lucide-react';
+import { MapPin, ArrowRight, CheckCircle, Search, Mic, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-export default function LandingPage() {
+export default function Home() {
     const router = useRouter();
-    const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [location, setLocation] = useState('');
+    const [locationText, setLocationText] = useState('Location');
+    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
-    // Debounce search
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
-        return () => clearTimeout(timer);
-    }, [searchTerm]);
-
-    // Fetch price preview
-    const { data: pricePreview, isLoading: priceLoading } = useSWR(
-        debouncedSearch.length > 2 ? `/api/pricing/preview?description=${encodeURIComponent(debouncedSearch)}` : null,
-        fetcher
-    );
-
-    const handleBookNow = () => {
-        const params = new URLSearchParams();
-        if (debouncedSearch) params.set('desc', debouncedSearch);
-        if (location) params.set('loc', location);
-        router.push(`/login?${params.toString()}`);
+    const handleLocationClick = () => {
+        setIsLoadingLocation(true);
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // For now, minimal implementation to show it works
+                    // In a real app, reverse geocode here
+                    setLocationText('London'); // Placeholder for success
+                    setIsLoadingLocation(false);
+                },
+                (error) => {
+                    console.error('Error getting location:', error);
+                    setLocationText('Unavailable');
+                    setIsLoadingLocation(false);
+                }
+            );
+        } else {
+            console.error('Geolocation is not supported by this browser.');
+            setIsLoadingLocation(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col font-sans selection:bg-blue-600/30">
-            {/* Nav */}
-            <header className="p-6 flex justify-between items-center max-w-7xl mx-auto w-full z-10">
-                <div className="text-2xl font-black tracking-tighter text-white">DIFM.</div>
-                <Button
-                    variant="ghost"
-                    className="text-white hover:text-blue-400 hover:bg-white/5"
+        <div className="relative w-full h-screen overflow-hidden bg-black font-sans text-white">
+            {/* Background Image Placeholder */}
+            {/* Replace 'url(...)' with actual image path or Next.js Image component */}
+            <div
+                className="absolute inset-0 bg-cover bg-center z-0"
+                style={{
+                    backgroundImage: 'url(/path/to/WhatsApp_Image_2026-01-18.jpg)', // Update this path
+                    opacity: 0.6
+                }}
+            />
+            {/* Fallback dark overlay if image fails or to improve text contrast */}
+            <div className="absolute inset-0 bg-black/40 z-0" />
+
+
+            {/* Top Navigation */}
+            <div className="absolute top-8 right-6 z-20 flex gap-4">
+                {/* Location Button */}
+                <button
+                    onClick={handleLocationClick}
+                    className="flex items-center justify-center px-4 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-sm hover:bg-white/10 transition-all font-semibold text-sm text-white/60 tracking-wide"
+                >
+                    {isLoadingLocation ? 'Locating...' : locationText}
+                </button>
+
+                {/* Login Button */}
+                <button
                     onClick={() => router.push('/login')}
+                    className="flex items-center justify-center px-4 py-2 h-[38px] bg-white/5 border border-white/10 rounded-full backdrop-blur-sm hover:bg-white/10 transition-all font-semibold text-sm text-white/60 tracking-wide"
                 >
-                    Log In
+                    Login
+                </button>
+            </div>
+
+            {/* Main Content Card - "Overlay+Border+Shadow+OverlayBlur" */}
+            <div className="absolute top-[290px] left-4 right-4 md:left-[34px] md:right-[19px] md:w-[393px] md:mx-auto h-auto min-h-[380px] bg-[#1E1E20]/40 border border-white/10 rounded-[40px] backdrop-blur-[20px] shadow-[inset_0px_25px_50px_-12px_rgba(0,0,0,0.7)] flex flex-col p-7 z-10 box-border gap-7">
+
+                {/* Icons/Graphic Placeholder (Untitled design (3) 1) */}
+                {/* Assuming this is some hero graphic or mechanic illustration */}
+                <div className="absolute -top-[200px] left-1/2 -translate-x-1/2 w-[191px] h-[191px] bg-contain bg-no-repeat bg-center opacity-90"
+                    style={{ backgroundImage: 'url(/path/to/Untitled_design_3.png)' }} // Update path
+                >
+                    {/* Placeholder content if image missing */}
+                    <div className="w-full h-full flex items-center justify-center text-xs text-center text-white/20 border border-white/10 rounded-full">
+                        Hero Graphic
+                    </div>
+                </div>
+
+
+                {/* Text: Fixed Upfront Price. No Calling Around */}
+                <div className="absolute -top-[20px] left-1/2 -translate-x-1/2 w-max text-center">
+                    <span className="text-white/40 text-sm font-medium">Fixed Upfront Price. No Calling Around</span>
+                </div>
+
+
+                {/* Heading Section */}
+                <div className="flex flex-col gap-2 mt-4 text-center">
+                    <h2 className="text-[28px] font-bold leading-8 tracking-tight text-white">
+                        Book trusted local pros.<br />
+                        We handle everything
+                    </h2>
+                    <p className="text-[11px] text-white/40 font-medium">
+                        Fix a leaking tap, paint a bedroom, clean a 1 bed flat...
+                    </p>
+                </div>
+
+                {/* Search Bar / Action Input */}
+                <div className="relative w-full bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between h-[66px]">
+                    <div className="flex items-center gap-3">
+                        {/* Search Icon */}
+                        <Search className="w-6 h-6 text-white/40" />
+                        <span className="text-white/60 font-medium text-base">What needs doing?</span>
+                    </div>
+                    <div className="flex items-center gap-3 border-l border-white/10 pl-3">
+                        <Mic className="w-5 h-5 text-white/40" />
+                        <Camera className="w-5 h-5 text-white/40" />
+                    </div>
+                </div>
+
+                {/* Features List */}
+                <div className="flex flex-col gap-4 pl-2">
+                    {/* Vetted Local Pros */}
+                    <div className="flex items-center gap-4">
+                        <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-[18px] h-[18px] text-blue-600 fill-blue-600/20" />
+                        </div>
+                        <span className="text-white font-semibold text-[15px]">Vetted Local Pros</span>
+                    </div>
+
+                    {/* Fixed Upfront Pricing */}
+                    <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-4">
+                            <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
+                                <CheckCircle className="w-[18px] h-[18px] text-blue-600 fill-blue-600/20" />
+                            </div>
+                            <span className="text-white font-semibold text-[15px]">Fixed Upfront Pricing</span>
+                        </div>
+                        <span className="pl-[44px] text-xs text-white/40">No Quotes</span>
+                    </div>
+
+                    {/* We handle no-shows */}
+                    <div className="flex items-center gap-4">
+                        <div className="w-7 h-7 bg-blue-500/10 rounded-full flex items-center justify-center">
+                            {/* Shield Icon styling */}
+                            <div className="relative w-[18px] h-[18px]">
+                                <svg width="18" height="22" viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 20.3636C9 20.3636 15.75 16.9545 15.75 10.1364V4.45455L9 1.04545L2.25 4.45455V10.1364C2.25 16.9545 9 20.3636 9 20.3636Z" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span className="text-white font-semibold text-xs">We handle no-shows, issues and disputes</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Example Price / Booking Flow (Bottom Card Layer) */}
+            <div className="absolute top-[535px] left-4 right-4 md:left-[58px] md:w-[291px] h-[103px] bg-[#D9D9D9]/60 rounded-[22px] backdrop-blur-md p-4 text-black z-10 flex flex-col justify-between hidden md:flex">
+                {/* This section matches "Rectangle 1" and its content from Figma, seemingly an active booking placeholder or promo */}
+                <div className="flex justify-between items-start">
+                    <div>
+                        <div className="text-[10px] font-semibold opacity-60">Plumbing - Quick Fix (&lt;45 min)</div>
+                        <div className="text-[12px] font-bold mt-0.5">Enter address...</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[12px] font-bold">Upfront Price</div>
+                        <div className="text-[12px] font-bold text-blue-600">£85.00</div>
+                        <div className="text-[8px] font-bold text-blue-600">Change &gt;</div>
+                    </div>
+                </div>
+                <div className="text-[10px] opacity-60 font-semibold border-t border-black/10 pt-1 mt-1">
+                    Price locked when you book
+                </div>
+            </div>
+
+            {/* Book Now Button Floating */}
+            <div className="absolute top-[697px] left-1/2 -translate-x-1/2 z-20">
+                <Button className="w-[146px] h-[56px] bg-[#007AFF] hover:bg-[#006ee6] rounded-full shadow-[0px_8px_25px_rgba(0,122,255,0.4)] flex items-center justify-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                    <span className="text-[15px] font-bold text-white">Book Now</span>
                 </Button>
-            </header>
+            </div>
 
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col items-center justify-center p-4 relative z-10 max-w-xl mx-auto w-full -mt-20">
-
-                {/* Headlines */}
-                <div className="text-center space-y-4 mb-8">
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-tight">
-                        Book trusted Local Pros.<br />
-                        <span className="text-blue-500">We Handle everything.</span>
-                    </h1>
-                    <p className="text-gray-400 text-lg">
-                        Instant Fixed Price - No Calling Around - We'll do it for you
-                    </p>
+            {/* Footer Text */}
+            <div className="absolute bottom-16 w-full text-center z-10 space-y-4 px-4">
+                <p className="text-sm font-medium text-white/40">Don't Stress. Rest Assured. We'll do it for you.</p>
+                <div className="flex justify-center flex-wrap gap-4 text-sm font-medium text-white/40">
+                    <span>About Us</span>
+                    <span>How It Works</span>
+                    <span>FAQs</span>
+                    <span>Trust & Safety</span>
                 </div>
+            </div>
 
-                {/* Main Interaction Card */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="w-full bg-[#121417] p-1 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden"
-                >
-                    <div className="bg-gradient-to-b from-white/5 to-transparent absolute inset-0 pointer-events-none" />
-
-                    <div className="p-6 space-y-6 relative">
-                        {/* Search Input */}
-                        <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-500" />
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="What needs doing?"
-                                className="w-full bg-transparent text-xl placeholder:text-gray-500 text-white font-medium pl-14 pr-20 py-4 outline-none border-b border-white/10 focus:border-blue-500 transition-colors"
-                            />
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-3 text-gray-500">
-                                <Mic className="w-5 h-5 cursor-pointer hover:text-white transition-colors" />
-                                <Camera className="w-5 h-5 cursor-pointer hover:text-white transition-colors" />
-                            </div>
-                        </div>
-
-                        {/* Example Text */}
-                        {!searchTerm && (
-                            <p className="text-sm text-gray-600 pl-4">
-                                Fix leaking tap, paint bedroom, clean 1 bed flat...
-                            </p>
-                        )}
-
-                        {/* Trust Checklist */}
-                        <div className="space-y-3 pl-2">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-blue-600 rounded-full p-0.5">
-                                    <CheckCircle className="w-4 h-4 text-white fill-blue-600" />
-                                </div>
-                                <span className="text-gray-300 font-medium">Vetted local pros</span>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="bg-blue-600 rounded-full p-0.5 mt-0.5">
-                                    <CheckCircle className="w-4 h-4 text-white fill-blue-600" />
-                                </div>
-                                <div>
-                                    <span className="text-gray-300 font-medium">Fixed upfront pricing</span>
-                                    <p className="text-xs text-gray-500 ml-1">• No quotes</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="bg-blue-600 rounded-full p-0.5">
-                                    <CheckCircle className="w-4 h-4 text-white fill-blue-600" />
-                                </div>
-                                <span className="text-gray-300 font-medium">We cover no-shows, issues and disputes</span>
-                            </div>
-                        </div>
-
-                        {/* Price Preview Card */}
-                        <AnimatePresence>
-                            {(pricePreview || searchTerm) && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="bg-gray-200 rounded-2xl p-4 text-gray-900 mt-2">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="font-semibold text-lg">Price estimate</span>
-                                            {priceLoading ? (
-                                                <span className="text-blue-600 font-bold animate-pulse">Computing...</span>
-                                            ) : (
-                                                <span className="text-blue-900 font-bold text-2xl">
-                                                    £{pricePreview?.totalPrice?.toFixed(2) || '0.00'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-between items-end">
-                                            <div className="text-sm text-gray-600">
-                                                <p>{pricePreview?.items?.[0]?.itemType || 'General Service'}</p>
-                                                <p className="text-xs mt-1 opacity-75">Price locked when you book</p>
-                                            </div>
-                                            <button className="text-blue-700 font-semibold text-sm hover:underline flex items-center gap-1">
-                                                Change <ArrowRight className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* Location Input */}
-                        <div className="bg-white/5 rounded-xl flex items-center p-3 border border-white/5 focus-within:border-blue-500/50 transition-colors">
-                            <MapPin className="w-5 h-5 text-gray-400 mr-3" />
-                            <input
-                                type="text"
-                                value={location}
-                                onChange={(e) => setLocation(e.target.value)}
-                                placeholder="Enter address..."
-                                className="bg-transparent w-full text-white placeholder:text-gray-500 outline-none"
-                            />
-                        </div>
-                    </div>
-                </motion.div>
-
-                {/* CTA Button */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="w-full mt-8"
-                >
-                    <Button
-                        onClick={handleBookNow}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-7 text-xl rounded-2xl shadow-[0_0_40px_-5px_rgba(37,99,235,0.6)] transition-all hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        Book now
-                    </Button>
-                </motion.div>
-
-                {/* Footer Links */}
-                <div className="mt-16 text-center space-y-6">
-                    <p className="text-gray-500 text-sm font-medium tracking-wide">
-                        Don't stress. Rest Assured. We'll do it for YOU!
-                    </p>
-
-                    <div className="flex justify-center gap-6 text-sm text-gray-400">
-                        <a href="#" className="hover:text-blue-400 transition-colors">About us</a>
-                        <span className="text-gray-700">•</span>
-                        <a href="#" className="hover:text-blue-400 transition-colors">How it works</a>
-                        <span className="text-gray-700">•</span>
-                        <a href="#" className="hover:text-blue-400 transition-colors">FAQs</a>
-                        <span className="text-gray-700">•</span>
-                        <a href="#" className="hover:text-blue-400 transition-colors">Trust & Safety</a>
-                    </div>
-                </div>
-
-            </main>
+            {/* CSS to ensure fonts and utilities map correctly if not standard Tailwind */}
+            <style jsx global>{`
+                /* Add Manrope font if needed, or use sans-serif default */
+                @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
+                body {
+                    font-family: 'Manrope', sans-serif;
+                }
+            `}</style>
         </div>
     );
 }
+
