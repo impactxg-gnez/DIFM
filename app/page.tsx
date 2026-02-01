@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
+import { AddressModal } from '@/components/AddressModal';
 
 export default function Home() {
     const router = useRouter();
@@ -15,6 +16,10 @@ export default function Home() {
     const [debouncedDesc, setDebouncedDesc] = useState('');
     const [pricePreview, setPricePreview] = useState<any>(null);
     const [isPricingLoading, setIsPricingLoading] = useState(false);
+
+    // Modal State
+    const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+    const [selectedAddress, setSelectedAddress] = useState('');
 
     // Debounce description input
     useEffect(() => {
@@ -73,8 +78,11 @@ export default function Home() {
     };
 
     const handleAddressClick = () => {
-        // TODO: Open Address Entry Modal
-        console.log('Open Address Modal');
+        setIsAddressModalOpen(true);
+    };
+
+    const handleAddressSave = (address: string) => {
+        setSelectedAddress(address);
     };
 
     const handleBookNow = () => {
@@ -206,9 +214,11 @@ export default function Home() {
                             {/* Enter Address Button (Inside the card bottom) */}
                             <div
                                 onClick={handleAddressClick}
-                                className="w-full h-[48px] bg-black/10 rounded-[16px] flex items-center justify-center cursor-pointer hover:bg-black/15 transition-colors"
+                                className={`w-full h-[48px] rounded-[16px] flex items-center justify-center cursor-pointer transition-colors ${selectedAddress ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black/10 hover:bg-black/15'}`}
                             >
-                                <span className="text-black font-bold text-sm">Enter address...</span>
+                                <span className={`font-bold text-sm ${selectedAddress ? 'text-white' : 'text-black'}`}>
+                                    {selectedAddress || 'Enter address...'}
+                                </span>
                             </div>
                         </div>
                     )}
@@ -238,10 +248,19 @@ export default function Home() {
 
             </div>
 
+            {/* Address Modal */}
+            <AddressModal
+                isOpen={isAddressModalOpen}
+                onClose={() => setIsAddressModalOpen(false)}
+                onSave={handleAddressSave}
+            />
+
             {/* Global Styles */}
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
                 body { font-family: 'Manrope', sans-serif; }
+                .scrollbar-none::-webkit-scrollbar { display: none; }
+                .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
         </div>
     );
