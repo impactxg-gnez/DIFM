@@ -64,24 +64,57 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         fetchPrice();
     }, [debouncedDesc]);
 
-    const handleLocationClick = () => {
+    // Sync with initialLocation prop
+    useEffect(() => {
+        if (initialLocation && initialLocation !== 'Location') {
+            setLocationText(initialLocation);
+        }
+    }, [initialLocation]);
+
+    const fetchLocation = () => {
         setIsLoadingLocation(true);
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    // Ideally reverse geocode here, but for now placeholder
-                    setLocationText('Current Location');
-                    setIsLoadingLocation(false);
+                async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            // Take first part (e.g. "Camden") or first 2 parts
+                            const address = data.display_name.split(',')[0];
+                            setLocationText(address);
+                        } else {
+                            setLocationText('Current Location');
+                        }
+                    } catch (e) {
+                        console.error('Reverse geocode failed', e);
+                        setLocationText('Current Location');
+                    } finally {
+                        setIsLoadingLocation(false);
+                    }
                 },
                 (error) => {
                     console.error('Error getting location:', error);
-                    setLocationText('Unavailable');
+                    // If error, keep as is or specific error text? User just wants it to work.
+                    // If denied, we might just leave it.
                     setIsLoadingLocation(false);
                 }
             );
         } else {
             setIsLoadingLocation(false);
         }
+    };
+
+    // Auto-fetch on mount if no location provided
+    useEffect(() => {
+        if (!initialLocation || initialLocation === 'Location') {
+            fetchLocation();
+        }
+    }, []);
+
+    const handleLocationClick = () => {
+        fetchLocation();
     };
 
     const handleAddressClick = () => {
@@ -237,8 +270,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         onClick={handleBookClick}
                         disabled={!description.trim()}
                         className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${!description.trim()
-                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-                                : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
+                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+                            : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
                             }`}
                     >
                         <CheckCircle className="w-5 h-5" />
