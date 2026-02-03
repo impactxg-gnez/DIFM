@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { ServiceCategory } from '@/lib/constants';
 import { calculateJobPrice } from '@/lib/pricing/calculator';
+import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { computeStuck } from '@/lib/jobStateMachine';
 
 export async function POST(request: Request) {
@@ -23,13 +24,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        // Phase 2: Intelligent pricing with capability detection
-        const pricing = await calculateJobPrice('HANDYMAN' as ServiceCategory, description, true);
-        const category: ServiceCategory = pricing.primaryCategory || 'HANDYMAN';
+        // V1 Pricing Engine
+        const pricing = await calculateV1Pricing(description);
+        const category = pricing.primaryCategory;
         const now = new Date();
 
         // If simulation, calculate provider start position (approx 10km away)
-        // 1 deg lat is approx 111km. 0.09 deg is approx 10km.
         let spawnLat = latitude ? parseFloat(latitude) + 0.08 : 51.5874;
         let spawnLng = longitude ? parseFloat(longitude) + 0.08 : -0.0478;
 
@@ -42,16 +42,17 @@ export async function POST(request: Request) {
                     longitude: longitude ? parseFloat(longitude) : null,
                     category,
                     fixedPrice: pricing.totalPrice,
-                    isASAP: true, // Milestone 1: Always ASAP
+                    isASAP: true,
                     scheduledAt: null,
                     customerId,
                     status: 'CREATED',
                     statusUpdatedAt: now,
-                    priceLockedAt: now, // Price locks on booking
+                    priceLockedAt: null, // Price locks AFTER Scope Lock in V1
                     dispatchRadius: 5,
                     isSimulation: isSimulation ?? false,
-                    needsReview: pricing.needsReview,
+                    needsReview: pricing.confidence < 0.7,
                     isParsed: true,
+                    requiredCapability: pricing.visits[0]?.capabilityTags.join(','), // Simple join for now
                 },
             });
 
@@ -60,87 +61,39 @@ export async function POST(request: Request) {
                     jobId: createdJob.id,
                     fromStatus: 'SYSTEM',
                     toStatus: 'CREATED',
-                    reason: 'Job created',
+                    reason: 'Job created (Draft)',
                     changedById: customerId,
                     changedByRole: 'CUSTOMER',
                 },
             });
 
-            // Determine required capability from items
-            // P1/E1 jobs can be handled by handymen with capability OR specialists
-            let requiredCapability: string | null = null;
-            for (const item of pricing.items) {
-                // If item is P1 and routed to HANDYMAN, it requires plumbing capability
-                if (item.itemType === 'P1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
-                    requiredCapability = 'HANDYMAN_PLUMBING';
-                    break;
-                }
-                // If item is E1 and routed to HANDYMAN, it requires electrical capability
-                if (item.itemType === 'E1' && item.routeCategory === 'HANDYMAN' && item.requiresCapability) {
-                    requiredCapability = 'HANDYMAN_ELECTRICAL';
-                    break;
-                }
-                // If category is PLUMBER/ELECTRICIAN with P1/E1, handymen with capability can also see it
-                if (category === 'PLUMBER' && item.itemType === 'P1') {
-                    requiredCapability = 'HANDYMAN_PLUMBING';
-                    break;
-                }
-                if (category === 'ELECTRICIAN' && item.itemType === 'E1') {
-                    requiredCapability = 'HANDYMAN_ELECTRICAL';
-                    break;
-                }
-            }
-
-            // Update job with required capability and parts tracking
-            await tx.job.update({
-                where: { id: createdJob.id },
-                data: {
-                    requiredCapability,
-                    partsExpectedAtBooking: partsExpectedAtBooking || null
-                }
-            });
-
-            // Persist job items if any
-            if (pricing.items.length > 0) {
-                await tx.jobItem.createMany({
-                    data: pricing.items.map((item) => ({
+            // V1: Create Visit records (Initially DRAFT)
+            for (const v of pricing.visits) {
+                await (tx as any).visit.create({
+                    data: {
                         jobId: createdJob.id,
-                        itemType: item.itemType,
-                        quantity: item.quantity,
-                        unitPrice: item.unitPrice,
-                        totalPrice: item.totalPrice,
-                        description: item.description,
-                    })),
+                        visit_tier: v.tier,
+                        primaryItemId: v.primaryItemId,
+                        addonItemIds: v.addonItemIds,
+                        total_minutes: v.totalMinutes,
+                        price: v.price,
+                        capability_tags: v.capabilityTags,
+                        status: 'DRAFT'
+                    }
                 });
             }
 
-            // Auto move to DISPATCHED to allow provider acceptance
-            const dispatchedJob = await tx.job.update({
-                where: { id: createdJob.id },
-                data: { status: 'DISPATCHED', statusUpdatedAt: now },
-            });
+            // In V1, we don't auto-dispatch yet. We need Scope Lock.
 
-            await tx.jobStateChange.create({
-                data: {
-                    jobId: createdJob.id,
-                    fromStatus: 'CREATED',
-                    toStatus: 'DISPATCHED',
-                    reason: 'Auto dispatch',
-                    changedById: customerId,
-                    changedByRole: 'CUSTOMER',
-                },
-            });
-
-            return dispatchedJob;
+            return createdJob;
         });
 
-        // Fetch job with items for response
-        const jobWithItems = await prisma.job.findUnique({
+        // Fetch job with visits for response
+        const jobWithVisits = await prisma.job.findUnique({
             where: { id: job.id },
-            include: { items: true }
+            include: { visits: true } as any
         });
 
-        // Update Simulator Provider location if this is a sim
         if (isSimulation) {
             await prisma.user.updateMany({
                 where: { email: 'simulator@demo.com' },
@@ -148,7 +101,8 @@ export async function POST(request: Request) {
             });
         }
 
-        return NextResponse.json(jobWithItems);
+        return NextResponse.json(jobWithVisits);
+
 
     } catch (error) {
         console.error('Create job error', error);

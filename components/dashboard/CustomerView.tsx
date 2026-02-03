@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { ScopeLock } from '@/components/booking/ScopeLock';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,8 +40,9 @@ export function CustomerView({ user }: { user: any }) {
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
 
     const [activeTab, setActiveTab] = useState<'NEW_TASK' | 'STATUS' | 'HISTORY' | 'ACCOUNT'>('NEW_TASK');
-    const [step, setStep] = useState<'LIST' | 'CREATE' | 'WAITING'>('LIST');
+    const [step, setStep] = useState<'LIST' | 'CREATE' | 'SCOPE_LOCK' | 'WAITING'>('LIST');
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
+    const [activeJob, setActiveJob] = useState<any>(null);
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
@@ -115,9 +117,9 @@ export function CustomerView({ user }: { user: any }) {
             });
             if (res.ok) {
                 const job = await res.json();
+                setActiveJob(job);
                 setActiveJobId(job.id);
-                setStep('WAITING');
-                setActiveTab('STATUS'); // Switch to status tab
+                setStep('SCOPE_LOCK');
                 mutate();
             }
         } catch (e) {
@@ -272,7 +274,34 @@ export function CustomerView({ user }: { user: any }) {
     );
 
     const renderContent = () => {
-        // If we in active job "finding" state
+        if (step === 'SCOPE_LOCK' && activeJob) {
+            return (
+                <ScopeLock
+                    job={activeJob}
+                    onComplete={async (visitId, answers) => {
+                        try {
+                            const res = await fetch(`/api/jobs/${activeJobId}/scope-lock`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ visitId, answers })
+                            });
+                            if (res.ok) {
+                                setStep('WAITING');
+                                setActiveTab('STATUS');
+                                mutate();
+                            }
+                        } catch (e) {
+                            console.error('Scope lock submission failed', e);
+                        }
+                    }}
+                    onCancel={() => {
+                        handleCancelJob();
+                        setStep('LIST');
+                    }}
+                />
+            );
+        }
+
         if (step === 'WAITING' && activeJobId && activeTab === 'STATUS') {
             return (
                 <DispatchTimer

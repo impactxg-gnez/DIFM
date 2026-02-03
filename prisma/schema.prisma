@@ -121,6 +121,7 @@ model Job {
   customerReview CustomerReview?
   adminReview    AdminReview?
   items       JobItem[]
+  visits      Visit[]
   stateChanges JobStateChange[]
   priceOverrides PriceOverride[]
 }
@@ -240,3 +241,66 @@ model ProviderDocument {
   uploadedAt  DateTime @default(now())
   verifiedAt  DateTime? // When admin verified (optional for now)
 }
+
+// --- V1 Pricing Matrix Models ---
+
+model CatalogueItem {
+  id                      String   @id @default(uuid())
+  job_item_id             String   @unique // Human readable unique ID e.g. "tv_mount_standard"
+  display_name            String
+  item_class              String   // "STANDARD", "CLEANING", "SPECIALIST"
+  
+  required_capability_tags String[] // Postgres array
+  time_weight_minutes     Int
+  
+  allowed_addon           Boolean
+  uncertainty_prone       Boolean
+  uncertainty_handling    String   // "IGNORE", "BUFFER", "FORCE_H3"
+  risk_buffer_minutes     Int?
+  
+  notes                   String?
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model Visit {
+  id              String   @id @default(uuid())
+  
+  jobId           String
+  job             Job      @relation(fields: [jobId], references: [id])
+  
+  // Visit Details
+  visit_tier      String   // "H1", "H2", "H3"
+  status          String   @default("DRAFT") // "DRAFT", "SCHEDULED", "COMPLETED", etc.
+  
+  // Composition
+  primaryItemId   String   // References CatalogueItem.job_item_id
+  addonItemIds    String[] // References CatalogueItem.job_item_id
+  
+  // Sizing
+  total_minutes   Int
+  price           Float
+  
+  // Validated constraints
+  capability_tags String[]
+  
+  scopeSummary    ScopeSummary?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ScopeSummary {
+  id              String   @id @default(uuid())
+  
+  visitId         String   @unique
+  visit           Visit    @relation(fields: [visitId], references: [id])
+  
+  // The enforceable contract
+  snapshot        Json     // Stores: effective_minutes, tier, includes_text, excludes_text, mismatch_rule
+  answers         Json     // Stores: questionId -> answer mapping
+  
+  createdAt       DateTime @default(now())
+}
+
