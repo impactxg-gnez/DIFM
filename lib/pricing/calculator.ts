@@ -1,6 +1,7 @@
 import { ServiceCategory, PRICE_MATRIX } from '../constants';
 import { parseJobDescription } from './jobParser';
-import { getTierByCode } from './matrix';
+import { getCatalogue, getCatalogueItemSync } from './catalogue';
+import { calculateTier, calculatePrice } from './visitEngine';
 
 export interface JobItemData {
   itemType: string;
@@ -46,26 +47,32 @@ export async function calculateJobPrice(
   }
 
   try {
-    const parsed = parseJobDescription(description);
+    const catalogue = await getCatalogue();
+    const parsed = parseJobDescription(description, catalogue);
 
-    const items: JobItemData[] = parsed.items.map((item) => {
-      const tier = getTierByCode(item.itemType as any);
-      const routeCategory = (item.routeCategory as ServiceCategory) || effectiveCategory;
-      const unitPrice = tier?.customerPrice ?? PRICE_MATRIX[routeCategory];
+    const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {
+      const item = getCatalogueItemSync(id, catalogue);
+      const tier = calculateTier(item?.time_weight_minutes || 0);
+      const unitPrice = calculatePrice(tier, item?.item_class || 'STANDARD');
+
+      // Map item_class to ServiceCategory proxy
+      let routeCategory = effectiveCategory;
+      if (item?.item_class === 'CLEANING') routeCategory = 'CLEANING';
+
       return {
-        itemType: item.itemType,
+        itemType: id,
         quantity: 1,
         unitPrice,
         totalPrice: unitPrice,
-        description: item.description,
+        description: item?.display_name || id,
         routeCategory,
-        requiresCapability: item.requiresCapability,
+        requiresCapability: (item?.required_capability_tags?.length || 0) > 0
       };
     });
 
     // Enforce GENERAL_HOUR guardrail (max 2)
     const generalHourCount = items.filter((i) => i.itemType === 'GENERAL_HOUR').length;
-    const routingNotes = [...(parsed.routingNotes || [])];
+    const routingNotes: string[] = [];
     if (generalHourCount > 2) {
       routingNotes.push('GENERAL_HOUR exceeded (max 2) - escalate to half day');
     }
@@ -73,23 +80,22 @@ export async function calculateJobPrice(
     let totalPrice = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
     const needsReview =
-      parsed.needsReview ||
-      generalHourCount > 2 ||
-      parsed.confidence < 0.7;
+      parsed.confidence < 0.7 ||
+      generalHourCount > 2;
 
     return {
       totalPrice,
       items,
       needsReview,
-      usedFallback: parsed.usedFallback,
+      usedFallback: parsed.confidence === 0,
       confidence: parsed.confidence,
-      primaryCategory: parsed.primaryCategory as ServiceCategory,
+      primaryCategory: (items[0]?.routeCategory || effectiveCategory) as ServiceCategory,
       routingNotes,
-      visits: parsed.visits,
+      visits: [], // visits generated separately in V1 flow
     };
   } catch (error) {
     console.error('Pricing calculation error:', error);
-    
+
     // Fallback to fixed pricing on error
     return {
       totalPrice: PRICE_MATRIX[category],
