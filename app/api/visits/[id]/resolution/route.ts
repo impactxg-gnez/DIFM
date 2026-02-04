@@ -4,10 +4,10 @@ import { calculatePrice } from '@/lib/pricing/visitEngine';
 
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
     try {
-        const visitId = params.id;
+        const { id: visitId } = await props.params;
         const body = await request.json();
         const { action } = body; // "UPGRADE" or "REBOOK"
 

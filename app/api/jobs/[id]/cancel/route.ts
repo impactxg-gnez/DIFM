@@ -6,9 +6,9 @@ import { canTransition, JobStatus } from '@/lib/jobStateMachine';
 
 export async function POST(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    props: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
+    const { id } = await props.params;
 
     try {
         // Find current status

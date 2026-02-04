@@ -9,9 +9,9 @@ import { cookies } from 'next/headers';
  */
 export async function GET(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    props: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
+    const { id } = await props.params;
 
     try {
         const cookieStore = await cookies();
@@ -51,26 +51,26 @@ export async function GET(
 
 export async function POST(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    props: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
+    const { id } = await props.params;
 
     try {
         const cookieStore = await cookies();
         const role = cookieStore.get('userRole')?.value;
         const adminId = cookieStore.get('userId')?.value;
-        
+
         if (role !== 'ADMIN') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
         const body = await request.json();
-        const { 
-            providerStatus, 
-            providerType, 
-            categories, 
+        const {
+            providerStatus,
+            providerType,
+            categories,
             capabilities,
-            serviceArea 
+            serviceArea
         } = body;
 
         const provider = await prisma.user.findUnique({ where: { id } });

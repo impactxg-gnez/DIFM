@@ -5,10 +5,10 @@ import { getCatalogueItem } from '@/lib/pricing/catalogue';
 
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
     try {
-        const jobId = params.id;
+        const { id: jobId } = await props.params;
         const body = await request.json();
         const { visitId, answers } = body; // answers: { [questionId: string]: string }
 
