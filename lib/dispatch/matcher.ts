@@ -39,7 +39,7 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   // BUT: Skip handymen for CLEANING jobs (cleaners only)
   if (job.category !== 'CLEANING') {
     const handymen = activeProviders.filter(p => p.providerType === 'HANDYMAN');
-    
+
     for (const handyman of handymen) {
       const handymanCategories = handyman.categories?.split(',').filter(Boolean) || [];
       const handymanCapabilities = handyman.capabilities?.split(',').filter(Boolean) || [];
@@ -84,7 +84,7 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   // Step 2: If no handyman matches, escalate to specialists
   if (matches.length === 0) {
     const specialists = activeProviders.filter(p => p.providerType === 'SPECIALIST');
-    
+
     for (const specialist of specialists) {
       const specialistCategories = specialist.categories?.split(',') || [];
       const specialistCapabilities = specialist.capabilities?.split(',').filter(Boolean) || [];
@@ -130,21 +130,53 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
 }
 
 /**
- * Dispatch job to eligible providers
- * Returns list of provider IDs the job was dispatched to
+ * Step 5: Sequential Provider Offers (10s window)
+ * Moves from broadcast to one-by-one offering.
  */
-export async function dispatchJob(jobId: string): Promise<string[]> {
+export async function dispatchJob(jobId: string): Promise<string | null> {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job) return null;
+
   const matches = await findEligibleProviders(jobId);
-  
+  const jAny = job as any;
   if (matches.length === 0) {
-    // No eligible providers - job stays in DISPATCHED state
-    // Could implement escalation logic here (expand radius, etc.)
-    return [];
+    // Reset if no matches left or none found
+    if (jAny.offeredToId) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { offeredToId: null, offeredAt: null }
+      });
+    }
+    return null;
   }
 
-  // For Milestone 2: Dispatch to all eligible providers
-  // First-accept locking happens at acceptance time
-  // In a real system, you might dispatch to a smaller batch first
-  
-  return matches.map(m => m.providerId);
+  const now = new Date();
+  const OFFER_TIMEOUT_MS = 10000; // 10 seconds per spec
+
+  // 1. If currently offered and within 10s, stay
+  if (jAny.offeredToId && jAny.offeredAt) {
+    const elapsed = now.getTime() - new Date(jAny.offeredAt).getTime();
+    if (elapsed < OFFER_TIMEOUT_MS) {
+      return jAny.offeredToId;
+    }
+  }
+
+  // 2. Either no offer yet, or current offer expired. Find next.
+  let nextIndex = 0;
+  if (job.offeredToId) {
+    const currentIndex = matches.findIndex(m => m.providerId === job.offeredToId);
+    nextIndex = (currentIndex + 1) % matches.length;
+  }
+
+  const nextMatch = matches[nextIndex];
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      offeredToId: nextMatch.providerId,
+      offeredAt: now,
+    }
+  });
+
+  return nextMatch.providerId;
 }

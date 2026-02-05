@@ -29,62 +29,77 @@ export async function POST(
         let extraMinutes = 0;
         let forceH3 = false;
 
-        const primaryItem = await getCatalogueItem(visit.primaryItemId);
+        const primaryItem = await getCatalogueItem(visit.primary_job_item_id);
 
         // Check answers for uncertainty-sensitive questions
         // Spec: "IGNORE | BUFFER | FORCE_H3"
         for (const [qId, answer] of Object.entries(answers)) {
-            if (answer === 'not_sure') {
-                if (primaryItem?.uncertainty_handling === 'BUFFER') {
-                    extraMinutes += primaryItem.risk_buffer_minutes || 0;
-                } else if (primaryItem?.uncertainty_handling === 'FORCE_H3') {
-                    forceH3 = true;
+            if (answer === 'not_sure' || answer === 'No' || answer === 'No / Not sure') {
+                // Determine if this is an uncertainty trigger
+                if (primaryItem?.uncertainty_prone) {
+                    if (primaryItem?.uncertainty_handling === 'BUFFER') {
+                        extraMinutes += primaryItem.risk_buffer_minutes || 0;
+                    } else if (primaryItem?.uncertainty_handling === 'FORCE_H3') {
+                        forceH3 = true;
+                    }
                 }
             }
         }
 
-        const effectiveMinutes = visit.total_minutes + extraMinutes;
+        const effectiveMinutes = visit.base_minutes + extraMinutes;
         let finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
-        const finalPrice = calculatePrice(finalTier, visit.job.category); // Using job category as item class proxy if needed
+        const finalPrice = calculatePrice(finalTier, visit.item_class);
 
         // 2. Create ScopeSummary Contract Snapshot
-        const snapshot = {
-            effective_minutes: effectiveMinutes,
-            tier: finalTier,
-            includes_text: "This visit covers the items listed above.",
-            excludes_text: "Additional or unrelated tasks not listed. Invasive work, regulated work, or specialist repairs unless explicitly booked.",
-            parts_text: "Labour price is fixed. Parts are only supplied with your approval and charged at cost with receipt.",
-            mismatch_rule: "If the job is different on arrival, we’ll upgrade the visit or rebook. No arguments on site."
-        };
+        const includes_text = "This visit covers the items listed above.";
+        const excludes_text = "Additional or unrelated tasks not listed. Invasive work, regulated work, or specialist repairs unless explicitly booked.";
+        const parts_text = "Labour price is fixed. Parts are only supplied with your approval and charged at cost with receipt.";
+        const mismatch_rule = "If the job is different on arrival, we’ll upgrade the visit or rebook. No arguments on site.";
 
         await (prisma as any).$transaction([
             // Update Visit
             (prisma as any).visit.update({
                 where: { id: visitId },
                 data: {
-                    visit_tier: finalTier,
-                    total_minutes: effectiveMinutes,
+                    tier: finalTier,
+                    effective_minutes: effectiveMinutes,
                     price: finalPrice,
-                    status: 'SCHEDULED' // Lock scope -> move to ready
+                    status: 'SCHEDULED'
                 }
             }),
-            // Save Summary
+            // Save Summary (IMMUTABLE Source of Truth)
             (prisma as any).scopeSummary.create({
                 data: {
                     visitId,
-                    snapshot,
-                    answers
+                    primary_job_item_id: visit.primary_job_item_id,
+                    addon_job_item_ids: visit.addon_job_item_ids,
+                    visit_tier: finalTier,
+                    effective_minutes: effectiveMinutes,
+                    includes_text,
+                    excludes_text,
+                    parts_rule_text: parts_text,
+                    mismatch_rule_text: mismatch_rule,
+                    scope_lock_answers: answers
                 }
             }),
-            // Move Job to DISPATCHED if all visits are locked?
-            // For V1 simple: Move job to DISPATCHED immediately after first scope lock or book?
-            // Spec says: "After Final... Lock scope contract snapshot. After this, only Upgrade/Rebook is allowed."
+            // Move Job to ASSIGNING
             (prisma as any).job.update({
                 where: { id: jobId },
                 data: {
-                    status: 'DISPATCHED',
+                    status: 'ASSIGNING',
                     statusUpdatedAt: new Date(),
-                    priceLockedAt: new Date()
+                    priceLockedAt: new Date(),
+                    fixedPrice: finalPrice // Update job fixedPrice to match visit price in V1 (single visit for now)
+                }
+            }),
+            // Log state change
+            (prisma as any).jobStateChange.create({
+                data: {
+                    jobId,
+                    fromStatus: visit.job.status,
+                    toStatus: 'ASSIGNING',
+                    reason: 'Scope locked and confirmed',
+                    changedByRole: 'CUSTOMER'
                 }
             })
         ]);

@@ -12,21 +12,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified } = body as {
-            status: JobStatus;
-            reason?: string;
-            completionNotes?: string;
-            partsRequiredAtCompletion?: string;
-            partsNotes?: string;
-            partsPhotos?: string;
-            completionPhotos?: string;
-            disputeNotes?: string;
-            disputePhotos?: string;
-            // Milestone 5: Geolocation
-            completionLat?: number;
-            completionLng?: number;
-            completionLocationVerified?: boolean;
-        };
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd } = body as any;
 
         const cookieStore = await cookies();
         const userId = cookieStore.get('userId')?.value;
@@ -47,64 +33,58 @@ export async function POST(
             }
 
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
-                throw new Error('Not authorized for this job');
-            }
-
-            // Allow customers to dispute completed jobs
-            if (userRole === 'CUSTOMER' && status === 'DISPUTED') {
-                if (job.customerId !== userId) {
+                // Special case for ASSIGNING -> ASSIGNED (Accepting job)
+                if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') {
+                    // Check if offered to this provider
+                    if (job.offeredToId !== userId) {
+                        throw new Error('This job offer is not for you or has expired');
+                    }
+                } else {
                     throw new Error('Not authorized for this job');
                 }
-                if (job.status !== 'COMPLETED' && job.status !== 'CUSTOMER_REVIEWED') {
-                    throw new Error('Can only dispute completed jobs');
-                }
-                // Dispute is allowed, will be handled below
-            } else if (userRole === 'CUSTOMER' && status !== 'DISPUTED') {
-                throw new Error('Customers can only dispute jobs');
             }
 
-            // Require completion notes before COMPLETED status
+            // Step 5: Completion Evidence Enforcement
             if (status === 'COMPLETED' && userRole === 'PROVIDER') {
-                if (!completionNotes || !completionNotes.trim()) {
-                    throw new Error('Completion notes are required before marking job as complete');
+                if (!completionPhotos || completionPhotos.trim() === '') {
+                    throw new Error('Photo/Video evidence is required for completion');
                 }
+            }
 
-                // For cleaning jobs, parts are always N/A
-                // For other jobs, require parts confirmation
-                if (job.category === 'CLEANING') {
-                    // Cleaners: parts are always N/A, no confirmation needed
-                    // Auto-set to N/A if not provided
-                } else {
-                    // Non-cleaning jobs require parts confirmation
-                    if (!partsRequiredAtCompletion || !['YES', 'NO', 'N/A'].includes(partsRequiredAtCompletion)) {
-                        throw new Error('Parts confirmation is required (YES/NO/N/A)');
-                    }
+            // Step 5: Timer & Access Logic
+            if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
+                if (!isAccessAvailable && !job.isAccessAvailable) {
+                    throw new Error('Cannot start timer until access is confirmed available');
                 }
             }
 
             const now = new Date();
-            const cancellationReason = status.startsWith('CANCELLED') ? (reason || job.cancellationReason || 'Cancelled by admin') : job.cancellationReason;
+            const cancellationReason = status === 'CLOSED' && job.status === 'ISSUE_REPORTED' ? (reason || 'Resolved') : job.cancellationReason;
 
             const updatedJob = await tx.job.update({
                 where: { id },
                 data: {
                     status,
                     statusUpdatedAt: now,
-                    acceptedAt: status === 'ACCEPTED' ? now : job.acceptedAt,
+                    providerId: (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') ? userId : job.providerId,
                     cancellationReason,
-                    // Update completion evidence if provided
-                    ...(status === 'COMPLETED' && completionNotes ? {
-                        completionNotes,
-                        completionPhotos: completionPhotos || null,
-                        // For cleaning jobs, always set parts to N/A
-                        partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || null),
-                        partsNotes: job.category === 'CLEANING' ? null : (partsNotes || null),
-                        partsPhotos: job.category === 'CLEANING' ? null : (partsPhotos || null),
-                        // Milestone 5: Geolocation
+                    isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
+                    arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
+                    arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
+                    timerStartedAt: (status === 'IN_PROGRESS' && !job.timerStartedAt) ? now : job.timerStartedAt,
+
+                    // Update completion evidence
+                    ...(status === 'COMPLETED' ? {
+                        completionNotes: completionNotes || "Job completed",
+                        completionPhotos: completionPhotos,
+                        partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || 'NO'),
+                        partsNotes: partsNotes || null,
+                        partsPhotos: partsPhotos || null,
                         completionLat: completionLat || null,
                         completionLng: completionLng || null,
                         completionLocationVerified: completionLocationVerified || false,
                     } : {}),
+
                     // Update dispute data if customer is disputing
                     ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {
                         disputeReason: reason || 'No reason provided',
@@ -112,6 +92,7 @@ export async function POST(
                         disputePhotos: disputePhotos || null,
                         disputedAt: now,
                     } : {}),
+
                     // Update dispute resolution if admin is resolving
                     ...(status === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
                         disputeResolvedAt: now,

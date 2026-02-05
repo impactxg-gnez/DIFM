@@ -82,20 +82,39 @@ export function ProviderView({ user }: { user: any }) {
 
     const acceptJob = async (jobId: string) => {
         try {
-            const res = await fetch(`/api/jobs/${jobId}/accept`, {
+            const res = await fetch(`/api/jobs/${jobId}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ providerId: user.id })
+                body: JSON.stringify({ status: 'ASSIGNED' })
             });
             if (res.ok) {
                 mutate();
             } else {
-                alert("Failed to accept job. It might have been taken.");
+                const err = await res.json();
+                alert(`Failed to accept: ${err.error || 'Job may have expired'}`);
                 mutate();
             }
         } catch (e) {
             console.error(e);
         }
+    };
+
+    const confirmArrival = async (jobId: string) => {
+        await fetch(`/api/jobs/${jobId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'ARRIVING' })
+        });
+        mutate();
+    };
+
+    const confirmAccess = async (jobId: string) => {
+        await fetch(`/api/jobs/${jobId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isAccessAvailable: true })
+        });
+        mutate();
     };
 
     const [completionDialog, setCompletionDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
@@ -235,7 +254,9 @@ export function ProviderView({ user }: { user: any }) {
 
     if (!jobs) return <div>Loading jobs...</div>;
 
-    const availableJobs = jobs.filter((j: any) => j.status === 'DISPATCHED');
+    // V1: Available jobs are those explicitly offered to this provider
+    const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING' && j.offeredToId === user.id);
+    // V1: My jobs are those assigned to me or in progress
     const myJobs = jobs.filter((j: any) => j.providerId === user.id);
 
     return (
@@ -288,44 +309,81 @@ export function ProviderView({ user }: { user: any }) {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-900">My Schedule</h2>
                 {myJobs.map((job: any) => (
-                    <Card key={job.id} className="p-4">
+                    <Card key={job.id} className="p-4 border-l-4 border-blue-500">
                         <div className="flex justify-between items-center mb-2">
                             <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
                             <span className="text-sm font-mono font-bold text-gray-900">£{job.fixedPrice}</span>
                         </div>
                         <h3 className="font-semibold mb-1 text-gray-900">{job.description}</h3>
-                        <p className="text-sm text-gray-400 mb-4 flex items-start gap-1">
+                        <p className="text-sm text-gray-400 mb-2 flex items-start gap-1">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
                         </p>
-                        {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && job.cancellationReason && (
-                            <div className="text-sm text-red-400 mb-3">Cancel reason: {job.cancellationReason}</div>
-                        )}
 
-                        {['ACCEPTED', 'IN_PROGRESS'].includes(job.status) && job.latitude && (
-                            <div className="mb-4">
-                                <ProviderMap
-                                    providerLat={user.latitude || 51.5074} // Fallback to London 
-                                    providerLon={user.longitude || -0.1278}
-                                    jobLat={job.latitude}
-                                    jobLon={job.longitude}
-                                    showRoute={true}
-                                />
+                        {(job.status === 'ASSIGNED' || job.status === 'PREAUTHORISED') && (
+                            <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-100">
+                                <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Arrival Window</p>
+                                <p className="text-sm text-blue-900">
+                                    {job.arrivalWindowStart ? (
+                                        `${new Date(job.arrivalWindowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(job.arrivalWindowEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                    ) : 'ASAP'}
+                                </p>
                             </div>
                         )}
 
-                        <div className="flex gap-2">
-                            {job.status === 'ACCEPTED' && (
-                                <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full" variant="outline">Start Job</Button>
+                        {job.status === 'IN_PROGRESS' && job.timerStartedAt && (
+                            <div className="mb-4 p-3 bg-green-50 rounded border border-green-100 flex justify-between items-center">
+                                <div>
+                                    <p className="text-[10px] font-semibold text-green-700 uppercase">Timer Active</p>
+                                    <p className="text-lg font-black font-mono text-green-900">
+                                        {Math.floor((Date.now() - new Date(job.timerStartedAt).getTime()) / 60000)}m elapsed
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-semibold text-green-700 uppercase">Access</p>
+                                    <p className="text-xs text-green-900 font-bold">Confirmed ✅</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-2">
+                            {job.status === 'ASSIGNED' && (
+                                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">Waiting for pre-authorization...</p>
                             )}
+
+                            {job.status === 'PREAUTHORISED' && (
+                                <Button onClick={() => confirmArrival(job.id)} className="w-full bg-blue-600 hover:bg-blue-700" variant="default">Confirm Arrival</Button>
+                            )}
+
+                            {job.status === 'ARRIVING' && (
+                                <>
+                                    {!job.isAccessAvailable ? (
+                                        <Button onClick={() => confirmAccess(job.id)} className="w-full bg-indigo-600 hover:bg-indigo-700">Confirm Access to Property</Button>
+                                    ) : (
+                                        <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-green-600 hover:bg-green-700">Start Timer</Button>
+                                    )}
+                                </>
+                            )}
+
                             {job.status === 'IN_PROGRESS' && (
-                                <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="w-full bg-green-600 hover:bg-green-700">Complete Job</Button>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="bg-green-600 hover:bg-green-700">Complete Job</Button>
+                                    <Button
+                                        onClick={async () => {
+                                            if (confirm('Report a mismatch? This will stop the timer and notify the admin.')) {
+                                                await updateStatus(job.id, 'SCOPE_MISMATCH');
+                                            }
+                                        }}
+                                        variant="outline"
+                                        className="border-red-200 text-red-600"
+                                    >
+                                        Mismatch
+                                    </Button>
+                                </div>
                             )}
-                            {['COMPLETED', 'CLOSED'].includes(job.status) && (
-                                <div className="w-full text-center text-sm text-green-600 font-medium py-2">Job Done / Closed</div>
-                            )}
-                            {['CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(job.status) && (
-                                <div className="w-full text-center text-sm text-red-400 font-medium py-2">Cancelled</div>
+
+                            {['COMPLETED', 'CAPTURED', 'PAID_OUT', 'CLOSED'].includes(job.status) && (
+                                <div className="w-full text-center text-sm text-green-600 font-medium py-2">Job Done / Recorded</div>
                             )}
                         </div>
                     </Card>

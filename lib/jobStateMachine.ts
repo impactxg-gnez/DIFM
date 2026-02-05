@@ -1,41 +1,49 @@
 import { prisma } from './prisma';
 
 export const JOB_STATUSES = [
-  'CREATED',
-  'DISPATCHED',
-  'ACCEPTED',
+  'REQUESTED',
+  'PRICED',
+  'BOOKED',
+  'ASSIGNING',
+  'ASSIGNED',
+  'PREAUTHORISED',
+  'ARRIVING',
   'IN_PROGRESS',
+  'SCOPE_MISMATCH',
+  'PARTS_REQUIRED',
   'COMPLETED',
+  'ISSUE_REPORTED',
+  'CAPTURED',
+  'PAID_OUT',
   'CLOSED',
-  'PAID',
-  'CANCELLED_FREE',
-  'CANCELLED_CHARGED',
-  'DISPUTED',
-  'CUSTOMER_REVIEWED', // Optional review status (doesn't block closure)
 ] as const;
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  CREATED: ['DISPATCHED', 'CANCELLED_FREE'],
-  DISPATCHED: ['ACCEPTED', 'CANCELLED_FREE'],
-  ACCEPTED: ['IN_PROGRESS', 'CANCELLED_FREE', 'CANCELLED_CHARGED'],
-  IN_PROGRESS: ['COMPLETED', 'CANCELLED_CHARGED'],
-  COMPLETED: ['CLOSED', 'DISPUTED', 'CUSTOMER_REVIEWED'],
-  CUSTOMER_REVIEWED: ['CLOSED', 'DISPUTED'], // Reviews don't block closure
-  CLOSED: ['PAID'],
-  PAID: [],
-  CANCELLED_FREE: [],
-  CANCELLED_CHARGED: [],
-  DISPUTED: ['CLOSED'], // Only admin can resolve disputes
+  REQUESTED: ['PRICED'],
+  PRICED: ['BOOKED'],
+  BOOKED: ['ASSIGNING'],
+  ASSIGNING: ['ASSIGNED'],
+  ASSIGNED: ['PREAUTHORISED'],
+  PREAUTHORISED: ['ARRIVING'],
+  ARRIVING: ['IN_PROGRESS'],
+  IN_PROGRESS: ['COMPLETED', 'SCOPE_MISMATCH', 'PARTS_REQUIRED'],
+  SCOPE_MISMATCH: ['IN_PROGRESS', 'BOOKED'], // Can rebook or upgrade
+  PARTS_REQUIRED: ['IN_PROGRESS'],
+  COMPLETED: ['CAPTURED', 'ISSUE_REPORTED'],
+  ISSUE_REPORTED: ['CLOSED'],
+  CAPTURED: ['PAID_OUT'],
+  PAID_OUT: ['CLOSED'],
+  CLOSED: [],
 };
 
 const STUCK_MINUTES: Partial<Record<JobStatus, number>> = {
-  CREATED: 30,
-  DISPATCHED: 45,
-  ACCEPTED: 60,
+  REQUESTED: 30,
+  BOOKED: 45,
+  ASSIGNED: 60,
   IN_PROGRESS: 180,
-  COMPLETED: 120, // Should move to CLOSED within 2 hours
+  COMPLETED: 120,
 };
 
 export function canTransition(from: JobStatus, to: JobStatus) {
@@ -92,7 +100,7 @@ export async function applyStatusChange(
       data: {
         status: toStatus,
         statusUpdatedAt: now,
-        acceptedAt: toStatus === 'ACCEPTED' ? now : job.acceptedAt,
+        acceptedAt: toStatus === 'ASSIGNED' ? now : job.acceptedAt,
       },
     });
 

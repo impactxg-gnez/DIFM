@@ -29,18 +29,17 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     const totalPrice = visits.reduce((sum, v) => sum + v.price, 0);
 
     // 6. Determine Primary Category
-    // Heuristic: First visit's class or capabilities
     let primaryCategory = 'HANDYMAN';
     if (visits.length > 0) {
         const v = visits[0];
-        if (v.itemClass === 'CLEANING') primaryCategory = 'CLEANING';
-        else if (v.itemClass === 'SPECIALIST') {
+        if (v.item_class === 'CLEANING') primaryCategory = 'CLEANING';
+        else if (v.item_class === 'SPECIALIST') {
             primaryCategory = 'SPECIALIST';
         } else {
             // STANDARD
-            if (v.capabilityTags.includes('PLUMBING')) primaryCategory = 'PLUMBER';
-            else if (v.capabilityTags.includes('ELECTRICAL')) primaryCategory = 'ELECTRICIAN';
-            else if (v.capabilityTags.includes('PAINTER')) primaryCategory = 'PAINTER';
+            if (v.required_capability_tags_union.includes('PLUMBING')) primaryCategory = 'PLUMBER';
+            else if (v.required_capability_tags_union.includes('ELECTRICAL')) primaryCategory = 'ELECTRICIAN';
+            else if (v.required_capability_tags_union.includes('PAINTER')) primaryCategory = 'PAINTER';
         }
     }
 

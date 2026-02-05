@@ -85,6 +85,7 @@ model Job {
   // Parts & Materials (Phase 2: non-financial tracking)
   partsExpectedAtBooking String? // "YES", "NO", "NOT_SURE" - customer indication at booking
   partsRequiredAtCompletion String? // "YES", "NO", "N/A" - provider confirmation at completion
+  partsCost Float? // Financial tracking of parts cost
   partsNotes String? // Provider notes about parts used
   partsPhotos String? // Comma-separated URLs or paths to photos
   
@@ -107,6 +108,17 @@ model Job {
   customerPaidAt DateTime? // When customer payment was captured
   paymentMethod String? // "MANUAL", "SIMULATED", "GATEWAY"
   paymentReference String? // External payment reference/transaction ID
+  
+  // Sequential Assignment (Step 5)
+  offeredToId String?
+  offeredAt   DateTime?
+  
+  // Arrival & Timer (Step 5)
+  arrivalWindowStart DateTime?
+  arrivalWindowEnd   DateTime?
+  timerStartedAt     DateTime?
+  timerPausedAt      DateTime?
+  isAccessAvailable  Boolean   @default(false)
   
   // Relations
   customerId  String
@@ -271,19 +283,18 @@ model Visit {
   job             Job      @relation(fields: [jobId], references: [id])
   
   // Visit Details
-  visit_tier      String   // "H1", "H2", "H3"
-  status          String   @default("DRAFT") // "DRAFT", "SCHEDULED", "COMPLETED", etc.
+  item_class      String   // "STANDARD", "CLEANING", "SPECIALIST"
+  primary_job_item_id String
+  addon_job_item_ids  String[]
   
-  // Composition
-  primaryItemId   String   // References CatalogueItem.job_item_id
-  addonItemIds    String[] // References CatalogueItem.job_item_id
+  required_capability_tags_union String[]
   
-  // Sizing
-  total_minutes   Int
+  base_minutes    Int
+  effective_minutes Int
+  tier            String   // "H1", "H2", "H3"
   price           Float
   
-  // Validated constraints
-  capability_tags String[]
+  status          String   @default("DRAFT") // "DRAFT", "SCHEDULED", "COMPLETED", etc.
   
   scopeSummary    ScopeSummary?
   
@@ -292,15 +303,21 @@ model Visit {
 }
 
 model ScopeSummary {
-  id              String   @id @default(uuid())
+  id                    String   @id @default(uuid())
   
-  visitId         String   @unique
-  visit           Visit    @relation(fields: [visitId], references: [id])
+  visitId               String   @unique
+  visit                 Visit    @relation(fields: [visitId], references: [id])
   
-  // The enforceable contract
-  snapshot        Json     // Stores: effective_minutes, tier, includes_text, excludes_text, mismatch_rule
-  answers         Json     // Stores: questionId -> answer mapping
+  primary_job_item_id   String
+  addon_job_item_ids    String[]
+  visit_tier            String
+  effective_minutes     Int
+  includes_text         String
+  excludes_text         String
+  parts_rule_text       String
+  mismatch_rule_text     String
+  scope_lock_answers    Json     // Key/Value
   
-  createdAt       DateTime @default(now())
+  createdAt             DateTime @default(now())
 }
 

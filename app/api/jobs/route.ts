@@ -45,23 +45,23 @@ export async function POST(request: Request) {
                     isASAP: true,
                     scheduledAt: null,
                     customerId,
-                    status: 'CREATED',
+                    status: 'PRICED',
                     statusUpdatedAt: now,
                     priceLockedAt: null, // Price locks AFTER Scope Lock in V1
                     dispatchRadius: 5,
                     isSimulation: isSimulation ?? false,
                     needsReview: pricing.confidence < 0.7,
                     isParsed: true,
-                    requiredCapability: pricing.visits[0]?.capabilityTags.join(','), // Simple join for now
+                    requiredCapability: pricing.visits[0]?.required_capability_tags_union.join(','),
                 },
             });
 
             await tx.jobStateChange.create({
                 data: {
                     jobId: createdJob.id,
-                    fromStatus: 'SYSTEM',
-                    toStatus: 'CREATED',
-                    reason: 'Job created (Draft)',
+                    fromStatus: 'REQUESTED',
+                    toStatus: 'PRICED',
+                    reason: 'Instant price generated',
                     changedById: customerId,
                     changedByRole: 'CUSTOMER',
                 },
@@ -72,12 +72,14 @@ export async function POST(request: Request) {
                 await (tx as any).visit.create({
                     data: {
                         jobId: createdJob.id,
-                        visit_tier: v.tier,
-                        primaryItemId: v.primaryItemId,
-                        addonItemIds: v.addonItemIds,
-                        total_minutes: v.totalMinutes,
+                        item_class: v.item_class,
+                        primary_job_item_id: v.primary_job_item_id,
+                        addon_job_item_ids: v.addon_job_item_ids,
+                        required_capability_tags_union: v.required_capability_tags_union,
+                        base_minutes: v.base_minutes,
+                        effective_minutes: v.effective_minutes,
+                        tier: v.tier,
                         price: v.price,
-                        capability_tags: v.capabilityTags,
                         status: 'DRAFT'
                     }
                 });
@@ -154,74 +156,14 @@ export async function GET(request: Request) {
         if (userRole === 'CUSTOMER') {
             whereClause.customerId = userId;
         } else if (userRole === 'PROVIDER') {
-            // Milestone 2: Only ACTIVE providers can see jobs
-            if (user.providerStatus !== 'ACTIVE') {
-                // Inactive providers can only see their own assigned jobs
-                whereClause.providerId = userId;
-            } else {
-                const myCategories = user.categories?.split(',') || [];
-                const myCapabilities = user.capabilities?.split(',') || [];
-                const myProviderType = user.providerType || 'HANDYMAN';
-
-                // Build dispatch filter with capability logic
-                const dispatchConditions: any[] = [];
-
-                // Jobs already assigned to this provider
-                dispatchConditions.push({ providerId: userId });
-
-                // Available jobs (DISPATCHED, not assigned)
-                const availableJobConditions: any[] = [
-                    { status: 'DISPATCHED' },
-                    { providerId: null }
-                ];
-
-                // Milestone 2: Handyman-first matching logic
-                const categoryFilters: any[] = [];
-
-                if (myProviderType === 'HANDYMAN') {
-                    // Handymen can see:
-                    // 1. HANDYMAN category jobs (default)
-                    // 2. Jobs with requiredCapability that matches their capabilities
-                    categoryFilters.push({ category: 'HANDYMAN' });
-
-                    // If handyman has capabilities, they can see jobs requiring those capabilities
-                    if (myCapabilities.includes('HANDYMAN_PLUMBING')) {
-                        categoryFilters.push({
-                            requiredCapability: 'HANDYMAN_PLUMBING'
-                        });
-                    }
-                    if (myCapabilities.includes('HANDYMAN_ELECTRICAL')) {
-                        categoryFilters.push({
-                            requiredCapability: 'HANDYMAN_ELECTRICAL'
-                        });
-                    }
-                } else if (myProviderType === 'SPECIALIST') {
-                    // Specialists can see jobs in their categories
-                    // They only see jobs if no handyman can handle them (handled at dispatch time)
-                    if (myCategories.length > 0) {
-                        for (const cat of myCategories) {
-                            // Cleaners: Only see CLEANING category jobs, never repair/installation jobs
-                            if (cat === 'CLEANING') {
-                                // Cleaners only see CLEANING jobs
-                                categoryFilters.push({ category: 'CLEANING' });
-                            } else {
-                                // Other specialists (plumber, electrician, etc.) see their category
-                                categoryFilters.push({ category: cat });
-                            }
-                        }
-                    }
-                }
-
-                if (categoryFilters.length > 0) {
-                    availableJobConditions.push({ OR: categoryFilters });
-                }
-
-                dispatchConditions.push({
-                    AND: availableJobConditions
-                });
-
-                whereClause = { OR: dispatchConditions };
-            }
+            // Milestone 2 & Step 5: Sequential Assignment
+            // A provider sees a job ONLY if:
+            // 1. It is assigned to them (providerId === userId)
+            // 2. It is currently offered to them (offeredToId === userId)
+            whereClause.OR = [
+                { providerId: userId },
+                { offeredToId: userId, status: 'ASSIGNING' }
+            ];
         }
 
         if (status) {

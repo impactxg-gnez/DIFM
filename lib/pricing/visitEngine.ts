@@ -35,13 +35,14 @@ export const TIER_ITEM_CAPS: Record<string, number> = {
 };
 
 export interface GeneratedVisit {
-    itemClass: string;
-    primaryItemId: string;
-    addonItemIds: string[];
+    item_class: string;
+    primary_job_item_id: string;
+    addon_job_item_ids: string[];
     tier: string;
-    totalMinutes: number;
+    base_minutes: number;
+    effective_minutes: number;
     price: number;
-    capabilityTags: string[];
+    required_capability_tags_union: string[];
     items: CatalogueItem[]; // For reference
 }
 
@@ -49,20 +50,17 @@ export function calculateTier(minutes: number): string {
     if (minutes <= TIER_THRESHOLDS.H1) return 'H1';
     if (minutes <= TIER_THRESHOLDS.H2) return 'H2';
     if (minutes <= TIER_THRESHOLDS.H3) return 'H3';
-    return 'H3'; // Cap at H3 for V1, or handle overflow (spec says "splitVisit" but "never exceed H3 in V1")
+    return 'H3'; // For V1, cap at H3 or overflow logic
 }
 
 export function calculatePrice(tier: string, itemClass: string): number {
-    // Can expand to specific prices per class later
-    // For V1, H1/H2/H3 applies to Standard.
-    // Cleaning/Specialist might have their own rates. For now using same tiers.
     return TIER_PRICES[tier] || 0;
 }
 
 /**
  * Core Algorithm: Visit Generation
- * 1. Isolate CLEANING -> Visits
- * 2. Isolate SPECIALIST -> Visits
+ * 1. Isolate CLEANING -> one visit per item
+ * 2. Isolate SPECIALIST -> one visit per item
  * 3. Bundle STANDARD -> Visits (Greedy pack)
  */
 export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
@@ -72,14 +70,12 @@ export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
 
     const visits: GeneratedVisit[] = [];
 
-    // 1. Cleaning: Always isolated, one visit per item (usually) or bundle if same type?
-    // Spec: "Any CLEANING item always creates its own visit and never bundles."
+    // 1. Cleaning: Isolated, one visit per item
     for (const item of cleaning) {
         visits.push(createSingleItemVisit(item));
     }
 
-    // 2. Specialist: Always isolated
-    // Spec: "Any SPECIALIST item always creates its own visit and never bundles."
+    // 2. Specialist: Isolated, one visit per item
     for (const item of specialist) {
         visits.push(createSingleItemVisit(item));
     }
@@ -93,13 +89,14 @@ export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
 function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
     const tier = calculateTier(item.time_weight_minutes);
     return {
-        itemClass: item.item_class,
-        primaryItemId: item.job_item_id,
-        addonItemIds: [],
+        item_class: item.item_class,
+        primary_job_item_id: item.job_item_id,
+        addon_job_item_ids: [],
         tier,
-        totalMinutes: item.time_weight_minutes,
+        base_minutes: item.time_weight_minutes,
+        effective_minutes: item.time_weight_minutes,
         price: calculatePrice(tier, item.item_class),
-        capabilityTags: item.required_capability_tags,
+        required_capability_tags_union: item.required_capability_tags,
         items: [item]
     };
 }
@@ -127,39 +124,30 @@ function bundleStandard(items: CatalogueItem[]): GeneratedVisit[] {
 }
 
 function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
-    if (visit.itemClass !== 'STANDARD') return false;
+    if (visit.item_class !== 'STANDARD') return false;
     if (item.allowed_addon === false) return false;
 
-    const newMinutes = visit.totalMinutes + item.time_weight_minutes;
+    const newMinutes = visit.effective_minutes + item.time_weight_minutes;
     // Cap at 150 (H3 max)
     if (newMinutes > TIER_THRESHOLDS.H3) return false;
 
     const newTier = calculateTier(newMinutes);
-    const newCount = 1 + visit.addonItemIds.length + 1; // current Items + this one
+    const newCount = 1 + visit.addon_job_item_ids.length + 1; // current Items + this one
 
     if (newCount > TIER_ITEM_CAPS[newTier]) return false;
 
-    // Capability Superset check
-    // Spec: "Capability superset holds: provider_capabilities ⊇ union(required_capability_tags for items in the Visit)"
-    // This check here is implicit: If we merge them, the required tags become the UNION.
-    // The constraint is whether a provider CAN exist with that union.
-    // "HANDYMAN is a real capability tag and can be mixed as add-ons when capability-superset holds."
-    // V1 Logic: We assume merging is allowed if tags are compatible (e.g. Handyman + Plumbing).
-    // If we have distinct trades that never mix (e.g. "Roofing" + "Gardening"), we might block it.
-    // Spec says: "HANDYMAN mixed add-ons: HANDYMAN items may bundle across different task types as add-ons".
-    // For now, allow bundling, the resulting visit will require UNION of tags.
-    // dispatch will ensure a provider has all tags.
-
+    // Capability Superset check is handled by union later
     return true;
 }
 
 function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
-    visit.addonItemIds.push(item.job_item_id);
+    visit.addon_job_item_ids.push(item.job_item_id);
     visit.items.push(item);
-    visit.totalMinutes += item.time_weight_minutes;
-    visit.capabilityTags = Array.from(new Set([...visit.capabilityTags, ...item.required_capability_tags]));
+    visit.base_minutes += item.time_weight_minutes;
+    visit.effective_minutes += item.time_weight_minutes;
+    visit.required_capability_tags_union = Array.from(new Set([...visit.required_capability_tags_union, ...item.required_capability_tags]));
 
     // Recalc tier/price
-    visit.tier = calculateTier(visit.totalMinutes);
-    visit.price = calculatePrice(visit.tier, visit.itemClass);
+    visit.tier = calculateTier(visit.effective_minutes);
+    visit.price = calculatePrice(visit.tier, visit.item_class);
 }

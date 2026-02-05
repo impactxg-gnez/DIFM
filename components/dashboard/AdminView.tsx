@@ -185,6 +185,51 @@ export function AdminView({ user }: { user: any }) {
         }
     };
 
+    const handleMismatchAction = async (jobId: string, visitId: string, action: 'UPGRADE' | 'REBOOK', newTier?: string) => {
+        const reason = prompt(`Reason for ${action}:`);
+        if (!reason) return;
+
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/mismatch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, visitId, newTier, reason })
+            });
+            if (res.ok) {
+                alert(`${action} successful`);
+                mutateJobs();
+                setJobDetailDialog({ open: false, job: null });
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to handle mismatch');
+        }
+    };
+
+    const handlePaymentAction = async (jobId: string, action: 'preauth' | 'capture' | 'payout') => {
+        if (!confirm(`Confirm ${action} for job ${jobId.slice(0, 8)}?`)) return;
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (res.ok) {
+                alert(`${action} successful`);
+                mutateJobs();
+                // Optionally update local dialog state
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert(`Failed to ${action}`);
+        }
+    };
+
     const jobsContent = useMemo(() => {
         if (!jobs) return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
         if (filteredJobs.length === 0) {
@@ -227,6 +272,11 @@ export function AdminView({ user }: { user: any }) {
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <MapPin className="w-3 h-3" />
                                     {job.location}
+                                    {job.visits?.[0]?.tier && (
+                                        <Badge variant="outline" className="ml-2 bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                                            {job.visits[0].tier}
+                                        </Badge>
+                                    )}
                                 </div>
                             </div>
                             <div className="text-right">
@@ -751,14 +801,20 @@ export function AdminView({ user }: { user: any }) {
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
                             <option value="ALL">All Statuses</option>
-                            <option value="CREATED">Created</option>
-                            <option value="DISPATCHED">Dispatched</option>
-                            <option value="ACCEPTED">Accepted</option>
+                            <option value="REQUESTED">Requested</option>
+                            <option value="PRICED">Priced</option>
+                            <option value="BOOKED">Booked</option>
+                            <option value="ASSIGNING">Assigning</option>
+                            <option value="ASSIGNED">Assigned</option>
+                            <option value="PREAUTHORISED">Pre-authorised</option>
+                            <option value="ARRIVING">Arriving</option>
                             <option value="IN_PROGRESS">In Progress</option>
+                            <option value="SCOPE_MISMATCH">Mismatch</option>
+                            <option value="PARTS_REQUIRED">Parts Required</option>
                             <option value="COMPLETED">Completed</option>
+                            <option value="CAPTURED">Captured</option>
+                            <option value="PAID_OUT">Paid Out</option>
                             <option value="CLOSED">Closed</option>
-                            <option value="CANCELLED_FREE">Cancelled (Free)</option>
-                            <option value="CANCELLED_CHARGED">Cancelled (Charged)</option>
                             <option value="DISPUTED">Disputed</option>
                         </select>
                         <select
@@ -929,69 +985,55 @@ export function AdminView({ user }: { user: any }) {
 
                             {/* Column 2: Finances & Controls */}
                             <div className="space-y-6">
-                                <Card className="p-4 bg-indigo-50 border-indigo-100">
-                                    <h3 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
-                                        <Wallet className="w-4 h-4" /> Financials
+                                <Card className="p-4">
+                                    <h3 className="font-semibold mb-3 text-indigo-900 flex items-center gap-2">
+                                        <Wallet className="w-4 h-4" /> V1 Financials & Actions
                                     </h3>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span>Customer Price</span>
-                                            <span className="font-bold">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-indigo-700">
-                                            <div className="flex items-center gap-1">
-                                                <span>Platform Fee</span>
-                                                {jobDetailDialog.job.platformFeeOverride && <span className="text-xs bg-amber-100 px-1 rounded">Overridden</span>}
+                                    <div className="space-y-4 text-sm">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="p-2 bg-indigo-50/50 rounded border border-indigo-100">
+                                                <div className="text-[10px] text-indigo-600 uppercase">Customer Total</div>
+                                                <div className="text-lg font-bold">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</div>
                                             </div>
-                                            <span>
-                                                -£{(jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT)).toFixed(2)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between pt-2 border-t border-indigo-200 font-bold text-lg">
-                                            <span>Provider Payout</span>
-                                            <span>£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</span>
-                                        </div>
-                                        <div className="pt-2">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="w-full text-xs"
-                                                onClick={() => {
-                                                    const newFee = prompt('Override Platform Fee (£):');
-                                                    if (newFee && !isNaN(parseFloat(newFee))) {
-                                                        // Implement Fee Override
-                                                        handleOverrideJob(jobDetailDialog.job.id, undefined, undefined); // This is just for price/provider, need new arg or function
-                                                        // TODO: Add separate fee override call
-                                                        alert('Fee override will be implemented in backend next step.');
-                                                    }
-                                                }}
-                                            >
-                                                Override Fee
-                                            </Button>
+                                            <div className="p-2 bg-green-50/50 rounded border border-green-100">
+                                                <div className="text-[10px] text-green-600 uppercase">Provider Payout</div>
+                                                <div className="text-lg font-bold">£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</div>
+                                            </div>
                                         </div>
 
-                                        {!jobDetailDialog.job.customerPaidAt && ['COMPLETED', 'CUSTOMER_REVIEWED', 'CLOSED'].includes(jobDetailDialog.job.status) && (
-                                            <div className="pt-4 border-t border-indigo-200 grid grid-cols-2 gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    className="bg-green-600 hover:bg-green-700 text-white w-full"
-                                                    onClick={() => handleMarkPaid(jobDetailDialog.job.id, 'MANUAL')}
-                                                >
-                                                    Mark Paid
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="text-green-600 border-green-200 w-full"
-                                                    onClick={() => handleMarkPaid(jobDetailDialog.job.id, 'SIMULATED')}
-                                                >
-                                                    Simulate
-                                                </Button>
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-gray-500 font-semibold uppercase">V1 Workflow Controls</p>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {jobDetailDialog.job.status === 'ASSIGNED' && (
+                                                    <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'preauth')}>
+                                                        💳 Pre-authorise Card
+                                                    </Button>
+                                                )}
+                                                {jobDetailDialog.job.status === 'COMPLETED' && (
+                                                    <Button variant="default" className="w-full bg-green-600 hover:bg-green-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'capture')}>
+                                                        🎯 Capture Payment
+                                                    </Button>
+                                                )}
+                                                {jobDetailDialog.job.status === 'CAPTURED' && (
+                                                    <Button variant="default" className="w-full bg-indigo-600 hover:bg-indigo-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'payout')}>
+                                                        💸 Process Payout
+                                                    </Button>
+                                                )}
+
+                                                <div className="flex gap-2">
+                                                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleOverrideJob(jobDetailDialog.job.id, jobDetailDialog.job.fixedPrice)}>
+                                                        Price Override
+                                                    </Button>
+                                                    <Badge variant="outline" className="bg-zinc-50 border-zinc-200 text-zinc-500">
+                                                        V1 Lock Active
+                                                    </Badge>
+                                                </div>
                                             </div>
-                                        )}
+                                        </div>
+
                                         {jobDetailDialog.job.customerPaidAt && (
                                             <div className="pt-2 text-center">
-                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 w-full justify-center">
                                                     PAID on {new Date(jobDetailDialog.job.customerPaidAt).toLocaleDateString()}
                                                 </Badge>
                                             </div>
