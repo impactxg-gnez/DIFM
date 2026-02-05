@@ -107,6 +107,12 @@ function bundleStandard(items: CatalogueItem[]): GeneratedVisit[] {
     const visits: GeneratedVisit[] = [];
 
     for (const item of sorted) {
+        // Handle items that exceed H3 threshold (>150 minutes)
+        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
+            visits.push(...splitLargeItem(item));
+            continue;
+        }
+
         let placed = false;
         for (const v of visits) {
             if (canAdd(item, v)) {
@@ -123,9 +129,44 @@ function bundleStandard(items: CatalogueItem[]): GeneratedVisit[] {
     return visits;
 }
 
+function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
+    // For items >150min, create multiple visits
+    const visits: GeneratedVisit[] = [];
+    const numVisits = Math.ceil(item.time_weight_minutes / TIER_THRESHOLDS.H3);
+
+    for (let i = 0; i < numVisits; i++) {
+        const remainingMinutes = item.time_weight_minutes - (i * TIER_THRESHOLDS.H3);
+        const visitMinutes = Math.min(TIER_THRESHOLDS.H3, remainingMinutes);
+
+        const tier = calculateTier(visitMinutes);
+        const visit: GeneratedVisit = {
+            item_class: item.item_class,
+            primary_job_item_id: item.job_item_id,
+            addon_job_item_ids: [],
+            tier,
+            base_minutes: visitMinutes,
+            effective_minutes: visitMinutes,
+            price: calculatePrice(tier, item.item_class),
+            required_capability_tags_union: item.required_capability_tags,
+            items: [item]
+        };
+        visits.push(visit);
+    }
+
+    return visits;
+}
+
 function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     if (visit.item_class !== 'STANDARD') return false;
     if (item.allowed_addon === false) return false;
+
+    // Capability compatibility check
+    const itemCaps = new Set(item.required_capability_tags);
+    const visitCaps = new Set(visit.required_capability_tags_union);
+    const allCaps = new Set([...itemCaps, ...visitCaps]);
+
+    // Check if a single provider can handle all capabilities
+    if (!canProviderHandleAll(allCaps)) return false;
 
     const newMinutes = visit.effective_minutes + item.time_weight_minutes;
     // Cap at 150 (H3 max)
@@ -136,8 +177,26 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
 
     if (newCount > TIER_ITEM_CAPS[newTier]) return false;
 
-    // Capability Superset check is handled by union later
     return true;
+}
+
+function canProviderHandleAll(caps: Set<string>): boolean {
+    // Check if a single provider type can handle all capabilities
+    if (caps.size === 0) return true;
+    if (caps.size === 1) return true;
+
+    const capsArray = Array.from(caps);
+
+    // HANDYMAN can do basic tasks but not specialized work
+    if (capsArray.includes('HANDYMAN')) {
+        const specialized = ['PLUMBING', 'ELECTRICAL', 'PAINTER', 'CLEANING'];
+        return !capsArray.some(c => specialized.includes(c));
+    }
+
+    // Specialized capabilities can't mix with each other
+    const specialized = ['PLUMBING', 'ELECTRICAL', 'PAINTER', 'CLEANING'];
+    const specializedCount = capsArray.filter(c => specialized.includes(c)).length;
+    return specializedCount <= 1;
 }
 
 function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
