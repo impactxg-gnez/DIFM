@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { SERVICE_CATEGORIES, PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { getNextStates } from '@/lib/jobStateMachine';
-import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard } from 'lucide-react';
+import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -853,25 +853,31 @@ export function AdminView({ user }: { user: any }) {
             </div>
 
             {cancelDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-zinc-900 border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4 relative">
+                        <button
+                            onClick={closeCancelDialog}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-white">Cancel job</h3>
-                            <p className="text-sm text-gray-300">Provide a reason before cancelling.</p>
+                            <h3 className="text-lg font-semibold text-white">Cancel Job</h3>
+                            <p className="text-sm text-gray-400">Provide a reason before cancelling.</p>
                         </div>
                         <textarea
-                            className="w-full rounded-md border border-white/10 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-md border border-white/10 bg-zinc-800 p-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             rows={4}
                             placeholder="Reason for cancellation"
                             value={cancelDialog.reason}
                             onChange={(e) => setCancelDialog((prev) => ({ ...prev, reason: e.target.value }))}
                         />
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" onClick={closeCancelDialog} disabled={isSubmittingCancel}>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button variant="ghost" className="text-gray-400 hover:text-white" onClick={closeCancelDialog} disabled={isSubmittingCancel}>
                                 Back
                             </Button>
                             <Button variant="destructive" onClick={submitCancelDialog} disabled={isSubmittingCancel}>
-                                {isSubmittingCancel ? 'Cancelling...' : 'Confirm cancel'}
+                                {isSubmittingCancel ? 'Cancelling...' : 'Confirm Cancel'}
                             </Button>
                         </div>
                     </div>
@@ -879,31 +885,38 @@ export function AdminView({ user }: { user: any }) {
             )}
 
             {overrideDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-zinc-900 border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4 relative">
+                        <button
+                            onClick={closeOverrideDialog}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-white">Price override</h3>
-                            <p className="text-sm text-gray-300">Provide a new price and reason.</p>
+                            <h3 className="text-lg font-semibold text-white">Price Override</h3>
+                            <p className="text-sm text-gray-400">Provide a new price and reason.</p>
                         </div>
                         <Input
                             type="number"
+                            className="bg-zinc-800 border-white/10 text-white"
                             value={overrideDialog.price ?? ''}
                             onChange={(e) => setOverrideDialog((prev) => ({ ...prev, price: Number(e.target.value) }))}
                             placeholder="New price"
                         />
                         <textarea
-                            className="w-full rounded-md border border-white/10 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-md border border-white/10 bg-zinc-800 p-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             rows={4}
                             placeholder="Reason for override"
                             value={overrideDialog.reason}
                             onChange={(e) => setOverrideDialog((prev) => ({ ...prev, reason: e.target.value }))}
                         />
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" onClick={closeOverrideDialog} disabled={isSubmittingOverride}>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button variant="ghost" className="text-gray-400 hover:text-white" onClick={closeOverrideDialog} disabled={isSubmittingOverride}>
                                 Back
                             </Button>
-                            <Button variant="default" onClick={submitOverrideDialog} disabled={isSubmittingOverride}>
-                                {isSubmittingOverride ? 'Updating...' : 'Confirm override'}
+                            <Button variant="default" className="bg-blue-600 hover:bg-blue-700" onClick={submitOverrideDialog} disabled={isSubmittingOverride}>
+                                {isSubmittingOverride ? 'Updating...' : 'Confirm Override'}
                             </Button>
                         </div>
                     </div>
@@ -912,243 +925,244 @@ export function AdminView({ user }: { user: any }) {
 
             {/* Job Detail Dialog */}
             {jobDetailDialog.open && jobDetailDialog.job && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h2 className="text-2xl font-bold text-white">Job #{jobDetailDialog.job.id.slice(0, 8)}</h2>
-                                    <Badge variant={jobDetailDialog.job.status === 'COMPLETED' ? 'default' : 'secondary'} className="text-lg">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-zinc-900 border border-white/10 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative">
+                        <button
+                            onClick={() => setJobDetailDialog({ open: false, job: null })}
+                            className="absolute top-6 right-6 text-gray-400 hover:text-white transition-colors z-10"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+
+                        <div className="p-8 space-y-8">
+                            <div className="pr-12">
+                                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                    <h2 className="text-3xl font-bold text-white tracking-tight">Job #{jobDetailDialog.job.id.slice(0, 8)}</h2>
+                                    <Badge status={jobDetailDialog.job.status} className="text-sm px-3 py-1">
                                         {jobDetailDialog.job.status}
                                     </Badge>
-                                    {jobDetailDialog.job.isRefunded && <Badge variant="destructive" className="ml-2">REFUNDED</Badge>}
+                                    {jobDetailDialog.job.isRefunded && <Badge variant="destructive" className="animate-pulse">REFUNDED</Badge>}
                                 </div>
-                                <p className="text-gray-400">{jobDetailDialog.job.description}</p>
+                                <p className="text-xl text-gray-400 font-medium">{jobDetailDialog.job.description}</p>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => setJobDetailDialog({ open: false, job: null })}>Close</Button>
-                        </div>
 
-                        <div className="grid md:grid-cols-3 gap-6">
-                            {/* Column 1: Core Details & Timeline */}
-                            <div className="space-y-6 md:col-span-2">
-                                <Card className="p-4 bg-slate-50">
-                                    <h3 className="font-semibold mb-3">Line Items</h3>
-                                    {jobDetailDialog.job.items?.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {jobDetailDialog.job.items.map((item: any) => (
-                                                <div key={item.id} className="flex justify-between text-sm p-2 bg-white rounded border border-white/10">
-                                                    <span>{item.quantity}x {item.itemType} {item.description && `(${item.description})`}</span>
-                                                    <span className="font-mono">£{item.totalPrice.toFixed(2)}</span>
+                            <div className="grid lg:grid-cols-3 gap-8">
+                                {/* Column 1: Core Details & Timeline */}
+                                <div className="space-y-8 lg:col-span-2">
+                                    <div className="space-y-4">
+                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4" /> V1 Visits & Scope Lock
+                                        </h3>
+                                        {jobDetailDialog.job.visits?.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {jobDetailDialog.job.visits.map((visit: any) => (
+                                                    <div key={visit.id} className="p-4 bg-zinc-800/50 rounded-xl border border-white/10 space-y-4">
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">
+                                                                    {visit.item_class} • {visit.tier}
+                                                                </Badge>
+                                                                <span className="text-xs text-gray-500">{visit.status}</span>
+                                                            </div>
+                                                            <span className="text-lg font-black text-white">£{visit.price.toFixed(2)}</span>
+                                                        </div>
+
+                                                        {visit.scopeSummary && (
+                                                            <div className="text-sm bg-black/20 rounded-lg p-3 space-y-2">
+                                                                <p className="text-xs font-bold text-gray-500 uppercase">Scope Summary</p>
+                                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+                                                                    <div className="text-gray-500">Includes:</div>
+                                                                    <div>{visit.scopeSummary.includes_text}</div>
+                                                                    <div className="text-gray-500">Excludes:</div>
+                                                                    <div>{visit.scopeSummary.excludes_text}</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {jobDetailDialog.job.status === 'SCOPE_MISMATCH' && (
+                                                            <div className="flex gap-2 pt-2 border-t border-white/5">
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                                                                    onClick={() => handleMismatchAction(jobDetailDialog.job.id, visit.id, 'UPGRADE', 'H3')}
+                                                                >
+                                                                    Upgrade to H3
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="flex-1 border-white/10 text-white"
+                                                                    onClick={() => handleMismatchAction(jobDetailDialog.job.id, visit.id, 'REBOOK')}
+                                                                >
+                                                                    Rebook
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-6 text-center bg-zinc-800/50 rounded-xl border border-dashed border-white/10 text-gray-500 italic">
+                                                No V1 visits found. Check if job is still in legacy state.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                            <RefreshCw className="w-4 h-4" /> State Timeline
+                                        </h3>
+                                        <div className="space-y-6 relative border-l-2 border-white/5 ml-3 pl-6">
+                                            {jobDetailDialog.job.stateChanges?.map((s: any, idx: number) => (
+                                                <div key={s.id} className="relative">
+                                                    <div className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 border-zinc-900 ${idx === 0 ? 'bg-blue-500' : 'bg-zinc-700'}`}></div>
+                                                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                                                        {s.fromStatus} <ChevronRight className="w-3 h-3 text-gray-600" /> {s.toStatus}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {new Date(s.createdAt).toLocaleString()} • <span className="text-gray-400 font-bold">{s.changedByRole}</span>
+                                                    </div>
+                                                    {s.reason && (
+                                                        <div className="text-xs text-amber-500/80 mt-1 bg-amber-500/5 p-2 rounded border border-amber-500/10 italic">
+                                                            "{s.reason}"
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : <div className="text-sm text-gray-400 italic">No line items (Flat rate?)</div>}
-                                </Card>
-
-                                <Card className="p-4">
-                                    <h3 className="font-semibold mb-3">State Timeline</h3>
-                                    <div className="space-y-4 relative border-l-2 border-white/10 ml-2 pl-4">
-                                        {jobDetailDialog.job.stateChanges?.map((s: any) => (
-                                            <div key={s.id} className="relative">
-                                                <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-400"></div>
-                                                <div className="text-sm font-medium">{s.fromStatus} → {s.toStatus}</div>
-                                                <div className="text-xs text-gray-400">
-                                                    {new Date(s.createdAt).toLocaleString()} • {s.changedByRole}
-                                                </div>
-                                                {s.reason && <div className="text-xs text-amber-600 italic">"{s.reason}"</div>}
-                                            </div>
-                                        ))}
                                     </div>
-                                </Card>
+                                </div>
 
-                                {/* Evidence Section */}
-                                {(jobDetailDialog.job.completionPhotos || jobDetailDialog.job.completionNotes) && (
-                                    <Card className="p-4 border-l-4 border-green-500">
-                                        <h3 className="font-semibold mb-2">Completion Evidence</h3>
-                                        {jobDetailDialog.job.completionNotes && (
-                                            <div className="mb-2">
-                                                <p className="text-xs text-gray-400 uppercase">Notes</p>
-                                                <p className="bg-slate-50 p-2 rounded text-sm">{jobDetailDialog.job.completionNotes}</p>
-                                            </div>
-                                        )}
-                                        {jobDetailDialog.job.completionPhotos && (
-                                            <div>
-                                                <p className="text-xs text-gray-400 uppercase">Photos</p>
-                                                <a href={jobDetailDialog.job.completionPhotos} target="_blank" className="text-blue-600 underline text-sm break-all">
-                                                    {jobDetailDialog.job.completionPhotos}
-                                                </a>
-                                            </div>
-                                        )}
-                                    </Card>
-                                )}
-                            </div>
+                                {/* Column 2: Finances & Controls */}
+                                <div className="space-y-8">
+                                    <div className="p-6 bg-zinc-800/80 rounded-2xl border border-white/10 space-y-6">
+                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                            <Wallet className="w-4 h-4" /> Financials & Actions
+                                        </h3>
 
-                            {/* Column 2: Finances & Controls */}
-                            <div className="space-y-6">
-                                <Card className="p-4">
-                                    <h3 className="font-semibold mb-3 text-indigo-900 flex items-center gap-2">
-                                        <Wallet className="w-4 h-4" /> V1 Financials & Actions
-                                    </h3>
-                                    <div className="space-y-4 text-sm">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="p-2 bg-indigo-50/50 rounded border border-indigo-100">
-                                                <div className="text-[10px] text-indigo-600 uppercase">Customer Total</div>
-                                                <div className="text-lg font-bold">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</div>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            <div className="p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+                                                <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Customer Total</div>
+                                                <div className="text-2xl font-black text-white">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</div>
                                             </div>
-                                            <div className="p-2 bg-green-50/50 rounded border border-green-100">
-                                                <div className="text-[10px] text-green-600 uppercase">Provider Payout</div>
-                                                <div className="text-lg font-bold">£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</div>
+                                            <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                                                <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Provider Payout</div>
+                                                <div className="text-2xl font-black text-white">£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</div>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <p className="text-xs text-gray-500 font-semibold uppercase">V1 Workflow Controls</p>
+                                        <div className="space-y-3">
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Workflow Controls</p>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {jobDetailDialog.job.status === 'ASSIGNED' && (
-                                                    <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'preauth')}>
+                                                    <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700 h-11" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'preauth')}>
                                                         💳 Pre-authorise Card
                                                     </Button>
                                                 )}
                                                 {jobDetailDialog.job.status === 'COMPLETED' && (
-                                                    <Button variant="default" className="w-full bg-green-600 hover:bg-green-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'capture')}>
+                                                    <Button variant="default" className="w-full bg-emerald-600 hover:bg-emerald-700 h-11" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'capture')}>
                                                         🎯 Capture Payment
                                                     </Button>
                                                 )}
                                                 {jobDetailDialog.job.status === 'CAPTURED' && (
-                                                    <Button variant="default" className="w-full bg-indigo-600 hover:bg-indigo-700" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'payout')}>
+                                                    <Button variant="default" className="w-full bg-indigo-600 hover:bg-indigo-700 h-11" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'payout')}>
                                                         💸 Process Payout
                                                     </Button>
                                                 )}
 
                                                 <div className="flex gap-2">
-                                                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleOverrideJob(jobDetailDialog.job.id, jobDetailDialog.job.fixedPrice)}>
+                                                    <Button size="sm" variant="outline" className="flex-1 bg-transparent border-white/10 text-white hover:bg-white/5" onClick={() => handleOverrideJob(jobDetailDialog.job.id, jobDetailDialog.job.fixedPrice)}>
                                                         Price Override
                                                     </Button>
-                                                    <Badge variant="outline" className="bg-zinc-50 border-zinc-200 text-zinc-500">
+                                                    <div className="flex items-center justify-center px-3 rounded-md bg-white/5 border border-white/10 text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap">
                                                         V1 Lock Active
-                                                    </Badge>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {jobDetailDialog.job.customerPaidAt && (
-                                            <div className="pt-2 text-center">
-                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 w-full justify-center">
-                                                    PAID on {new Date(jobDetailDialog.job.customerPaidAt).toLocaleDateString()}
-                                                </Badge>
+                                            <div className="p-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center gap-2">
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                                <span className="text-xs font-bold text-emerald-400 uppercase">
+                                                    Paid • {new Date(jobDetailDialog.job.customerPaidAt).toLocaleDateString()}
+                                                </span>
                                             </div>
                                         )}
                                     </div>
-                                </Card>
 
-                                <Card className="p-4 border-red-100 bg-red-50/50">
-                                    <h3 className="font-semibold text-red-900 mb-3">Recovery Actions</h3>
-                                    <div className="grid gap-2">
-                                        <Button
-                                            variant="outline"
-                                            className="bg-white border-red-200 text-red-700 hover:bg-red-50 justify-start"
-                                            onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_FREE')}
-                                        >
-                                            🚫 Cancel Job (Free)
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            className="bg-white border-red-200 text-red-700 hover:bg-red-50 justify-start"
-                                            onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_CHARGED')}
-                                        >
-                                            💸 Cancel (Charged)
-                                        </Button>
-                                        {jobDetailDialog.job.providerId && (
+                                    {/* Recovery Section */}
+                                    <div className="p-6 bg-red-500/5 rounded-2xl border border-red-500/10 space-y-4">
+                                        <h3 className="text-sm font-bold text-red-500 uppercase tracking-widest flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4" /> Recovery Actions
+                                        </h3>
+                                        <div className="grid gap-2">
                                             <Button
                                                 variant="outline"
-                                                className="bg-white border-amber-200 text-amber-700 hover:bg-amber-50 justify-start"
-                                                onClick={async () => {
-                                                    if (confirm('Reassign this job?')) {
-                                                        await fetch(`/api/jobs/${jobDetailDialog.job.id}/reassign`, {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ reason: 'Admin Recovery' })
-                                                        });
-                                                        mutateJobs();
-                                                        setJobDetailDialog({ open: false, job: null });
-                                                    }
-                                                }}
+                                                className="bg-zinc-900 border-red-500/20 text-red-500 hover:bg-red-500/10 justify-start"
+                                                onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_FREE')}
                                             >
-                                                🔄 Reassign Provider
+                                                🚫 Cancel Job (Free)
                                             </Button>
-                                        )}
-                                        <div className="pt-2 border-t border-red-200 mt-2">
-                                            <p className="text-xs text-red-600 mb-2 font-semibold">Force State Jump (Dangerous)</p>
-                                            <div className="flex flex-wrap gap-1">
-                                                {['CREATED', 'DISPATCHED', 'COMPLETED', 'CLOSED'].map(s => (
+                                            <Button
+                                                variant="outline"
+                                                className="bg-zinc-900 border-red-500/20 text-red-500 hover:bg-red-500/10 justify-start"
+                                                onClick={() => handleOverrideStatus(jobDetailDialog.job.id, 'CANCELLED_CHARGED')}
+                                            >
+                                                💸 Cancel (Charged)
+                                            </Button>
+                                        </div>
+
+                                        <div className="pt-2 space-y-2">
+                                            <p className="text-[10px] text-red-900/40 font-bold uppercase text-center">Force State Jump (Dangerous)</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {['ASSIGNING', 'IN_PROGRESS', 'CLOSED', 'BOOKED'].map(st => (
                                                     <Button
-                                                        key={s}
+                                                        key={st}
                                                         size="sm"
                                                         variant="ghost"
-                                                        className="text-xs h-7 px-2 border border-white/10 bg-white"
-                                                        onClick={() => handleOverrideStatus(jobDetailDialog.job.id, s)}
+                                                        className="h-8 text-[10px] border border-red-500/10 text-red-900/60 hover:text-red-500"
+                                                        onClick={() => handleOverrideStatus(jobDetailDialog.job.id, st)}
                                                     >
-                                                        {s}
+                                                        {st}
                                                     </Button>
                                                 ))}
                                             </div>
                                         </div>
                                     </div>
-                                </Card>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
-            {/* Provider Edit Dialog */}
-            {providerEditDialog.open && providerEditDialog.provider && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h3 className="text-lg font-semibold mb-4">Edit Provider: {providerEditDialog.provider.name}</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Provider Type</label>
-                                <select
-                                    className="w-full rounded-md border border-white/10 p-2 text-sm"
-                                    value={editProviderData.providerType || 'HANDYMAN'}
-                                    onChange={(e) => setEditProviderData({ ...editProviderData, providerType: e.target.value })}
-                                >
-                                    <option value="HANDYMAN">Handyman</option>
-                                    <option value="SPECIALIST">Specialist</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Categories (comma-separated)</label>
-                                <Input
-                                    value={editProviderData.categories || ''}
-                                    onChange={(e) => setEditProviderData({ ...editProviderData, categories: e.target.value })}
-                                    placeholder="HANDYMAN,PLUMBER,ELECTRICIAN"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Capabilities (comma-separated)</label>
-                                <Input
-                                    value={editProviderData.capabilities || ''}
-                                    onChange={(e) => setEditProviderData({ ...editProviderData, capabilities: e.target.value })}
-                                    placeholder="HANDYMAN_PLUMBING,HANDYMAN_ELECTRICAL"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Service Area</label>
-                                <Input
-                                    value={editProviderData.serviceArea || ''}
-                                    onChange={(e) => setEditProviderData({ ...editProviderData, serviceArea: e.target.value })}
-                                    placeholder="London, Greater London area"
-                                />
-                            </div>
-                            <div className="flex justify-end gap-3">
-                                <Button variant="outline" onClick={() => setProviderEditDialog({ open: false })}>
-                                    Cancel
-                                </Button>
-                                <Button onClick={() => handleUpdateProvider(providerEditDialog.provider!.id, editProviderData)}>
-                                    Save
-                                </Button>
+                                    {/* Evidence Summary */}
+                                    {(jobDetailDialog.job.completionPhotos || jobDetailDialog.job.completionNotes) && (
+                                        <div className="p-6 bg-zinc-800/80 rounded-2xl border border-white/10 space-y-4">
+                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                                <RefreshCw className="w-4 h-4" /> Completion Evidence
+                                            </h3>
+                                            {jobDetailDialog.job.completionNotes && (
+                                                <div className="space-y-1">
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Provider Notes</p>
+                                                    <p className="text-sm text-gray-300 italic">"{jobDetailDialog.job.completionNotes}"</p>
+                                                </div>
+                                            )}
+                                            {jobDetailDialog.job.completionPhotos && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Photo/Video Links</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {jobDetailDialog.job.completionPhotos.split(',').map((url: string, i: number) => (
+                                                            <a
+                                                                key={i}
+                                                                href={url}
+                                                                target="_blank"
+                                                                className="px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs hover:bg-blue-500/20 transition-colors"
+                                                            >
+                                                                Evidence #{i + 1}
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
