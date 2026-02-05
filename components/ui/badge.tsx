@@ -12,16 +12,23 @@ export const Badge = ({ className, status, variant, ...props }: BadgeProps) => {
     // Status overrides variant
     if (status) {
         switch (status) {
-            case 'CREATED': colorClass = "bg-blue-100 text-blue-800"; break;
-            case 'DISPATCHED': colorClass = "bg-yellow-100 text-yellow-800 animate-pulse"; break;
-            case 'ACCEPTED': colorClass = "bg-indigo-100 text-indigo-800"; break;
-            case 'IN_PROGRESS': colorClass = "bg-orange-100 text-orange-800"; break;
+            case 'REQUESTED': colorClass = "bg-blue-100 text-blue-800"; break;
+            case 'PRICED': colorClass = "bg-indigo-100 text-indigo-800"; break;
+            case 'BOOKED': colorClass = "bg-sky-100 text-sky-800"; break;
+            case 'ASSIGNING': colorClass = "bg-yellow-100 text-yellow-800 animate-pulse"; break;
+            case 'ASSIGNED': colorClass = "bg-blue-100 text-blue-800"; break;
+            case 'PREAUTHORISED': colorClass = "bg-emerald-100 text-emerald-800"; break;
+            case 'ARRIVING': colorClass = "bg-amber-100 text-amber-800"; break;
+            case 'IN_PROGRESS': colorClass = "bg-green-100 text-green-800 font-bold"; break;
+            case 'SCOPE_MISMATCH': colorClass = "bg-red-100 text-red-800 font-bold"; break;
+            case 'PARTS_REQUIRED': colorClass = "bg-purple-100 text-purple-800"; break;
             case 'COMPLETED': colorClass = "bg-green-100 text-green-800"; break;
-            case 'CUSTOMER_REVIEWED': colorClass = "bg-purple-100 text-purple-800"; break;
-            case 'ADMIN_REVIEWED': colorClass = "bg-pink-100 text-pink-800"; break;
+            case 'CAPTURED': colorClass = "bg-slate-700 text-white"; break;
+            case 'PAID_OUT': colorClass = "bg-slate-900 text-white"; break;
             case 'CLOSED': colorClass = "bg-gray-800 text-white"; break;
             case 'CANCELLED_FREE':
             case 'CANCELLED_CHARGED': colorClass = "bg-red-100 text-red-800"; break;
+            case 'DISPUTED': colorClass = "bg-red-500 text-white"; break;
         }
     } else if (variant) {
         switch (variant) {

@@ -142,8 +142,8 @@ export async function GET(request: Request) {
                 }
             });
             // Simple auth check: owner or assigned provider
-            if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'DISPATCHED') {
-                // Allow providers to see DISPATCHED jobs
+            if (job?.customerId !== userId && job?.providerId !== userId && userRole !== 'ADMIN' && job?.status !== 'ASSIGNING') {
+                // Allow providers to see ASSIGNING jobs
                 // Strict check: if it's dispatching, is it in my category?
                 // For poll simplicity, allowing if status matches or role admin.
             }
@@ -185,7 +185,7 @@ export async function GET(request: Request) {
         const processedJobs = rawJobs.map((job: any) => {
             const { isStuck, reason } = computeStuck(job.status, job.statusUpdatedAt);
 
-            if (!['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(job.status)) {
+            if (!['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(job.status)) {
                 if (job.provider) {
                     return {
                         ...job,

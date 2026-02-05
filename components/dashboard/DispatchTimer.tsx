@@ -23,7 +23,7 @@ export function DispatchTimer({ jobId, onCompleted, onCancel }: DispatchTimerPro
         if (job && job[0]) {
             const status = job[0].status;
             // Exit on success or cancellation
-            if (['ACCEPTED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(status)) {
+            if (['ASSIGNED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(status)) {
                 onCompleted(job[0]);
             }
         }

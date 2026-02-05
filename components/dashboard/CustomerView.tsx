@@ -22,15 +22,24 @@ function getCustomerStatus(job: any): string {
         return 'Looking for provider';
     }
     const statusMap: Record<string, string> = {
-        'CREATED': 'Created',
-        'DISPATCHED': 'Provider assigned',
-        'ACCEPTED': 'Accepted by provider',
-        'IN_PROGRESS': 'In progress',
-        'COMPLETED': 'Completed',
-        'CLOSED': 'Closed',
-        'PAID': 'Paid',
+        'REQUESTED': 'Requesting price...',
+        'PRICED': 'Price generated',
+        'BOOKED': 'Booked',
+        'ASSIGNING': 'Finding a pro...',
+        'ASSIGNED': 'Pro found - Preparing...',
+        'PREAUTHORISED': 'Card pre-authorised',
+        'ARRIVING': 'Pro is on the way!',
+        'IN_PROGRESS': 'Job in progress',
+        'SCOPE_MISMATCH': 'Scope discrepancy found',
+        'PARTS_REQUIRED': 'Parts required',
+        'COMPLETED': 'Job completed',
+        'CAPTURED': 'Payment settled',
+        'PAID_OUT': 'Provider paid',
+        'CLOSED': 'Finished',
+        'ISSUE_REPORTED': 'Issue reported',
         'CANCELLED_FREE': 'Cancelled',
-        'CANCELLED_CHARGED': 'Cancelled (charged)',
+        'CANCELLED_CHARGED': 'Cancelled (fee applied)',
+        'DISPUTED': 'Disputed'
     };
     return statusMap[job.status] || job.status.replace('_', ' ');
 }
@@ -222,11 +231,11 @@ export function CustomerView({ user }: { user: any }) {
     };
 
     const activeJobs = Array.isArray(jobs) ? jobs.filter((j: any) =>
-        !['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
+        !['PAID_OUT', 'CLOSED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
 
     const historyJobs = Array.isArray(jobs) ? jobs.filter((j: any) =>
-        ['COMPLETED', 'CLOSED', 'PAID', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
+        ['PAID_OUT', 'CLOSED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
 
     const renderJobCard = (job: any) => (

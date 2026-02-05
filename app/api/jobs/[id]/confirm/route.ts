@@ -33,7 +33,7 @@ export async function POST(
                 throw new Error('Not authorized for this job');
             }
 
-            if (job.status !== 'CREATED') {
+            if (job.status !== 'PRICED') {
                 throw new Error('Job already confirmed or in progress');
             }
 
@@ -51,8 +51,8 @@ export async function POST(
                 }
             });
 
-            // Move to DISPATCHED state
-            await applyStatusChange(id, 'DISPATCHED', {
+            // Move to BOOKED state
+            await applyStatusChange(id, 'BOOKED', {
                 reason: 'Customer confirmed and price locked',
                 changedById: userId,
                 changedByRole: 'CUSTOMER'

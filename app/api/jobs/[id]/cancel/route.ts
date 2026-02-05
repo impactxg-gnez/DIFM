@@ -27,7 +27,7 @@ export async function POST(
         let newStatus: JobStatus = 'CANCELLED_FREE';
         let fee = 0;
 
-        if (job.status === 'ACCEPTED' || job.status === 'IN_PROGRESS') {
+        if (job.status === 'ASSIGNED' || job.status === 'IN_PROGRESS') {
             // Late cancellation -> Fee
             newStatus = 'CANCELLED_CHARGED';
             fee = job.fixedPrice * CANCELLATION_FEE_PERCENT;

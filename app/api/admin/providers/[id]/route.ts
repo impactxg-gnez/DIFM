@@ -88,7 +88,7 @@ export async function POST(
             const activeJobs = await prisma.job.findMany({
                 where: {
                     providerId: id,
-                    status: { in: ['ACCEPTED', 'IN_PROGRESS'] }
+                    status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
                 }
             });
 
@@ -97,11 +97,11 @@ export async function POST(
                 await prisma.job.updateMany({
                     where: {
                         providerId: id,
-                        status: { in: ['ACCEPTED', 'IN_PROGRESS'] }
+                        status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
                     },
                     data: {
                         providerId: null,
-                        status: 'DISPATCHED',
+                        status: 'ASSIGNING',
                         statusUpdatedAt: new Date()
                     }
                 });
@@ -111,8 +111,8 @@ export async function POST(
                     await prisma.jobStateChange.create({
                         data: {
                             jobId: job.id,
-                            fromStatus: job.status,
-                            toStatus: 'DISPATCHED',
+                            fromStatus: job.status as any,
+                            toStatus: 'ASSIGNING',
                             reason: `Provider ${providerStatus.toLowerCase()}, job returned to dispatch pool`,
                             changedById: adminId || undefined,
                             changedByRole: 'ADMIN'

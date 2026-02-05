@@ -16,6 +16,8 @@ export const JOB_STATUSES = [
   'CAPTURED',
   'PAID_OUT',
   'CLOSED',
+  'CANCELLED_FREE',
+  'CANCELLED_CHARGED',
 ] as const;
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
@@ -36,7 +38,20 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   CAPTURED: ['PAID_OUT'],
   PAID_OUT: ['CLOSED'],
   CLOSED: [],
+  CANCELLED_FREE: ['CLOSED'],
+  CANCELLED_CHARGED: ['CLOSED'],
 };
+
+// Add cancellation transitions to all non-terminal states
+const NON_TERMINAL_STATES: JobStatus[] = [
+  'REQUESTED', 'PRICED', 'BOOKED', 'ASSIGNING', 'ASSIGNED',
+  'PREAUTHORISED', 'ARRIVING', 'IN_PROGRESS', 'SCOPE_MISMATCH', 'PARTS_REQUIRED'
+];
+
+NON_TERMINAL_STATES.forEach(state => {
+  VALID_TRANSITIONS[state].push('CANCELLED_FREE');
+  VALID_TRANSITIONS[state].push('CANCELLED_CHARGED');
+});
 
 const STUCK_MINUTES: Partial<Record<JobStatus, number>> = {
   REQUESTED: 30,

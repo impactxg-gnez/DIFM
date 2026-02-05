@@ -52,7 +52,7 @@ export async function POST(
             where: { id },
             data: {
                 providerId: providerId || null,
-                status: providerId ? 'ACCEPTED' : 'DISPATCHED',
+                status: providerId ? 'ASSIGNED' : 'ASSIGNING',
                 statusUpdatedAt: now,
                 ...(providerId && { acceptedAt: now })
             }
@@ -63,7 +63,7 @@ export async function POST(
             data: {
                 jobId: id,
                 fromStatus: job.status,
-                toStatus: providerId ? 'ACCEPTED' : 'DISPATCHED',
+                toStatus: providerId ? 'ASSIGNED' : 'ASSIGNING',
                 reason: reason || `Admin reassignment${providerId ? ` to provider ${providerId}` : ' - returned to dispatch pool'}`,
                 changedById: adminId || undefined,
                 changedByRole: 'ADMIN'
