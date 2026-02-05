@@ -238,49 +238,122 @@ export function CustomerView({ user }: { user: any }) {
         ['PAID_OUT', 'CLOSED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
 
-    const renderJobCard = (job: any) => (
-        <Card key={job.id} className="overflow-hidden bg-[#1E1E20] border-white/10 text-white">
-            <div className="p-6">
-                <div className="flex justify-between items-start mb-2 gap-4">
-                    <div className="space-y-1">
-                        <div className="flex gap-2 mb-2">
-                            <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
-                                {getCustomerStatus(job)}
-                            </Badge>
+    const renderJobCard = (job: any) => {
+        // Multi-visit rendering for jobs with CLEANING or SPECIALIST items
+        if (job.visits && job.visits.length > 1) {
+            return (
+                <div key={job.id} className="space-y-3">
+                    {/* Job Header */}
+                    <div className="bg-[#1E1E20] border border-white/10 rounded-lg p-4">
+                        <div className="flex justify-between items-start gap-4">
+                            <div className="space-y-1">
+                                <div className="flex gap-2 mb-2">
+                                    <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
+                                        {getCustomerStatus(job)}
+                                    </Badge>
+                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
+                                        {job.visits.length} Visits
+                                    </Badge>
+                                </div>
+                                <h3 className="font-bold text-lg text-white">{job.category}</h3>
+                                <p className="font-medium text-white/80">{job.description}</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="font-bold text-xl text-white">£{job.fixedPrice}</div>
+                                <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                                {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
+                                    <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
+                                        Cancel
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        <h3 className="font-bold text-lg">{job.category}</h3>
-                        <p className="font-medium text-white/80">{job.description}</p>
                     </div>
-                    <div className="text-right">
-                        <div className="font-bold text-lg">£{job.fixedPrice}</div>
-                        <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
-                        {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
-                            <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
-                                Cancel
-                            </Button>
-                        )}
-                        {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && !job.customerReview && (
-                            <Button size="sm" variant="ghost" className="mt-2 text-blue-400" onClick={() => setReviewDialog({ open: true, jobId: job.id })}>
-                                Review Service
-                            </Button>
-                        )}
-                    </div>
+
+                    {/* Individual Visit Cards */}
+                    {job.visits.map((visit: any, idx: number) => (
+                        <Card key={visit.id} className="overflow-hidden bg-[#1A1A1C] border-l-4 border-l-blue-500 border-white/10 text-white ml-4">
+                            <div className="p-5">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="space-y-2 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono text-xs">
+                                                Visit {idx + 1}
+                                            </Badge>
+                                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-mono text-xs">
+                                                {visit.item_class} • {visit.tier}
+                                            </Badge>
+                                        </div>
+                                        {visit.scopeSummary && (
+                                            <div className="text-sm space-y-1 bg-black/20 rounded-lg p-3 mt-2">
+                                                <div className="flex gap-2">
+                                                    <span className="text-gray-500 font-semibold min-w-[70px]">Includes:</span>
+                                                    <span className="text-gray-300">{visit.scopeSummary.includes_text}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <span className="text-gray-500 font-semibold min-w-[70px]">Excludes:</span>
+                                                    <span className="text-gray-300">{visit.scopeSummary.excludes_text}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-right ml-4">
+                                        <div className="font-bold text-lg text-white">£{visit.price?.toFixed(2) || '0.00'}</div>
+                                        <div className="text-xs text-gray-500 mt-1">{visit.status || 'PENDING'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
                 </div>
-                {/* Provider Info */}
-                {job.provider && (
-                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 font-bold">
-                            {job.provider.name.charAt(0)}
+            );
+        }
+
+        // Standard single-visit rendering
+        return (
+            <Card key={job.id} className="overflow-hidden bg-[#1E1E20] border-white/10 text-white">
+                <div className="p-6">
+                    <div className="flex justify-between items-start mb-2 gap-4">
+                        <div className="space-y-1">
+                            <div className="flex gap-2 mb-2">
+                                <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
+                                    {getCustomerStatus(job)}
+                                </Badge>
+                            </div>
+                            <h3 className="font-bold text-lg">{job.category}</h3>
+                            <p className="font-medium text-white/80">{job.description}</p>
                         </div>
-                        <div>
-                            <div className="font-semibold">{job.provider.name}</div>
-                            <div className="text-xs text-blue-400">Verified Pro</div>
+                        <div className="text-right">
+                            <div className="font-bold text-lg">£{job.fixedPrice}</div>
+                            <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
+                            {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
+                                <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
+                                    Cancel
+                                </Button>
+                            )}
+                            {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && !job.customerReview && (
+                                <Button size="sm" variant="ghost" className="mt-2 text-blue-400" onClick={() => setReviewDialog({ open: true, jobId: job.id })}>
+                                    Review Service
+                                </Button>
+                            )}
                         </div>
                     </div>
-                )}
-            </div>
-        </Card>
-    );
+                    {/* Provider Info */}
+                    {job.provider && (
+                        <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 font-bold">
+                                {job.provider.name.charAt(0)}
+                            </div>
+                            <div>
+                                <div className="font-semibold">{job.provider.name}</div>
+                                <div className="text-xs text-blue-400">Verified Pro</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Card>
+        );
+    };
 
     const renderContent = () => {
         if (step === 'SCOPE_LOCK' && activeJob) {
