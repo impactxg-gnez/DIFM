@@ -19,8 +19,9 @@ import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
-    // Enable onboarding if provider hasn't set up capabilities or compliance
-    const [showOnboarding, setShowOnboarding] = useState(!user.capabilities || !user.complianceConfirmed);
+    // Enable onboarding only if provider hasn't set up capabilities
+    // If capabilities are set (by admin), allow skipping KYC/compliance
+    const [showOnboarding, setShowOnboarding] = useState(!user.capabilities);
 
     // API automatically filters for provider's category and dispatch radius
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });

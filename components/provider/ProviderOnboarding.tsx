@@ -310,7 +310,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                     </div>
 
                     <div className="flex justify-end gap-3">
-                        <Button variant="outline" onClick={() => setStep('capabilities')}>Back</Button>
+                        {!hasCapabilities && <Button variant="outline" onClick={() => setStep('capabilities')}>Back</Button>}
                         <Button variant="outline" onClick={async () => {
                             // Skip documents and mark compliance if not already set
                             if (!user.complianceConfirmed) {
