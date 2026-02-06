@@ -187,7 +187,6 @@ export async function GET(request: Request) {
             include: {
                 customer: { select: { name: true } },
                 provider: { select: { id: true, name: true, latitude: true, longitude: true, providerType: true, complianceConfirmed: true } },
-                items: true,
                 visits: true,
                 stateChanges: { orderBy: { createdAt: 'asc' } },
                 priceOverrides: { orderBy: { createdAt: 'desc' } },

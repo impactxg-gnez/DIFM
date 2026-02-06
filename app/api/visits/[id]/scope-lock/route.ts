@@ -133,9 +133,15 @@ export async function POST(
     // After transaction: Dispatch job to providers if all visits are locked
     if (result.allLocked && result.jobStatus === 'ASSIGNING') {
       try {
-        await dispatchJob(result.jobId);
+        console.log(`[Dispatch] Triggering dispatch for job ${result.jobId}`);
+        const offeredToId = await dispatchJob(result.jobId);
+        if (offeredToId) {
+          console.log(`[Dispatch] Job ${result.jobId} offered to provider ${offeredToId}`);
+        } else {
+          console.warn(`[Dispatch] No eligible providers found for job ${result.jobId}`);
+        }
       } catch (dispatchError) {
-        console.error('Dispatch error after scope lock:', dispatchError);
+        console.error('[Dispatch] Error after scope lock:', dispatchError);
         // Don't fail the scope lock if dispatch fails - job is still in ASSIGNING and can be dispatched later
       }
     }

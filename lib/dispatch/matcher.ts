@@ -151,7 +151,9 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
 
   const matches = await findEligibleProviders(jobId);
   const jAny = job as any;
+  console.log(`[Dispatch] Job ${jobId} (category: ${job.category}, requiredCapability: ${job.requiredCapability}) found ${matches.length} eligible providers`);
   if (matches.length === 0) {
+    console.warn(`[Dispatch] No matches for job ${jobId} - category: ${job.category}, requiredCapability: ${job.requiredCapability}`);
     // Reset if no matches left or none found
     if (jAny.offeredToId) {
       await prisma.job.update({
@@ -181,14 +183,17 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
   }
 
   const nextMatch = matches[nextIndex];
+  console.log(`[Dispatch] Offering job ${jobId} to provider ${nextMatch.providerId} (${nextMatch.matchReason})`);
 
-  await prisma.job.update({
+  const updated = await prisma.job.update({
     where: { id: jobId },
     data: {
       offeredToId: nextMatch.providerId,
       offeredAt: now,
     }
   });
+
+  console.log(`[Dispatch] Job ${jobId} updated - offeredToId: ${updated.offeredToId}, offeredAt: ${updated.offeredAt}`);
 
   return nextMatch.providerId;
 }
