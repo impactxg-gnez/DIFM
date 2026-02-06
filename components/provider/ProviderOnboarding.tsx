@@ -17,7 +17,11 @@ interface ProviderOnboardingProps {
 }
 
 export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps) {
-    const [step, setStep] = useState<'profile' | 'capabilities' | 'documents'>('profile');
+    // If capabilities are already set (by admin), skip directly to documents or complete
+    const hasCapabilities = user.capabilities && user.capabilities.split(',').filter(Boolean).length > 0;
+    const initialStep = hasCapabilities ? 'documents' : 'profile';
+    
+    const [step, setStep] = useState<'profile' | 'capabilities' | 'documents'>(initialStep);
     const [providerType, setProviderType] = useState<string>(user.providerType || 'HANDYMAN');
     const [categories, setCategories] = useState<string[]>(user.categories?.split(',').filter(Boolean) || []);
     const [capabilities, setCapabilities] = useState<string[]>(user.capabilities?.split(',').filter(Boolean) || []);
