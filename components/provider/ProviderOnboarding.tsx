@@ -32,6 +32,22 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
     const [insuranceUrl, setInsuranceUrl] = useState('');
 
     const { data: documents, mutate: mutateDocuments } = useSWR('/api/provider/documents', fetcher);
+    
+    // Auto-skip KYC if capabilities are set by admin
+    useEffect(() => {
+        if (hasCapabilities && !user.complianceConfirmed) {
+            // Auto-mark compliance as confirmed if capabilities are admin-assigned
+            fetch('/api/provider/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ complianceConfirmed: true })
+            }).catch(e => console.error('Auto-confirm compliance error', e));
+            // Skip directly to complete if everything is set
+            if (user.providerType && user.categories) {
+                setTimeout(() => onComplete(), 100);
+            }
+        }
+    }, [hasCapabilities, user.complianceConfirmed, user.providerType, user.categories, onComplete]);
 
     const handleSaveProfile = async () => {
         setIsSaving(true);
