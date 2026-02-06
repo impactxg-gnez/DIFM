@@ -44,6 +44,11 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       isOnline: true, // Only online providers
     }
   });
+  
+  console.log(`[Dispatch] Found ${activeProviders.length} active online providers for job ${jobId}`);
+  if (activeProviders.length === 0) {
+    console.warn(`[Dispatch] No active online providers available`);
+  }
 
   const matches: JobMatchResult[] = [];
 
@@ -133,6 +138,8 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
             providerType: 'SPECIALIST',
             matchReason: `Specialist - ${job.category}`
           });
+        } else {
+          console.log(`[Dispatch] Specialist ${specialist.id} (categories: ${specialist.categories}) does not match job category: ${job.category}`);
         }
       }
     }
