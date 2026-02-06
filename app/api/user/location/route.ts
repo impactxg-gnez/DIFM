@@ -18,11 +18,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing coordinates' }, { status: 400 });
         }
 
-        const user = await prisma.user.update({
+        // Fetch user first to check role
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+
+        // Update location and set providers online
+        const updated = await prisma.user.update({
             where: { id: userId },
             data: {
                 latitude: parseFloat(latitude),
-                longitude: parseFloat(longitude)
+                longitude: parseFloat(longitude),
+                // Set providers online when they update location
+                ...(user.role === 'PROVIDER' ? { isOnline: true } : {})
             }
         });
 
