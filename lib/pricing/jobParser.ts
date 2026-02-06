@@ -30,8 +30,10 @@ const KEYWORD_MAP: Record<string, string[]> = {
   'toilet_repair_simple': ['toilet', 'flush'],
   'socket_replace': ['socket', 'plug', 'switch', 'outlet'],
   'gas_cert_cp12': ['gas cert', 'cp12', 'safety cert', 'landlord'],
-  // Accept "clean" phrases directly (acceptance criteria) while avoiding substring false positives.
-  'eot_cleaning_1bed': ['cleaning', 'clean', 'clean my', 'apartment clean', 'end of tenancy', 'deep clean'],
+  // Regular apartment cleaning (shorter, not end of tenancy)
+  'apartment_cleaning_standard': ['clean my apartment', 'apartment clean', 'clean apartment', 'flat clean', 'clean my flat'],
+  // End of tenancy cleaning (longer, more thorough)
+  'eot_cleaning_1bed': ['end of tenancy', 'deep clean', 'eot clean'],
 };
 
 export function parseJobDescription(text: string, catalogue: CatalogueItem[]): ParseResult {

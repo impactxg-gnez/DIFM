@@ -126,6 +126,17 @@ const CATALOGUE_ITEMS = [
 
     // --- CLEANING (ISOLATED) ---
     {
+        job_item_id: 'apartment_cleaning_standard',
+        display_name: 'Apartment Cleaning',
+        item_class: 'CLEANING',
+        required_capability_tags: ['CLEANING'],
+        time_weight_minutes: 120,
+        allowed_addon: false,
+        uncertainty_prone: false,
+        uncertainty_handling: 'IGNORE',
+        risk_buffer_minutes: 0
+    },
+    {
         job_item_id: 'eot_cleaning_1bed',
         display_name: 'End of Tenancy Cleaning (1 Bed)',
         item_class: 'CLEANING',
