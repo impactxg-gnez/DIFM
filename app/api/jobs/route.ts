@@ -52,7 +52,7 @@ export async function POST(request: Request) {
                     isSimulation: isSimulation ?? false,
                     needsReview: pricing.confidence < 0.7,
                     isParsed: true,
-                    requiredCapability: pricing.visits[0]?.required_capability_tags_union.join(','),
+                    requiredCapability: pricing.visits[0]?.required_capability_tags.join(','),
                 },
             });
 
@@ -73,11 +73,11 @@ export async function POST(request: Request) {
                     data: {
                         jobId: createdJob.id,
                         item_class: v.item_class,
-                        primary_job_item_id: v.primary_job_item_id,
-                        addon_job_item_ids: v.addon_job_item_ids,
-                        required_capability_tags_union: v.required_capability_tags_union,
-                        base_minutes: v.base_minutes,
-                        effective_minutes: v.effective_minutes,
+                        primary_job_item_id: v.primary_job_item.job_item_id,
+                        addon_job_item_ids: v.addon_job_items.map((a) => a.job_item_id),
+                        required_capability_tags_union: v.required_capability_tags,
+                        base_minutes: v.total_minutes,
+                        effective_minutes: v.total_minutes,
                         tier: v.tier,
                         price: v.price,
                         status: 'DRAFT'
@@ -90,11 +90,17 @@ export async function POST(request: Request) {
             return createdJob;
         });
 
-        // Fetch job with visits for response
-        const jobWithVisits = await prisma.job.findUnique({
-            where: { id: job.id },
-            include: { visits: true } as any
+        // Fetch persisted visits to attach DB IDs (visit_id)
+        const persistedVisits = await (prisma as any).visit.findMany({
+            where: { jobId: job.id },
+            orderBy: { createdAt: 'asc' }
         });
+
+        // Attach visit_id to the pricing visits in order
+        const quoteVisits = pricing.visits.map((v, idx) => ({
+            ...v,
+            visit_id: persistedVisits[idx]?.id || ''
+        }));
 
         if (isSimulation) {
             await prisma.user.updateMany({
@@ -103,7 +109,11 @@ export async function POST(request: Request) {
             });
         }
 
-        return NextResponse.json(jobWithVisits);
+        // 🔒 V1 Contract: Visit-first pricing response (do not return job/price objects)
+        return NextResponse.json({
+            visits: quoteVisits,
+            total_price: pricing.totalPrice
+        });
 
 
     } catch (error) {

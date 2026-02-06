@@ -6,17 +6,16 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
 
 interface ScopeLockProps {
-    job: any;
+    visits: any[];
     onComplete: (visitId: string, answers: any) => void;
     onCancel: () => void;
 }
 
-export function ScopeLock({ job, onComplete, onCancel }: ScopeLockProps) {
+export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     const [currentVisitIndex, setCurrentVisitIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const visits = job.visits || [];
     const currentVisit = visits[currentVisitIndex];
 
     if (!currentVisit) return null;
@@ -40,7 +39,9 @@ export function ScopeLock({ job, onComplete, onCancel }: ScopeLockProps) {
             }
         ];
 
-        if (visit.primaryItemId.includes('tv')) {
+        const primaryId: string = visit?.primary_job_item?.job_item_id || '';
+
+        if (primaryId.includes('tv')) {
             questions.push({
                 id: 'bracket_provided',
                 text: 'Do you have the correct bracket and fixings for your wall type?',
@@ -48,7 +49,7 @@ export function ScopeLock({ job, onComplete, onCancel }: ScopeLockProps) {
             });
         }
 
-        if (visit.primaryItemId.includes('leak') || visit.primaryItemId.includes('toilet')) {
+        if (primaryId.includes('leak') || primaryId.includes('toilet')) {
             questions.push({
                 id: 'location',
                 text: 'Where is the issue located?',
@@ -88,7 +89,7 @@ export function ScopeLock({ job, onComplete, onCancel }: ScopeLockProps) {
                     <Badge className="bg-blue-600">Step 2: Scope Lock</Badge>
                     <h1 className="text-3xl font-bold text-white">Confirm Details</h1>
                     <p className="text-gray-400">
-                        Visit {currentVisitIndex + 1} of {visits.length}: {currentVisit.primaryItemId.replace(/_/g, ' ')}
+                        Visit {currentVisitIndex + 1} of {visits.length}: {currentVisit.primary_job_item?.display_name || currentVisit.primary_job_item?.job_item_id}
                     </p>
                 </div>
 

@@ -5,6 +5,18 @@ export interface ParseResult {
   confidence: number;
 }
 
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function keywordMatches(textLower: string, keywordLower: string) {
+  // If keyword is a phrase, do a direct includes.
+  if (keywordLower.includes(' ')) return textLower.includes(keywordLower);
+  // Otherwise, match as a whole word to avoid false positives (e.g. "art" in "apartment").
+  const re = new RegExp(`\\b${escapeRegExp(keywordLower)}\\b`, 'i');
+  return re.test(textLower);
+}
+
 // Simple V1 detection rules
 // In a real app this would be more sophisticated or fuzzy match against DB
 const KEYWORD_MAP: Record<string, string[]> = {
@@ -18,7 +30,8 @@ const KEYWORD_MAP: Record<string, string[]> = {
   'toilet_repair_simple': ['toilet', 'flush'],
   'socket_replace': ['socket', 'plug', 'switch', 'outlet'],
   'gas_cert_cp12': ['gas cert', 'cp12', 'safety cert', 'landlord'],
-  'eot_cleaning_1bed': ['cleaning', 'end of tenancy', 'deep clean'],
+  // Accept "clean" phrases directly (acceptance criteria) while avoiding substring false positives.
+  'eot_cleaning_1bed': ['cleaning', 'clean', 'clean my', 'apartment clean', 'end of tenancy', 'deep clean'],
 };
 
 export function parseJobDescription(text: string, catalogue: CatalogueItem[]): ParseResult {
@@ -41,7 +54,7 @@ export function parseJobDescription(text: string, catalogue: CatalogueItem[]): P
   for (const [id, keywords] of Object.entries(KEYWORD_MAP)) {
     if (id.startsWith('tv_mount')) continue; // Handled above
 
-    if (keywords.some(k => lower.includes(k))) {
+    if (keywords.some(k => keywordMatches(lower, k.toLowerCase()))) {
       // Validate against catalogue (only return valid IDs)
       if (catalogue.find(c => c.job_item_id === id)) {
         detectedIds.add(id);

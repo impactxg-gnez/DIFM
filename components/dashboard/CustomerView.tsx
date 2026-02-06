@@ -14,6 +14,8 @@ import { Plus, Star, LogOut, ArrowLeft, MapPin } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { LocationPicker } from './LocationPicker';
 import { HomeSearchInterface } from './HomeSearchInterface';
+import { VisitCard, type Visit } from '@/components/booking/VisitCard';
+import { TotalPrice } from '@/components/booking/TotalPrice';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -50,8 +52,9 @@ export function CustomerView({ user }: { user: any }) {
 
     const [activeTab, setActiveTab] = useState<'NEW_TASK' | 'STATUS' | 'HISTORY' | 'ACCOUNT'>('NEW_TASK');
     const [step, setStep] = useState<'LIST' | 'CREATE' | 'SCOPE_LOCK' | 'WAITING'>('LIST');
-    const [activeJobId, setActiveJobId] = useState<string | null>(null);
-    const [activeJob, setActiveJob] = useState<any>(null);
+    // 🔒 Visit-first state (no job/price assumptions)
+    const [visits, setVisits] = useState<Visit[]>([]);
+    const [totalPrice, setTotalPrice] = useState<number>(0);
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
@@ -108,8 +111,6 @@ export function CustomerView({ user }: { user: any }) {
         handleCreateJob({
             description: jobData.description,
             location: jobData.address || userLocation || 'Unknown Location',
-            category: 'HANDYMAN', // Default or derive
-            price: jobData.pricePrediction?.totalPrice || 0
         });
     };
 
@@ -119,15 +120,16 @@ export function CustomerView({ user }: { user: any }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...details,
+                    description: details.description,
+                    location: details.location,
                     latitude: userCoords?.lat || 51.5074, // Default to London if missing for now
                     longitude: userCoords?.lng || -0.1278,
                 }),
             });
             if (res.ok) {
-                const job = await res.json();
-                setActiveJob(job);
-                setActiveJobId(job.id);
+                const quote = await res.json();
+                setVisits(Array.isArray(quote.visits) ? quote.visits : []);
+                setTotalPrice(Number(quote.total_price || 0));
                 setStep('SCOPE_LOCK');
                 mutate();
             }
@@ -137,8 +139,8 @@ export function CustomerView({ user }: { user: any }) {
     };
 
     const handleCancelJob = async (jobId?: string) => {
-        const targetId = jobId || activeJobId;
-        if (!targetId) return;
+        const targetId = jobId;
+        if (!targetId) return; // legacy path: cancel requires jobId from list, not quote
         const confirmed = window.confirm('Cancel this job?');
         if (!confirmed) return;
 
@@ -149,7 +151,8 @@ export function CustomerView({ user }: { user: any }) {
         });
 
         setStep('LIST');
-        setActiveJobId(null);
+        setVisits([]);
+        setTotalPrice(0);
         mutate();
     };
 
@@ -238,138 +241,74 @@ export function CustomerView({ user }: { user: any }) {
         ['PAID_OUT', 'CLOSED', 'CANCELLED_FREE', 'CANCELLED_CHARGED'].includes(j.status)
     ) : [];
 
-    const renderJobCard = (job: any) => {
-        // Multi-visit rendering for jobs with CLEANING or SPECIALIST items
-        if (job.visits && job.visits.length > 1) {
-            return (
-                <div key={job.id} className="space-y-3">
-                    {/* Job Header */}
-                    <div className="bg-[#1E1E20] border border-white/10 rounded-lg p-4">
-                        <div className="flex justify-between items-start gap-4">
-                            <div className="space-y-1">
-                                <div className="flex gap-2 mb-2">
-                                    <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
-                                        {getCustomerStatus(job)}
-                                    </Badge>
-                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
-                                        {job.visits.length} Visits
-                                    </Badge>
-                                </div>
-                                <h3 className="font-bold text-lg text-white">{job.category}</h3>
-                                <p className="font-medium text-white/80">{job.description}</p>
-                            </div>
-                            <div className="text-right">
-                                <div className="font-bold text-xl text-white">£{job.fixedPrice}</div>
-                                <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
-                                {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
-                                    <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
-                                        Cancel
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+    const dbVisitToUiVisit = (v: any): Visit => {
+        const required = Array.isArray(v.required_capability_tags_union) ? v.required_capability_tags_union : [];
+        const visitTypeLabel =
+            v.item_class === 'CLEANING' ? 'Cleaning' :
+                v.item_class === 'SPECIALIST' ? (required.includes('PLUMBING') ? 'Plumbing' : required.includes('ELECTRICAL') ? 'Electrical' : 'Specialist') :
+                    (required.includes('PLUMBING') ? 'Plumbing' : required.includes('ELECTRICAL') ? 'Electrical' : 'Handyman');
 
-                    {/* Individual Visit Cards */}
-                    {job.visits.map((visit: any, idx: number) => (
-                        <Card key={visit.id} className="overflow-hidden bg-[#1A1A1C] border-l-4 border-l-blue-500 border-white/10 text-white ml-4">
-                            <div className="p-5">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className="space-y-2 flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono text-xs">
-                                                Visit {idx + 1}
-                                            </Badge>
-                                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-mono text-xs">
-                                                {visit.item_class} • {visit.tier}
-                                            </Badge>
-                                        </div>
-                                        {visit.scopeSummary && (
-                                            <div className="text-sm space-y-1 bg-black/20 rounded-lg p-3 mt-2">
-                                                <div className="flex gap-2">
-                                                    <span className="text-gray-500 font-semibold min-w-[70px]">Includes:</span>
-                                                    <span className="text-gray-300">{visit.scopeSummary.includes_text}</span>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <span className="text-gray-500 font-semibold min-w-[70px]">Excludes:</span>
-                                                    <span className="text-gray-300">{visit.scopeSummary.excludes_text}</span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="text-right ml-4">
-                                        <div className="font-bold text-lg text-white">£{visit.price?.toFixed(2) || '0.00'}</div>
-                                        <div className="text-xs text-gray-500 mt-1">{visit.status || 'PENDING'}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </Card>
+        return {
+            visit_id: v.id,
+            item_class: v.item_class,
+            visit_type_label: visitTypeLabel,
+            primary_job_item: {
+                job_item_id: v.primary_job_item_id,
+                display_name: v.primary_job_item_id,
+                time_weight_minutes: v.base_minutes || 0,
+            },
+            addon_job_items: (v.addon_job_item_ids || []).map((id: string) => ({
+                job_item_id: id,
+                display_name: id,
+                time_weight_minutes: 0,
+            })),
+            required_capability_tags: required,
+            total_minutes: v.effective_minutes || v.base_minutes || 0,
+            tier: v.tier,
+            price: v.price || 0,
+        };
+    };
+
+    const renderVisitListFromJobs = (jobsList: any[]) => {
+        const allVisits: Visit[] = jobsList
+            .flatMap((j: any) => Array.isArray(j.visits) ? j.visits : [])
+            .map(dbVisitToUiVisit);
+
+        const total = jobsList.reduce((sum: number, j: any) => sum + Number(j.fixedPrice || 0), 0);
+
+        return (
+            <div className="space-y-4">
+                <div className="flex gap-2 mb-2">
+                    <Badge variant="secondary">Visits</Badge>
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
+                        {allVisits.length} VisitCards
+                    </Badge>
+                </div>
+                <div className="grid gap-4">
+                    {allVisits.map((v, idx) => (
+                        <VisitCard key={v.visit_id || `${v.primary_job_item.job_item_id}-${idx}`} visit={v} index={idx} />
                     ))}
                 </div>
-            );
-        }
-
-        // Standard single-visit rendering
-        return (
-            <Card key={job.id} className="overflow-hidden bg-[#1E1E20] border-white/10 text-white">
-                <div className="p-6">
-                    <div className="flex justify-between items-start mb-2 gap-4">
-                        <div className="space-y-1">
-                            <div className="flex gap-2 mb-2">
-                                <Badge variant={['COMPLETED', 'CLOSED'].includes(job.status) ? 'default' : 'secondary'}>
-                                    {getCustomerStatus(job)}
-                                </Badge>
-                            </div>
-                            <h3 className="font-bold text-lg">{job.category}</h3>
-                            <p className="font-medium text-white/80">{job.description}</p>
-                        </div>
-                        <div className="text-right">
-                            <div className="font-bold text-lg">£{job.fixedPrice}</div>
-                            <div className="text-sm text-gray-400">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</div>
-                            {!['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CLOSED', 'COMPLETED', 'DISPUTED'].includes(job.status) && (
-                                <Button size="sm" variant="outline" className="mt-2 text-red-400 border-red-900/50 hover:bg-red-900/20" onClick={() => handleCancelJob(job.id)}>
-                                    Cancel
-                                </Button>
-                            )}
-                            {(job.status === 'COMPLETED' || job.status === 'CUSTOMER_REVIEWED') && !job.customerReview && (
-                                <Button size="sm" variant="ghost" className="mt-2 text-blue-400" onClick={() => setReviewDialog({ open: true, jobId: job.id })}>
-                                    Review Service
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                    {/* Provider Info */}
-                    {job.provider && (
-                        <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 font-bold">
-                                {job.provider.name.charAt(0)}
-                            </div>
-                            <div>
-                                <div className="font-semibold">{job.provider.name}</div>
-                                <div className="text-xs text-blue-400">Verified Pro</div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </Card>
+                <TotalPrice amount={total} />
+            </div>
         );
     };
 
     const renderContent = () => {
-        if (step === 'SCOPE_LOCK' && activeJob) {
+        if (step === 'SCOPE_LOCK' && visits.length > 0) {
             return (
                 <ScopeLock
-                    job={activeJob}
+                    visits={visits}
                     onComplete={async (visitId, answers) => {
                         try {
-                            const res = await fetch(`/api/jobs/${activeJobId}/scope-lock`, {
+                            const res = await fetch(`/api/visits/${visitId}/scope-lock`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ visitId, answers })
+                                body: JSON.stringify({ answers })
                             });
                             if (res.ok) {
+                                // After scope-lock, we can show "waiting" or return to status list.
                                 setStep('WAITING');
-                                setActiveTab('STATUS');
                                 mutate();
                             }
                         } catch (e) {
@@ -377,23 +316,31 @@ export function CustomerView({ user }: { user: any }) {
                         }
                     }}
                     onCancel={() => {
-                        handleCancelJob();
                         setStep('LIST');
+                        setVisits([]);
+                        setTotalPrice(0);
                     }}
                 />
             );
         }
 
-        if (step === 'WAITING' && activeJobId && activeTab === 'STATUS') {
+        if (step === 'WAITING') {
             return (
-                <DispatchTimer
-                    jobId={activeJobId}
-                    onCompleted={() => {
-                        setStep('LIST');
-                        mutate();
-                    }}
-                    onCancel={() => handleCancelJob()}
-                />
+                <div className="pt-10 px-6 pb-24 text-white space-y-4">
+                    <h2 className="text-2xl font-bold">Your Visits</h2>
+                    <div className="space-y-3">
+                        {visits.map((v, idx) => (
+                            <VisitCard key={v.visit_id || `${v.primary_job_item.job_item_id}-${idx}`} visit={v} index={idx} />
+                        ))}
+                    </div>
+                    <TotalPrice amount={totalPrice} />
+                    <p className="text-sm text-gray-400">
+                        Scope locked. We’re now finding the right pro(s) for each visit.
+                    </p>
+                    <Button variant="outline" onClick={() => { setStep('LIST'); setActiveTab('STATUS'); }}>
+                        View status
+                    </Button>
+                </div>
             );
         }
 
@@ -405,8 +352,6 @@ export function CustomerView({ user }: { user: any }) {
                             onBookNow={(data) => handleCreateJob({
                                 description: data.description,
                                 location: data.address || userLocation || 'Unknown',
-                                category: 'HANDYMAN',
-                                price: data.pricePrediction?.totalPrice || 0
                             })}
                             initialLocation={userLocation}
                         />
@@ -422,7 +367,7 @@ export function CustomerView({ user }: { user: any }) {
                                 No active jobs.
                             </div>
                         ) : (
-                            <div className="grid gap-4">{activeJobs.map(renderJobCard)}</div>
+                            renderVisitListFromJobs(activeJobs)
                         )}
                     </div>
                 );
@@ -436,7 +381,7 @@ export function CustomerView({ user }: { user: any }) {
                                 No past jobs.
                             </div>
                         ) : (
-                            <div className="grid gap-4">{historyJobs.map(renderJobCard)}</div>
+                            renderVisitListFromJobs(historyJobs)
                         )}
                     </div>
                 );

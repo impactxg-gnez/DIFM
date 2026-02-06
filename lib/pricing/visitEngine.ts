@@ -29,21 +29,32 @@ export const TIER_PRICES: Record<string, number> = {
 };
 
 export const TIER_ITEM_CAPS: Record<string, number> = {
-    H1: 1,
+    // Allow small add-ons to be bundled into a single H1 visit (per DIFM V1 acceptance criteria)
+    H1: 2,
     H2: 2,
     H3: 4,
 };
 
+// V1 Quote Contract (Visit is the primary unit)
 export interface GeneratedVisit {
-    item_class: string;
-    primary_job_item_id: string;
-    addon_job_item_ids: string[];
-    tier: string;
-    base_minutes: number;
-    effective_minutes: number;
+    // visit_id is assigned when persisted; for quote generation we keep it empty.
+    visit_id: string;
+    item_class: "STANDARD" | "CLEANING" | "SPECIALIST";
+    visit_type_label: string; // e.g. "Cleaning", "Handyman", "Plumbing"
+    primary_job_item: {
+        job_item_id: string;
+        display_name: string;
+        time_weight_minutes: number;
+    };
+    addon_job_items: Array<{
+        job_item_id: string;
+        display_name: string;
+        time_weight_minutes: number;
+    }>;
+    required_capability_tags: string[];
+    total_minutes: number;
+    tier: "H1" | "H2" | "H3";
     price: number;
-    required_capability_tags_union: string[];
-    items: CatalogueItem[]; // For reference
 }
 
 export function calculateTier(minutes: number): string {
@@ -55,6 +66,22 @@ export function calculateTier(minutes: number): string {
 
 export function calculatePrice(tier: string, itemClass: string): number {
     return TIER_PRICES[tier] || 0;
+}
+
+function inferVisitTypeLabel(itemClass: GeneratedVisit['item_class'], capabilityTags: string[]): string {
+    if (itemClass === 'CLEANING') return 'Cleaning';
+    if (itemClass === 'SPECIALIST') {
+        // If we have more specific tags, prefer those.
+        if (capabilityTags.includes('PLUMBING')) return 'Plumbing';
+        if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
+        if (capabilityTags.includes('PAINTER')) return 'Painting';
+        return 'Specialist';
+    }
+    // STANDARD (default)
+    if (capabilityTags.includes('PLUMBING')) return 'Plumbing';
+    if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
+    if (capabilityTags.includes('PAINTER')) return 'Painting';
+    return 'Handyman';
 }
 
 /**
@@ -72,12 +99,20 @@ export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
 
     // 1. Cleaning: Isolated, one visit per item
     for (const item of cleaning) {
-        visits.push(createSingleItemVisit(item));
+        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
+            visits.push(...splitLargeItem(item));
+        } else {
+            visits.push(createSingleItemVisit(item));
+        }
     }
 
     // 2. Specialist: Isolated, one visit per item
     for (const item of specialist) {
-        visits.push(createSingleItemVisit(item));
+        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
+            visits.push(...splitLargeItem(item));
+        } else {
+            visits.push(createSingleItemVisit(item));
+        }
     }
 
     // 3. Standard: Bundle
@@ -88,16 +123,22 @@ export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
 
 function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
     const tier = calculateTier(item.time_weight_minutes);
+    const requiredCaps = item.required_capability_tags || [];
+    const visitTypeLabel = inferVisitTypeLabel(item.item_class as any, requiredCaps);
     return {
-        item_class: item.item_class,
-        primary_job_item_id: item.job_item_id,
-        addon_job_item_ids: [],
-        tier,
-        base_minutes: item.time_weight_minutes,
-        effective_minutes: item.time_weight_minutes,
+        visit_id: '',
+        item_class: item.item_class as any,
+        visit_type_label: visitTypeLabel,
+        primary_job_item: {
+            job_item_id: item.job_item_id,
+            display_name: item.display_name,
+            time_weight_minutes: item.time_weight_minutes,
+        },
+        addon_job_items: [],
+        required_capability_tags: requiredCaps,
+        total_minutes: item.time_weight_minutes,
+        tier: tier as any,
         price: calculatePrice(tier, item.item_class),
-        required_capability_tags_union: item.required_capability_tags,
-        items: [item]
     };
 }
 
@@ -133,6 +174,8 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
     // For items >150min, create multiple visits
     const visits: GeneratedVisit[] = [];
     const numVisits = Math.ceil(item.time_weight_minutes / TIER_THRESHOLDS.H3);
+    const requiredCaps = item.required_capability_tags || [];
+    const visitTypeLabel = inferVisitTypeLabel(item.item_class as any, requiredCaps);
 
     for (let i = 0; i < numVisits; i++) {
         const remainingMinutes = item.time_weight_minutes - (i * TIER_THRESHOLDS.H3);
@@ -140,15 +183,19 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
 
         const tier = calculateTier(visitMinutes);
         const visit: GeneratedVisit = {
-            item_class: item.item_class,
-            primary_job_item_id: item.job_item_id,
-            addon_job_item_ids: [],
-            tier,
-            base_minutes: visitMinutes,
-            effective_minutes: visitMinutes,
+            visit_id: '',
+            item_class: item.item_class as any,
+            visit_type_label: visitTypeLabel,
+            primary_job_item: {
+                job_item_id: item.job_item_id,
+                display_name: item.display_name,
+                time_weight_minutes: item.time_weight_minutes,
+            },
+            addon_job_items: [],
+            required_capability_tags: requiredCaps,
+            total_minutes: visitMinutes,
+            tier: tier as any,
             price: calculatePrice(tier, item.item_class),
-            required_capability_tags_union: item.required_capability_tags,
-            items: [item]
         };
         visits.push(visit);
     }
@@ -162,18 +209,18 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
 
     // Capability compatibility check
     const itemCaps = new Set(item.required_capability_tags);
-    const visitCaps = new Set(visit.required_capability_tags_union);
+    const visitCaps = new Set(visit.required_capability_tags);
     const allCaps = new Set([...itemCaps, ...visitCaps]);
 
     // Check if a single provider can handle all capabilities
     if (!canProviderHandleAll(allCaps)) return false;
 
-    const newMinutes = visit.effective_minutes + item.time_weight_minutes;
+    const newMinutes = visit.total_minutes + item.time_weight_minutes;
     // Cap at 150 (H3 max)
     if (newMinutes > TIER_THRESHOLDS.H3) return false;
 
     const newTier = calculateTier(newMinutes);
-    const newCount = 1 + visit.addon_job_item_ids.length + 1; // current Items + this one
+    const newCount = 1 + visit.addon_job_items.length + 1; // current Items + this one
 
     if (newCount > TIER_ITEM_CAPS[newTier]) return false;
 
@@ -200,13 +247,16 @@ function canProviderHandleAll(caps: Set<string>): boolean {
 }
 
 function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
-    visit.addon_job_item_ids.push(item.job_item_id);
-    visit.items.push(item);
-    visit.base_minutes += item.time_weight_minutes;
-    visit.effective_minutes += item.time_weight_minutes;
-    visit.required_capability_tags_union = Array.from(new Set([...visit.required_capability_tags_union, ...item.required_capability_tags]));
+    visit.addon_job_items.push({
+        job_item_id: item.job_item_id,
+        display_name: item.display_name,
+        time_weight_minutes: item.time_weight_minutes,
+    });
+    visit.total_minutes += item.time_weight_minutes;
+    visit.required_capability_tags = Array.from(new Set([...visit.required_capability_tags, ...(item.required_capability_tags || [])]));
+    visit.visit_type_label = inferVisitTypeLabel(visit.item_class, visit.required_capability_tags);
 
     // Recalc tier/price
-    visit.tier = calculateTier(visit.effective_minutes);
+    visit.tier = calculateTier(visit.total_minutes) as any;
     visit.price = calculatePrice(visit.tier, visit.item_class);
 }

@@ -37,9 +37,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             primaryCategory = 'SPECIALIST';
         } else {
             // STANDARD
-            if (v.required_capability_tags_union.includes('PLUMBING')) primaryCategory = 'PLUMBER';
-            else if (v.required_capability_tags_union.includes('ELECTRICAL')) primaryCategory = 'ELECTRICIAN';
-            else if (v.required_capability_tags_union.includes('PAINTER')) primaryCategory = 'PAINTER';
+      if (v.required_capability_tags.includes('PLUMBING')) primaryCategory = 'PLUMBER';
+      else if (v.required_capability_tags.includes('ELECTRICAL')) primaryCategory = 'ELECTRICIAN';
+      else if (v.required_capability_tags.includes('PAINTER')) primaryCategory = 'PAINTER';
         }
     }
 
