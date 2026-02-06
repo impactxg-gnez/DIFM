@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server';
-import { calculateJobPrice } from '@/lib/pricing/calculator';
-import { ServiceCategory } from '@/lib/constants';
+import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { category, description, enableParsing = true } = body;
-        const resolvedCategory = (category as ServiceCategory) || 'HANDYMAN';
+        const { description } = body;
 
         if (!description) {
             return NextResponse.json({ error: 'Missing description' }, { status: 400 });
         }
 
-        const result = await calculateJobPrice(resolvedCategory, description, enableParsing);
-        return NextResponse.json(result);
+        // V1 Pricing Engine returns visit-first format
+        const pricing = await calculateV1Pricing(description);
+        
+        // Return visit-first contract: { visits: Visit[], total_price: number }
+        return NextResponse.json({
+            visits: pricing.visits,
+            total_price: pricing.totalPrice
+        });
     } catch (error) {
         console.error('Price preview error', error);
         return NextResponse.json({ error: 'Unable to calculate price' }, { status: 500 });

@@ -238,14 +238,31 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex flex-col max-w-[70%]">
                                     <span className="text-[10px] font-bold text-black/70 uppercase tracking-wider">Upfront Price</span>
-                                    <span className="text-[11px] font-semibold text-black/80 mt-1 truncate">
-                                        {isPricingLoading ? 'Calculating...' : (pricePreview?.items?.[0]?.description || description || 'Custom Job')}
+                                    <span className="text-[11px] font-semibold text-black/80 mt-1">
+                                        {isPricingLoading ? 'Calculating...' : (
+                                            pricePreview?.visits?.length === 1 
+                                                ? (pricePreview.visits[0].primary_job_item?.display_name || description || 'Custom Job')
+                                                : pricePreview?.visits?.length > 1
+                                                    ? (
+                                                        <span>
+                                                            {pricePreview.visits.length} visits:
+                                                            <br />
+                                                            {pricePreview.visits.map((v: any, idx: number) => (
+                                                                <span key={idx}>
+                                                                    • {v.visit_type_label || 'Visit'}
+                                                                    {idx < pricePreview.visits.length - 1 ? <br /> : ''}
+                                                                </span>
+                                                            ))}
+                                                        </span>
+                                                    )
+                                                    : (description || 'Custom Job')
+                                        )}
                                     </span>
                                     <span className="text-[10px] text-black/50">Price locked when you book</span>
                                 </div>
                                 <div className="text-right flex flex-col items-end shrink-0">
                                     <span className="text-[#007AFF] font-bold text-sm">
-                                        {isPricingLoading ? '...' : `£${pricePreview?.totalPrice?.toFixed(2) || '0.00'}`}
+                                        {isPricingLoading ? '...' : `£${pricePreview?.total_price?.toFixed(2) || '0.00'}`}
                                     </span>
                                     {!isPricingLoading && <span className="text-[#007AFF] text-[9px] font-bold cursor-pointer hover:underline">Change &gt;</span>}
                                 </div>
