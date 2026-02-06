@@ -52,14 +52,24 @@ export function parseJobDescription(text: string, catalogue: CatalogueItem[]): P
     }
   }
 
-  // Iterate other rules
-  for (const [id, keywords] of Object.entries(KEYWORD_MAP)) {
+  // Iterate other rules - prioritize longer/more specific phrases first
+  // Sort by keyword length (longest first) to match specific phrases before generic ones
+  const sortedEntries = Object.entries(KEYWORD_MAP).sort((a, b) => {
+    const aMaxLen = Math.max(...a[1].map(k => k.length));
+    const bMaxLen = Math.max(...b[1].map(k => k.length));
+    return bMaxLen - aMaxLen; // Longer keywords first
+  });
+
+  for (const [id, keywords] of sortedEntries) {
     if (id.startsWith('tv_mount')) continue; // Handled above
 
     if (keywords.some(k => keywordMatches(lower, k.toLowerCase()))) {
       // Validate against catalogue (only return valid IDs)
-      if (catalogue.find(c => c.job_item_id === id)) {
+      const catalogueItem = catalogue.find(c => c.job_item_id === id);
+      if (catalogueItem) {
         detectedIds.add(id);
+      } else {
+        console.warn(`[JobParser] Keyword matched ${id} but item not found in catalogue`);
       }
     }
   }
