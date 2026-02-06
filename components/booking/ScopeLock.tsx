@@ -72,7 +72,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         // If last visit, submit
         if (currentVisitIndex === visits.length - 1) {
             setIsSubmitting(true);
-            await onComplete(currentVisit.id, answers);
+            const visitId = currentVisit.visit_id || currentVisit.id;
+            await onComplete(visitId, answers);
             setIsSubmitting(false);
         } else {
             setCurrentVisitIndex(prev => prev + 1);
