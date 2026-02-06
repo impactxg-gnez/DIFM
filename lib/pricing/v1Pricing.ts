@@ -8,9 +8,46 @@ export interface V1PricingResult {
     confidence: number;
     primaryCategory: string;
     warnings: string[];
+    isOutOfScope?: boolean; // True if service is not supported
+    suggestedServices?: string[]; // Suggested alternative services
 }
 
+// Out-of-scope keywords that indicate services we don't offer
+const OUT_OF_SCOPE_KEYWORDS = [
+    'walk', 'dog', 'pet', 'animal', 'babysit', 'childcare', 'deliver', 
+    'delivery', 'food', 'grocery', 'shopping', 'drive', 'taxi', 'uber',
+    'tutor', 'teach', 'lesson', 'class', 'coach', 'personal trainer',
+    'massage', 'therapy', 'counseling', 'legal', 'accountant', 'tax',
+    'gardening', 'landscaping', 'mow', 'lawn', 'snow', 'shovel',
+    'pet sitting', 'dog walking', 'cat sitting', 'pet care'
+];
+
+// Supported service categories for suggestions
+const SUPPORTED_SERVICES = [
+    'Plumbing', 'Electrical', 'Handyman', 'Cleaning', 
+    'Painting', 'TV Mounting', 'Carpentry', 'General Repairs'
+];
+
 export async function calculateV1Pricing(description: string): Promise<V1PricingResult> {
+    const lower = description.toLowerCase();
+    
+    // Check for out-of-scope services
+    const isOutOfScope = OUT_OF_SCOPE_KEYWORDS.some(keyword => 
+        lower.includes(keyword.toLowerCase())
+    );
+    
+    if (isOutOfScope) {
+        return {
+            visits: [],
+            totalPrice: 0,
+            confidence: 0,
+            primaryCategory: 'HANDYMAN',
+            warnings: ['OUT_OF_SCOPE'],
+            isOutOfScope: true,
+            suggestedServices: SUPPORTED_SERVICES
+        };
+    }
+
     // 1. Get Catalogue
     const catalogue = await getCatalogue();
 
@@ -24,11 +61,12 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
 
     // 4. Fallback: If nothing detected, try intelligent category inference
     if (detectedItems.length === 0) {
-        const lower = description.toLowerCase();
-        // Plumbing-related keywords
+        // Plumbing-related keywords (including drain/unclog)
         if (lower.includes('pipe') || lower.includes('plumb') || lower.includes('tap') || 
             lower.includes('faucet') || lower.includes('sink') || lower.includes('water') ||
-            lower.includes('leak') || lower.includes('drip') || lower.includes('fixture')) {
+            lower.includes('leak') || lower.includes('drip') || lower.includes('fixture') ||
+            lower.includes('drain') || lower.includes('unclog') || lower.includes('clog') ||
+            lower.includes('shower') || lower.includes('bath')) {
             // Try to find tap_leak_fix as fallback
             const fallbackItem = catalogue.find(c => c.job_item_id === 'tap_leak_fix');
             if (fallbackItem) {
@@ -53,6 +91,19 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
                 parseResult.confidence = 0.6;
             }
         }
+    }
+    
+    // 4b. If still no match after fallback, mark as needs clarification
+    if (detectedItems.length === 0) {
+        return {
+            visits: [],
+            totalPrice: 0,
+            confidence: 0,
+            primaryCategory: 'HANDYMAN',
+            warnings: ['NEEDS_CLARIFICATION'],
+            isOutOfScope: false,
+            suggestedServices: SUPPORTED_SERVICES
+        };
     }
 
     // 5. Generate Visits

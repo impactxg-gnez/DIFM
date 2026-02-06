@@ -232,8 +232,44 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     </div>
 
+                    {/* Out of Scope Warning */}
+                    {pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
+                        <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-[24px] p-4 text-yellow-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                <span>⚠️</span>
+                                <span>Service Not Available</span>
+                            </div>
+                            <div className="text-xs mb-3 text-yellow-100/80">
+                                We don't currently offer "{description}". 
+                                We specialize in home repairs, installations, and cleaning services.
+                            </div>
+                            <div className="text-xs">
+                                <strong className="text-yellow-200">Available services:</strong>{' '}
+                                {pricePreview?.suggestedServices?.join(', ') || 'Plumbing, Electrical, Handyman, Cleaning, Painting, TV Mounting, and more home services'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Needs Clarification Warning */}
+                    {pricePreview?.warnings?.includes('NEEDS_CLARIFICATION') && !pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
+                        <div className="bg-blue-500/20 border border-blue-500/30 rounded-[24px] p-4 text-blue-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                <span>ℹ️</span>
+                                <span>Need More Details</span>
+                            </div>
+                            <div className="text-xs mb-3 text-blue-100/80">
+                                We couldn't determine the exact service from your description. 
+                                Please provide more details about what needs to be done.
+                            </div>
+                            <div className="text-xs">
+                                <strong className="text-blue-200">Examples:</strong>{' '}
+                                "Fix leaking tap", "Mount TV on wall", "Deep clean apartment", "Replace socket"
+                            </div>
+                        </div>
+                    )}
+
                     {/* Upfront Price Card - Dynamic */}
-                    {(pricePreview || isPricingLoading) && (
+                    {(pricePreview || isPricingLoading) && !pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
                         <div className="bg-[#D9D9D9] rounded-[24px] p-4 text-black relative overflow-hidden mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex flex-col max-w-[70%]">
@@ -285,8 +321,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 <div className="mt-8">
                     <Button
                         onClick={handleBookClick}
-                        disabled={!description.trim()}
-                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${!description.trim()
+                        disabled={!description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))}
+                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${!description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))
                             ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
                             : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
                             }`}
