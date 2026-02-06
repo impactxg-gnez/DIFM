@@ -85,10 +85,20 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         }
         // Cleaning-related keywords
         else if (lower.includes('clean') || lower.includes('cleaning')) {
-            const fallbackItem = catalogue.find(c => c.job_item_id === 'eot_cleaning_1bed');
-            if (fallbackItem) {
-                detectedItems = [fallbackItem];
-                parseResult.confidence = 0.6;
+            // Prefer standard apartment cleaning if apartment/flat is mentioned
+            if (lower.includes('apartment') || lower.includes('flat')) {
+                const fallbackItem = catalogue.find(c => c.job_item_id === 'apartment_cleaning_standard');
+                if (fallbackItem) {
+                    detectedItems = [fallbackItem];
+                    parseResult.confidence = 0.6;
+                }
+            } else {
+                // Otherwise use EOT cleaning as fallback
+                const fallbackItem = catalogue.find(c => c.job_item_id === 'eot_cleaning_1bed');
+                if (fallbackItem) {
+                    detectedItems = [fallbackItem];
+                    parseResult.confidence = 0.6;
+                }
             }
         }
     }

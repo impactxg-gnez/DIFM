@@ -30,8 +30,8 @@ const KEYWORD_MAP: Record<string, string[]> = {
   'toilet_repair_simple': ['toilet', 'flush'],
   'socket_replace': ['socket', 'plug', 'switch', 'outlet'],
   'gas_cert_cp12': ['gas cert', 'cp12', 'safety cert', 'landlord'],
-  // Regular apartment cleaning (shorter, not end of tenancy)
-  'apartment_cleaning_standard': ['clean my apartment', 'apartment clean', 'clean apartment', 'flat clean', 'clean my flat'],
+    // Regular apartment cleaning (shorter, not end of tenancy) - check this BEFORE generic 'clean' keywords
+    'apartment_cleaning_standard': ['clean my apartment', 'apartment clean', 'clean apartment', 'flat clean', 'clean my flat', 'clean apartment and', 'clean my flat and'],
   // End of tenancy cleaning (longer, more thorough)
   'eot_cleaning_1bed': ['end of tenancy', 'deep clean', 'eot clean'],
 };
