@@ -13,10 +13,15 @@ export async function POST(request: Request) {
         // V1 Pricing Engine returns visit-first format
         const pricing = await calculateV1Pricing(description);
         
-        // Return visit-first contract: { visits: Visit[], total_price: number }
+        // Return visit-first contract with warnings and metadata
         return NextResponse.json({
             visits: pricing.visits,
-            total_price: pricing.totalPrice
+            total_price: pricing.totalPrice,
+            warnings: pricing.warnings || [],
+            isOutOfScope: pricing.isOutOfScope || false,
+            suggestedServices: pricing.suggestedServices || [],
+            confidence: pricing.confidence,
+            primaryCategory: pricing.primaryCategory
         });
     } catch (error) {
         console.error('Price preview error', error);
