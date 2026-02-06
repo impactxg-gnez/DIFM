@@ -25,7 +25,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
   'mirror_hang': ['mirror'],
   'shelf_install_single': ['shelf', 'shelves', 'floating'],
   'curtain_rail_standard': ['curtain', 'blind', 'rail', 'pole'],
-  'pic_hang': ['picture', 'art', 'frame', 'canvas'],
+  'pic_hang': ['picture', 'art', 'frame', 'canvas', 'hang picture', 'hang a picture'],
   'tap_leak_fix': ['leak', 'drip', 'tap', 'sink', 'plumb', 'pipe', 'faucet', 'fixture', 'water', 'plumbing', 'repair pipe', 'fix pipe', 'broken pipe', 'leaking pipe'],
   'toilet_repair_simple': ['toilet', 'flush'],
   'socket_replace': ['socket', 'plug', 'switch', 'outlet'],

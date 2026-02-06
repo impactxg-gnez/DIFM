@@ -30,7 +30,9 @@ export const TIER_PRICES: Record<string, number> = {
 
 export const TIER_ITEM_CAPS: Record<string, number> = {
     // Allow small add-ons to be bundled into a single H1 visit (per DIFM V1 acceptance criteria)
-    H1: 2,
+    // BUT: Similar tasks like "hang mirror" and "hang picture" should be separate visits
+    // So we limit to 1 item per visit for hanging/mounting tasks to ensure proper visit isolation
+    H1: 1,  // Changed from 2 to 1 to prevent bundling similar tasks
     H2: 2,
     H3: 4,
 };
@@ -206,6 +208,15 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
 function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     if (visit.item_class !== 'STANDARD') return false;
     if (item.allowed_addon === false) return false;
+
+    // Don't bundle similar hanging/mounting tasks - they should be separate visits
+    // This ensures "hang mirror" and "hang picture" create 2 separate visits
+    const hangingTasks = ['mirror_hang', 'pic_hang', 'tv_mount_standard', 'tv_mount_large', 'shelf_install_single'];
+    const isHangingTask = hangingTasks.includes(item.job_item_id);
+    const visitIsHangingTask = hangingTasks.includes(visit.primary_job_item.job_item_id);
+    if (isHangingTask && visitIsHangingTask) {
+        return false; // Keep hanging tasks separate
+    }
 
     // Capability compatibility check
     const itemCaps = new Set(item.required_capability_tags);
