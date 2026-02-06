@@ -63,13 +63,15 @@ export function parseJobDescription(text: string, catalogue: CatalogueItem[]): P
   for (const [id, keywords] of sortedEntries) {
     if (id.startsWith('tv_mount')) continue; // Handled above
 
-    if (keywords.some(k => keywordMatches(lower, k.toLowerCase()))) {
+    const matchedKeyword = keywords.find(k => keywordMatches(lower, k.toLowerCase()));
+    if (matchedKeyword) {
       // Validate against catalogue (only return valid IDs)
       const catalogueItem = catalogue.find(c => c.job_item_id === id);
       if (catalogueItem) {
         detectedIds.add(id);
+        console.log(`[JobParser] Matched "${matchedKeyword}" -> ${id} (${catalogueItem.display_name})`);
       } else {
-        console.warn(`[JobParser] Keyword matched ${id} but item not found in catalogue`);
+        console.warn(`[JobParser] Keyword "${matchedKeyword}" matched ${id} but item not found in catalogue`);
       }
     }
   }
