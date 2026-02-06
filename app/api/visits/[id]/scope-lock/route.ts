@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateTier, calculatePrice } from '@/lib/pricing/visitEngine';
 import { getCatalogueItem } from '@/lib/pricing/catalogue';
+import { dispatchJob } from '@/lib/dispatch/matcher';
 
 /**
  * Visit-first Scope Lock
@@ -126,8 +127,18 @@ export async function POST(
         });
       }
 
-      return { totalPrice, jobStatus: updatedJob.status, allLocked };
+      return { totalPrice, jobStatus: updatedJob.status, allLocked, jobId: visit.jobId };
     });
+
+    // After transaction: Dispatch job to providers if all visits are locked
+    if (result.allLocked && result.jobStatus === 'ASSIGNING') {
+      try {
+        await dispatchJob(result.jobId);
+      } catch (dispatchError) {
+        console.error('Dispatch error after scope lock:', dispatchError);
+        // Don't fail the scope lock if dispatch fails - job is still in ASSIGNING and can be dispatched later
+      }
+    }
 
     return NextResponse.json({
       success: true,

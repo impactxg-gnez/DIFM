@@ -52,7 +52,7 @@ export async function POST(request: Request) {
                     isSimulation: isSimulation ?? false,
                     needsReview: pricing.confidence < 0.7,
                     isParsed: true,
-                    requiredCapability: pricing.visits[0]?.required_capability_tags.join(','),
+                    requiredCapability: pricing.visits[0]?.required_capability_tags?.[0] || null,
                 },
             });
 

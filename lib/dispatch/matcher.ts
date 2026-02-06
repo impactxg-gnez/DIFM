@@ -17,12 +17,24 @@ export interface JobMatchResult {
 export async function findEligibleProviders(jobId: string): Promise<JobMatchResult[]> {
   const job = await prisma.job.findUnique({
     where: { id: jobId },
-    include: { items: true }
+    include: { visits: true } as any
   });
 
   if (!job) {
     throw new Error('Job not found');
   }
+
+  // V1: Determine required capabilities from visits (union of all visit capability tags)
+  const visits = (job as any).visits || [];
+  const allRequiredCapabilities = new Set<string>();
+  visits.forEach((v: any) => {
+    if (v.required_capability_tags_union && Array.isArray(v.required_capability_tags_union)) {
+      v.required_capability_tags_union.forEach((cap: string) => allRequiredCapabilities.add(cap));
+    }
+  });
+  
+  // For matching, use the primary capability from the first visit or job.requiredCapability
+  const primaryCapability = Array.from(allRequiredCapabilities)[0] || job.requiredCapability;
 
   // Only dispatch to ACTIVE providers
   const activeProviders = await prisma.user.findMany({
@@ -49,24 +61,24 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       let matchReason = 'Handyman match';
 
       // If job requires specific capability, check if handyman has it
-      if (job.requiredCapability) {
-        if (!handymanCapabilities.includes(job.requiredCapability)) {
+      if (primaryCapability) {
+        if (!handymanCapabilities.includes(primaryCapability)) {
           canHandle = false;
         } else {
-          matchReason = `Handyman with ${job.requiredCapability} capability`;
+          matchReason = `Handyman with ${primaryCapability} capability`;
         }
       }
 
       // Check category match
       if (job.category && !handymanCategories.includes(job.category) && job.category !== 'HANDYMAN') {
         // If job is not HANDYMAN category, handyman needs to have that category or capability
-        if (!handymanCategories.includes(job.category) && !job.requiredCapability) {
+        if (!handymanCategories.includes(job.category) && !primaryCapability) {
           canHandle = false;
         }
       }
 
       // If job is HANDYMAN category, any handyman can potentially handle it
-      if (job.category === 'HANDYMAN' && !job.requiredCapability) {
+      if (job.category === 'HANDYMAN' && !primaryCapability) {
         canHandle = true;
         matchReason = 'Handyman - general job';
       }
@@ -93,14 +105,14 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       if (specialistCategories.includes('CLEANING')) {
         // Cleaner providers only see CLEANING category jobs
         if (job.category === 'CLEANING') {
-          // Check if job requires specific cleaning capability
-          if (job.requiredCapability) {
+          // Check if job requires specific cleaning capability from visits
+          if (primaryCapability && primaryCapability.startsWith('C-')) {
             // If job requires a capability (e.g., C-DEEP-BATHROOM), check if cleaner has it
-            if (specialistCapabilities.includes(job.requiredCapability)) {
+            if (specialistCapabilities.includes(primaryCapability)) {
               matches.push({
                 providerId: specialist.id,
                 providerType: 'SPECIALIST',
-                matchReason: `Cleaner with ${job.requiredCapability} capability`
+                matchReason: `Cleaner with ${primaryCapability} capability`
               });
             }
           } else {
