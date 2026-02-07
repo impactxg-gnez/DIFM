@@ -121,8 +121,9 @@ export async function GET() {
                         providerStatus: 'ACTIVE', // Pre-approved, skip onboarding
                         complianceConfirmed: true, // Skip onboarding
                         isOnline: true,
-                        latitude: londonLat + (Math.random() - 0.5) * 0.1,
-                        longitude: londonLng + (Math.random() - 0.5) * 0.1
+                        // Don't set random location - let providers set their actual location via GPS
+                        // latitude: londonLat + (Math.random() - 0.5) * 0.1,
+                        // longitude: londonLng + (Math.random() - 0.5) * 0.1
                     }
                 });
             }
