@@ -170,11 +170,14 @@ export async function GET(request: Request) {
             // Milestone 2 & Step 5: Sequential Assignment
             // A provider sees a job ONLY if:
             // 1. It is assigned to them (providerId === userId)
-            // 2. It is currently offered to them (offeredToId === userId)
+            // 2. It is currently offered to them (offeredToId === userId AND status === 'ASSIGNING')
             whereClause.OR = [
                 { providerId: userId },
                 { offeredToId: userId, status: 'ASSIGNING' }
             ];
+            
+            // Debug logging for providers
+            console.log(`[Jobs API] Provider ${userId} query: looking for jobs where providerId=${userId} OR (offeredToId=${userId} AND status='ASSIGNING')`);
         }
 
         if (status) {
