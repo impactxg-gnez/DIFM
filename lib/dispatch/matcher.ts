@@ -117,10 +117,12 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   // Step 2: If no handyman matches, escalate to specialists
   if (matches.length === 0) {
     const specialists = activeProviders.filter(p => p.providerType === 'SPECIALIST');
+    console.log(`[Dispatch] Found ${specialists.length} specialists for job ${jobId} (category: ${job.category})`);
 
     for (const specialist of specialists) {
-      const specialistCategories = specialist.categories?.split(',') || [];
+      const specialistCategories = specialist.categories?.split(',').filter(Boolean) || [];
       const specialistCapabilities = specialist.capabilities?.split(',').filter(Boolean) || [];
+      console.log(`[Dispatch] Checking specialist ${specialist.id}: categories=[${specialistCategories.join(',')}], capabilities=[${specialistCapabilities.join(',')}]`);
 
       // Cleaners: Only match CLEANING category jobs, never repair/installation
       if (specialistCategories.includes('CLEANING')) {
