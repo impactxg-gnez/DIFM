@@ -201,11 +201,14 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
   const now = new Date();
   const OFFER_TIMEOUT_MS = 10000; // 10 seconds per spec
 
-  // 1. If currently offered and within 10s, stay
+  // 1. If currently offered and within 10s, stay (don't move to next provider)
   if (jAny.offeredToId && jAny.offeredAt) {
     const elapsed = now.getTime() - new Date(jAny.offeredAt).getTime();
     if (elapsed < OFFER_TIMEOUT_MS) {
+      console.log(`[Dispatch] Job ${jobId} still offered to provider ${jAny.offeredToId}, ${Math.round((OFFER_TIMEOUT_MS - elapsed) / 1000)}s remaining`);
       return jAny.offeredToId;
+    } else {
+      console.log(`[Dispatch] Job ${jobId} offer to provider ${jAny.offeredToId} expired (${Math.round(elapsed / 1000)}s elapsed), moving to next provider`);
     }
   }
 

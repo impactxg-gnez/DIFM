@@ -32,12 +32,24 @@ export async function POST(
                 throw new Error(`Invalid transition ${currentStatus} -> ${status}`);
             }
 
+            const now = new Date();
+            
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
                 // Special case for ASSIGNING -> ASSIGNED (Accepting job)
                 if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') {
+                    const jAny = job as any;
                     // Check if offered to this provider
-                    if (job.offeredToId !== userId) {
+                    if (jAny.offeredToId !== userId) {
                         throw new Error('This job offer is not for you or has expired');
+                    }
+                    
+                    // Check if offer is still valid (within 10 seconds)
+                    if (jAny.offeredAt) {
+                        const OFFER_TIMEOUT_MS = 10000; // 10 seconds
+                        const elapsed = now.getTime() - new Date(jAny.offeredAt).getTime();
+                        if (elapsed >= OFFER_TIMEOUT_MS) {
+                            throw new Error('This job offer has expired. Please wait for the next offer.');
+                        }
                     }
                 } else {
                     throw new Error('Not authorized for this job');
@@ -58,15 +70,52 @@ export async function POST(
                 }
             }
 
-            const now = new Date();
             const cancellationReason = status === 'CLOSED' && job.status === 'ISSUE_REPORTED' ? (reason || 'Resolved') : job.cancellationReason;
 
-            const updatedJob = await tx.job.update({
-                where: { id },
-                data: {
-                    status,
-                    statusUpdatedAt: now,
-                    providerId: (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') ? userId : job.providerId,
+            // For ASSIGNING -> ASSIGNED transition, use updateMany with conditions to prevent race conditions
+            let updatedJob;
+            if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED' && userRole === 'PROVIDER') {
+                const jAny = job as any;
+                const OFFER_TIMEOUT_MS = 10000; // 10 seconds
+                const minOfferTime = new Date(now.getTime() - OFFER_TIMEOUT_MS);
+                
+                // Use updateMany with conditions to ensure we only update if still offered to this provider and not expired
+                const updateResult = await tx.job.updateMany({
+                    where: { 
+                        id,
+                        status: 'ASSIGNING',
+                        offeredToId: userId,
+                        // Also check offer hasn't expired (offeredAt must be within last 10 seconds)
+                        ...(jAny.offeredAt ? {
+                            offeredAt: {
+                                gte: minOfferTime
+                            }
+                        } : {})
+                    },
+                    data: {
+                        status: 'ASSIGNED',
+                        statusUpdatedAt: now,
+                        providerId: userId,
+                        acceptedAt: now,
+                        offeredToId: null, // Clear the offer
+                        offeredAt: null
+                    }
+                });
+                
+                if (updateResult.count === 0) {
+                    throw new Error('This job offer is no longer available. It may have expired or been offered to another provider.');
+                }
+                
+                // Fetch the updated job
+                updatedJob = await tx.job.findUnique({ where: { id } });
+                if (!updatedJob) throw new Error('Failed to fetch updated job');
+            } else {
+                updatedJob = await tx.job.update({
+                    where: { id },
+                    data: {
+                        status,
+                        statusUpdatedAt: now,
+                        providerId: (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') ? userId : job.providerId,
                     cancellationReason,
                     isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
                     arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
