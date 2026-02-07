@@ -40,15 +40,21 @@ export default function DashboardPage() {
 
         navigator.geolocation.getCurrentPosition(
             async (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+                // Only save if accuracy is reasonable
+                if (accuracy > 100) {
+                    console.warn(`Initial location accuracy is poor: ${accuracy}m`);
+                }
                 try {
                     await fetch('/api/user/location', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude,
+                            latitude,
+                            longitude,
                         }),
                     });
+                    console.log(`Initial location saved: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy?.toFixed(0)}m)`);
                 } catch (e) {
                     console.error('Failed to save location', e);
                 }
@@ -56,7 +62,11 @@ export default function DashboardPage() {
             (error) => {
                 console.warn('Location permission denied or failed', error);
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            { 
+                enableHighAccuracy: true, 
+                timeout: 10000,
+                maximumAge: 0 // Always get fresh position on initial load
+            }
         );
     }, [user, locationRequested]);
 

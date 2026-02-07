@@ -56,19 +56,62 @@ export function ProviderView({ user }: { user: any }) {
 
                 navigator.geolocation.getCurrentPosition(
                     async (position) => {
-                        const { latitude, longitude } = position.coords;
+                        const { latitude, longitude, accuracy } = position.coords;
+                        
+                        // Only update if accuracy is reasonable (within 100m) and location has changed significantly (>10m)
+                        if (accuracy > 100) {
+                            console.warn(`Location accuracy is poor: ${accuracy}m, skipping update`);
+                            return;
+                        }
+
+                        // Check if location has changed significantly (more than ~10 meters)
+                        const currentLat = user.latitude;
+                        const currentLng = user.longitude;
+                        if (currentLat && currentLng) {
+                            // Calculate distance in meters using Haversine formula
+                            const R = 6371e3; // Earth radius in meters
+                            const φ1 = currentLat * Math.PI / 180;
+                            const φ2 = latitude * Math.PI / 180;
+                            const Δφ = (latitude - currentLat) * Math.PI / 180;
+                            const Δλ = (longitude - currentLng) * Math.PI / 180;
+                            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                                Math.cos(φ1) * Math.cos(φ2) *
+                                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                            const distance = R * c; // Distance in meters
+
+                            // Only update if moved more than 10 meters
+                            if (distance < 10) {
+                                console.log(`Location unchanged (${distance.toFixed(1)}m), skipping update`);
+                                return;
+                            }
+                        }
+
                         try {
-                            await fetch('/api/user/location', {
+                            const response = await fetch('/api/user/location', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ latitude, longitude })
                             });
+                            if (response.ok) {
+                                console.log(`Location updated: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy?.toFixed(0)}m)`);
+                            }
                         } catch (e) {
                             console.error("Failed to heart-beat location", e);
                         }
                     },
-                    (error) => console.error("Location error", error),
-                    { enableHighAccuracy: true }
+                    (error) => {
+                        console.error("Location error", error);
+                        // Don't spam errors if permission denied
+                        if (error.code !== error.PERMISSION_DENIED) {
+                            console.warn("Geolocation error:", error.message);
+                        }
+                    },
+                    { 
+                        enableHighAccuracy: true,
+                        timeout: 10000, // 10 second timeout
+                        maximumAge: 5000 // Don't use cached positions older than 5 seconds
+                    }
                 );
             };
 
