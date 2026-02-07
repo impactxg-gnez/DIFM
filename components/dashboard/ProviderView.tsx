@@ -298,10 +298,9 @@ export function ProviderView({ user }: { user: any }) {
 
     if (!jobs) return <div>Loading jobs...</div>;
 
-    // V1: Available jobs are those explicitly offered to this provider OR ASSIGNING jobs that match
-    const availableJobs = jobs.filter((j: any) => 
-        j.status === 'ASSIGNING' && (j.offeredToId === user.id || !j.offeredToId)
-    );
+    // V1: Available jobs are those in ASSIGNING status
+    // The backend already filters by category/capabilities, so show all ASSIGNING jobs returned
+    const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING');
     // V1: My jobs are those assigned to me or in progress
     const myJobs = jobs.filter((j: any) => j.providerId === user.id);
 
