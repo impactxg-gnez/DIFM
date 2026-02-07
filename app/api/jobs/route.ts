@@ -184,33 +184,40 @@ export async function GET(request: Request) {
             ];
 
             // Fallback: If provider is active and online, also show ASSIGNING jobs that match their category
+            // Show jobs even if offeredToId is set (they might have expired or be cycling through providers)
             if (providerMatchesAssigningJobs) {
                 const userCategories = user.categories?.split(',').filter(Boolean) || [];
                 const userCapabilities = user.capabilities?.split(',').filter(Boolean) || [];
                 
-                // Match ASSIGNING jobs where:
-                // - Job category matches provider categories OR
-                // - Job category is HANDYMAN and provider is HANDYMAN type OR
-                // - Job requiredCapability matches provider capabilities
-                const categoryMatch = userCategories.length > 0 ? { category: { in: userCategories } } : {};
-                const handymanMatch = user.providerType === 'HANDYMAN' ? { category: 'HANDYMAN' } : {};
+                // Build category/capability matching conditions
+                const categoryConditions: any[] = [];
+                if (userCategories.length > 0) {
+                    categoryConditions.push({ category: { in: userCategories } });
+                }
+                if (user.providerType === 'HANDYMAN') {
+                    categoryConditions.push({ category: 'HANDYMAN' });
+                }
+                if (userCapabilities.length > 0) {
+                    categoryConditions.push({ requiredCapability: { in: userCapabilities } });
+                }
                 
-                orConditions.push({
-                    AND: [
-                        { status: 'ASSIGNING' },
-                        { offeredToId: null }, // Only show if not already offered to someone
-                        {
-                            OR: [
-                                categoryMatch,
-                                handymanMatch,
-                                // If job has requiredCapability, check if provider has it
-                                ...(userCapabilities.length > 0 ? [{ requiredCapability: { in: userCapabilities } }] : [])
-                            ].filter(c => Object.keys(c).length > 0) // Remove empty conditions
-                        }
-                    ]
-                });
+                // If no specific conditions, allow all ASSIGNING jobs for handymen
+                if (categoryConditions.length === 0 && user.providerType === 'HANDYMAN') {
+                    categoryConditions.push({}); // Match all
+                }
                 
-                console.log(`[Jobs API] Provider ${userId} (categories: ${userCategories.join(',')}, capabilities: ${userCapabilities.join(',')}) - including fallback for ASSIGNING jobs`);
+                if (categoryConditions.length > 0) {
+                    orConditions.push({
+                        AND: [
+                            { status: 'ASSIGNING' },
+                            {
+                                OR: categoryConditions
+                            }
+                        ]
+                    });
+                }
+                
+                console.log(`[Jobs API] Provider ${userId} (categories: ${userCategories.join(',')}, capabilities: ${userCapabilities.join(',')}, type: ${user.providerType}) - including fallback for ASSIGNING jobs`);
             }
             
             whereClause.OR = orConditions;
