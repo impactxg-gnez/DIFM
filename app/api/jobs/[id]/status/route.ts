@@ -147,8 +147,9 @@ export async function POST(
                         disputeResolvedAt: now,
                         disputeResolution: reason || 'Resolved by admin',
                     } : {}),
-                }
-            });
+                    }
+                });
+            }
 
             await tx.jobStateChange.create({
                 data: {
