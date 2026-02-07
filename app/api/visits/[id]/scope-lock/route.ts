@@ -138,12 +138,16 @@ export async function POST(
         if (offeredToId) {
           console.log(`[Dispatch] Job ${result.jobId} offered to provider ${offeredToId}`);
         } else {
-          console.warn(`[Dispatch] No eligible providers found for job ${result.jobId}`);
+          console.warn(`[Dispatch] No eligible providers found for job ${result.jobId} - job will remain in ASSIGNING status`);
+          console.warn(`[Dispatch] Check: Are there active online providers? Do they match the job category/capabilities?`);
         }
       } catch (dispatchError) {
         console.error('[Dispatch] Error after scope lock:', dispatchError);
+        console.error('[Dispatch] Stack trace:', dispatchError instanceof Error ? dispatchError.stack : 'No stack trace');
         // Don't fail the scope lock if dispatch fails - job is still in ASSIGNING and can be dispatched later
       }
+    } else {
+      console.log(`[Dispatch] Not dispatching job ${result.jobId}: allLocked=${result.allLocked}, jobStatus=${result.jobStatus}`);
     }
 
     return NextResponse.json({
