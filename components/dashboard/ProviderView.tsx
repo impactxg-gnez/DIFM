@@ -298,10 +298,33 @@ export function ProviderView({ user }: { user: any }) {
 
     if (!jobs) return <div>Loading jobs...</div>;
 
-    // V1: Available jobs are those explicitly offered to this provider
-    const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING' && j.offeredToId === user.id);
+    // V1: Available jobs are those explicitly offered to this provider OR ASSIGNING jobs that match
+    const availableJobs = jobs.filter((j: any) => 
+        j.status === 'ASSIGNING' && (j.offeredToId === user.id || !j.offeredToId)
+    );
     // V1: My jobs are those assigned to me or in progress
     const myJobs = jobs.filter((j: any) => j.providerId === user.id);
+
+    // Toggle online status
+    const toggleOnlineStatus = async (newStatus: boolean) => {
+        try {
+            const res = await fetch('/api/user/online-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isOnline: newStatus })
+            });
+            if (res.ok) {
+                // Refresh user data
+                window.location.reload();
+            } else {
+                const error = await res.json();
+                alert(`Failed to update status: ${error.error}`);
+            }
+        } catch (e) {
+            console.error('Failed to toggle online status', e);
+            alert('Failed to update online status');
+        }
+    };
 
     return (
         <div className="grid md:grid-cols-2 gap-8">
