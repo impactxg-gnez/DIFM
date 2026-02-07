@@ -130,37 +130,46 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
           if (primaryCapability && primaryCapability.startsWith('C-')) {
             // If job requires a capability (e.g., C-DEEP-BATHROOM), check if cleaner has it
             if (specialistCapabilities.includes(primaryCapability)) {
+              console.log(`[Dispatch] Specialist ${specialist.id} matched: Cleaner with ${primaryCapability} capability`);
               matches.push({
                 providerId: specialist.id,
                 providerType: 'SPECIALIST',
                 matchReason: `Cleaner with ${primaryCapability} capability`
               });
+            } else {
+              console.log(`[Dispatch] Specialist ${specialist.id} (cleaner) missing required capability: ${primaryCapability}`);
             }
           } else {
             // General cleaning job - any cleaner can handle it
+            console.log(`[Dispatch] Specialist ${specialist.id} matched: Cleaner - general cleaning job`);
             matches.push({
               providerId: specialist.id,
               providerType: 'SPECIALIST',
               matchReason: 'Cleaner - general cleaning job'
             });
           }
+        } else {
+          console.log(`[Dispatch] Specialist ${specialist.id} (cleaner) cannot handle non-cleaning job: ${job.category}`);
         }
         // Cleaners never match non-cleaning jobs (HANDYMAN, PLUMBER, ELECTRICIAN, etc.)
       } else {
         // Other specialists (plumber, electrician, etc.) match their category
         if (job.category && specialistCategories.includes(job.category)) {
+          console.log(`[Dispatch] Specialist ${specialist.id} matched: Specialist - ${job.category}`);
           matches.push({
             providerId: specialist.id,
             providerType: 'SPECIALIST',
             matchReason: `Specialist - ${job.category}`
           });
         } else {
-          console.log(`[Dispatch] Specialist ${specialist.id} (categories: ${specialist.categories}) does not match job category: ${job.category}`);
+          console.log(`[Dispatch] Specialist ${specialist.id} (categories: ${specialistCategories.join(',')}) does not match job category: ${job.category}`);
         }
       }
     }
   }
 
+  console.log(`[Dispatch] Total matches for job ${jobId}: ${matches.length}`);
+  matches.forEach(m => console.log(`  - Provider ${m.providerId}: ${m.matchReason}`));
   return matches;
 }
 
