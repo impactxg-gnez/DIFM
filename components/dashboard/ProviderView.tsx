@@ -330,6 +330,25 @@ export function ProviderView({ user }: { user: any }) {
         <div className="grid md:grid-cols-2 gap-8">
             {/* Available Jobs Column */}
             <div className="space-y-4">
+                {/* Online Status Toggle */}
+                <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 mb-4 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="font-semibold text-gray-900">Online Status</h3>
+                            <p className="text-sm text-gray-400">
+                                {user.isOnline ? 'You are online and receiving job offers' : 'You are offline and will not receive new job offers'}
+                            </p>
+                        </div>
+                        <Button
+                            onClick={() => toggleOnlineStatus(!user.isOnline)}
+                            variant={user.isOnline ? "default" : "outline"}
+                            className={user.isOnline ? "bg-green-600 hover:bg-green-700" : ""}
+                        >
+                            {user.isOnline ? "🟢 Online" : "🔴 Offline"}
+                        </Button>
+                    </div>
+                </div>
+
                 {/* Location Tracker */}
                 <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 mb-6">
                     <div className="flex justify-between items-start mb-4">
