@@ -196,6 +196,14 @@ export async function GET(request: Request) {
             }
         });
 
+        // Debug logging for providers
+        if (userRole === 'PROVIDER') {
+            console.log(`[Jobs API] Provider ${userId} found ${rawJobs.length} jobs`);
+            rawJobs.forEach((job: any) => {
+                console.log(`[Jobs API] Job ${job.id}: status=${job.status}, offeredToId=${job.offeredToId || 'null'}, providerId=${job.providerId || 'null'}, category=${job.category}`);
+            });
+        }
+
         const processedJobs = rawJobs.map((job: any) => {
             const { isStuck, reason } = computeStuck(job.status, job.statusUpdatedAt);
 
