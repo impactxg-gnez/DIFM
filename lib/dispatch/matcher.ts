@@ -216,21 +216,35 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
   let nextIndex = 0;
   if (job.offeredToId) {
     const currentIndex = matches.findIndex(m => m.providerId === job.offeredToId);
-    nextIndex = (currentIndex + 1) % matches.length;
+    if (currentIndex === -1) {
+      // Current provider is no longer in matches (maybe went offline), start from beginning
+      nextIndex = 0;
+    } else {
+      nextIndex = (currentIndex + 1) % matches.length;
+    }
   }
 
   const nextMatch = matches[nextIndex];
   console.log(`[Dispatch] Offering job ${jobId} to provider ${nextMatch.providerId} (${nextMatch.matchReason})`);
 
-  const updated = await prisma.job.update({
-    where: { id: jobId },
+  // Use updateMany to ensure we only update if job is still in ASSIGNING status (prevent race conditions)
+  const updateResult = await prisma.job.updateMany({
+    where: { 
+      id: jobId,
+      status: 'ASSIGNING' // Only update if still in ASSIGNING status
+    },
     data: {
       offeredToId: nextMatch.providerId,
       offeredAt: now,
     }
   });
 
-  console.log(`[Dispatch] Job ${jobId} updated - offeredToId: ${updated.offeredToId}, offeredAt: ${updated.offeredAt}`);
+  if (updateResult.count === 0) {
+    console.warn(`[Dispatch] Job ${jobId} is no longer in ASSIGNING status, cannot update offer`);
+    return null;
+  }
+
+  console.log(`[Dispatch] Job ${jobId} updated - offeredToId: ${nextMatch.providerId}, offeredAt: ${now.toISOString()}`);
 
   return nextMatch.providerId;
 }
