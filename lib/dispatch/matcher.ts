@@ -56,10 +56,13 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   // BUT: Skip handymen for CLEANING jobs (cleaners only)
   if (job.category !== 'CLEANING') {
     const handymen = activeProviders.filter(p => p.providerType === 'HANDYMAN');
+    console.log(`[Dispatch] Found ${handymen.length} handymen for job ${jobId} (category: ${job.category}, primaryCapability: ${primaryCapability})`);
 
     for (const handyman of handymen) {
       const handymanCategories = handyman.categories?.split(',').filter(Boolean) || [];
       const handymanCapabilities = handyman.capabilities?.split(',').filter(Boolean) || [];
+
+      console.log(`[Dispatch] Checking handyman ${handyman.id}: categories=[${handymanCategories.join(',')}], capabilities=[${handymanCapabilities.join(',')}]`);
 
       // Check if handyman can handle all job items
       let canHandle = true;
@@ -68,32 +71,45 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       // If job requires specific capability, check if handyman has it
       if (primaryCapability) {
         if (!handymanCapabilities.includes(primaryCapability)) {
+          console.log(`[Dispatch] Handyman ${handyman.id} missing required capability: ${primaryCapability}`);
           canHandle = false;
         } else {
           matchReason = `Handyman with ${primaryCapability} capability`;
         }
       }
 
-      // Check category match
-      if (job.category && !handymanCategories.includes(job.category) && job.category !== 'HANDYMAN') {
-        // If job is not HANDYMAN category, handyman needs to have that category or capability
-        if (!handymanCategories.includes(job.category) && !primaryCapability) {
-          canHandle = false;
+      // Check category match - be more lenient
+      if (job.category && job.category !== 'HANDYMAN') {
+        // If job is not HANDYMAN category, handyman needs to have that category OR the capability
+        if (!handymanCategories.includes(job.category)) {
+          // If no capability match either, then can't handle
+          if (primaryCapability && !handymanCapabilities.includes(primaryCapability)) {
+            console.log(`[Dispatch] Handyman ${handyman.id} doesn't have category ${job.category} or capability ${primaryCapability}`);
+            canHandle = false;
+          } else if (!primaryCapability) {
+            // If no specific capability required, allow if handyman has general capabilities
+            console.log(`[Dispatch] Handyman ${handyman.id} doesn't have category ${job.category}, but no specific capability required - allowing`);
+            canHandle = true;
+            matchReason = `Handyman - general ${job.category} job`;
+          }
         }
       }
 
       // If job is HANDYMAN category, any handyman can potentially handle it
-      if (job.category === 'HANDYMAN' && !primaryCapability) {
+      if (job.category === 'HANDYMAN') {
         canHandle = true;
         matchReason = 'Handyman - general job';
       }
 
       if (canHandle) {
+        console.log(`[Dispatch] Handyman ${handyman.id} matched: ${matchReason}`);
         matches.push({
           providerId: handyman.id,
           providerType: 'HANDYMAN',
           matchReason
         });
+      } else {
+        console.log(`[Dispatch] Handyman ${handyman.id} rejected`);
       }
     }
   }
