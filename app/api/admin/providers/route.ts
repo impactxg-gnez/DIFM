@@ -16,11 +16,21 @@ export async function GET() {
             name: true,
             email: true,
             isOnline: true,
+            providerStatus: true,
+            providerType: true,
             categories: true,
+            capabilities: true,
+            serviceArea: true,
             latitude: true,
             longitude: true,
             createdAt: true,
             updatedAt: true,
+            _count: {
+                select: {
+                    jobsAssigned: true,
+                    documents: true
+                }
+            }
         },
         orderBy: { createdAt: 'desc' },
     });

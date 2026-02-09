@@ -1168,6 +1168,81 @@ export function AdminView({ user }: { user: any }) {
                     </div>
                 </div>
             )}
+
+            {/* Provider Edit Dialog */}
+            {providerEditDialog.open && providerEditDialog.provider && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md space-y-4">
+                        <h3 className="text-lg font-bold text-white">Edit Provider: {providerEditDialog.provider.name}</h3>
+                        
+                        <div className="space-y-3">
+                            <div>
+                                <Label className="text-gray-400">Provider Type</Label>
+                                <div className="flex gap-2 mt-1">
+                                    <Button
+                                        size="sm"
+                                        variant={editProviderData.providerType === 'HANDYMAN' ? 'default' : 'outline'}
+                                        onClick={() => setEditProviderData({ ...editProviderData, providerType: 'HANDYMAN' })}
+                                    >
+                                        Handyman
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant={editProviderData.providerType === 'SPECIALIST' ? 'default' : 'outline'}
+                                        onClick={() => setEditProviderData({ ...editProviderData, providerType: 'SPECIALIST' })}
+                                    >
+                                        Specialist
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <Label className="text-gray-400">Categories (comma-separated)</Label>
+                                <Input
+                                    value={editProviderData.categories}
+                                    onChange={(e) => setEditProviderData({ ...editProviderData, categories: e.target.value })}
+                                    placeholder="e.g. HANDYMAN,CLEANING"
+                                    className="mt-1 bg-zinc-800 border-white/10"
+                                />
+                            </div>
+
+                            <div>
+                                <Label className="text-gray-400">Capabilities (comma-separated)</Label>
+                                <Input
+                                    value={editProviderData.capabilities}
+                                    onChange={(e) => setEditProviderData({ ...editProviderData, capabilities: e.target.value })}
+                                    placeholder="e.g. HANDYMAN_PLUMBING,HANDYMAN_ELECTRICAL"
+                                    className="mt-1 bg-zinc-800 border-white/10"
+                                />
+                            </div>
+
+                            <div>
+                                <Label className="text-gray-400">Service Area</Label>
+                                <Input
+                                    value={editProviderData.serviceArea}
+                                    onChange={(e) => setEditProviderData({ ...editProviderData, serviceArea: e.target.value })}
+                                    placeholder="e.g. London, Greater London"
+                                    className="mt-1 bg-zinc-800 border-white/10"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                            <Button
+                                variant="outline"
+                                onClick={() => setProviderEditDialog({ open: false })}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => handleUpdateProvider(providerEditDialog.provider.id, editProviderData)}
+                            >
+                                Save Changes
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
