@@ -15,12 +15,9 @@ import { CameraUpload } from '@/components/ui/CameraUpload';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-import { ProviderOnboarding } from '../provider/ProviderOnboarding';
 
 export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
-    // Onboarding is now handled by admin - skip it entirely
-    const [showOnboarding] = useState(false);
 
     // API automatically filters for provider's category and dispatch radius
     const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
@@ -239,19 +236,6 @@ export function ProviderView({ user }: { user: any }) {
             setIsSubmitting(false);
         }
     };
-
-    // Show onboarding if needed
-    if (showOnboarding) {
-        return (
-            <ProviderOnboarding
-                user={user}
-                onComplete={() => {
-                    setShowOnboarding(false);
-                    window.location.reload(); // Refresh to get updated user data
-                }}
-            />
-        );
-    }
 
     // Check if provider is active
     if (user.providerStatus !== 'ACTIVE') {
