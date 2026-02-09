@@ -36,20 +36,44 @@ export async function POST(
             
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
                 // Special case for ASSIGNING -> ASSIGNED (Accepting job)
+                // Broadcast mode: Any eligible provider can accept
                 if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') {
-                    const jAny = job as any;
-                    // Check if offered to this provider
-                    if (jAny.offeredToId !== userId) {
-                        throw new Error('This job offer is not for you or has expired');
+                    // Verify provider is eligible for this job (matches category/capabilities)
+                    const provider = await tx.user.findUnique({ where: { id: userId } });
+                    if (!provider || provider.providerStatus !== 'ACTIVE' || !provider.isOnline) {
+                        throw new Error('You must be an active, online provider to accept jobs');
                     }
                     
-                    // Check if offer is still valid (within 10 seconds)
-                    if (jAny.offeredAt) {
-                        const OFFER_TIMEOUT_MS = 10000; // 10 seconds
-                        const elapsed = now.getTime() - new Date(jAny.offeredAt).getTime();
-                        if (elapsed >= OFFER_TIMEOUT_MS) {
-                            throw new Error('This job offer has expired. Please wait for the next offer.');
+                    const providerCategories = provider.categories?.split(',').filter(Boolean) || [];
+                    const providerCapabilities = provider.capabilities?.split(',').filter(Boolean) || [];
+                    
+                    // Check if provider matches the job
+                    let isEligible = false;
+                    
+                    // CLEANING jobs can only be done by cleaners
+                    if (job.category === 'CLEANING') {
+                        if (providerCategories.includes('CLEANING')) {
+                            // Check capability match if required
+                            if (job.requiredCapability && job.requiredCapability.startsWith('C-')) {
+                                isEligible = providerCapabilities.includes(job.requiredCapability);
+                            } else {
+                                isEligible = true;
+                            }
                         }
+                    } else {
+                        // For non-cleaning jobs: handymen or matching specialists
+                        if (provider.providerType === 'HANDYMAN') {
+                            // Handymen can do general jobs and those matching their capabilities
+                            if (!job.requiredCapability || providerCapabilities.includes(job.requiredCapability)) {
+                                isEligible = true;
+                            }
+                        } else if (providerCategories.includes(job.category)) {
+                            isEligible = true;
+                        }
+                    }
+                    
+                    if (!isEligible) {
+                        throw new Error('This job does not match your skills or category');
                     }
                 } else {
                     throw new Error('Not authorized for this job');
@@ -73,37 +97,27 @@ export async function POST(
             const cancellationReason = status === 'CLOSED' && job.status === 'ISSUE_REPORTED' ? (reason || 'Resolved') : job.cancellationReason;
 
             // For ASSIGNING -> ASSIGNED transition, use updateMany with conditions to prevent race conditions
+            // Broadcast mode: First provider to accept gets the job (atomic update)
             let updatedJob;
             if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED' && userRole === 'PROVIDER') {
-                const jAny = job as any;
-                const OFFER_TIMEOUT_MS = 10000; // 10 seconds
-                const minOfferTime = new Date(now.getTime() - OFFER_TIMEOUT_MS);
-                
-                // Use updateMany with conditions to ensure we only update if still offered to this provider and not expired
+                // Use updateMany with status condition to ensure atomic first-come-first-served
                 const updateResult = await tx.job.updateMany({
                     where: { 
                         id,
-                        status: 'ASSIGNING',
-                        offeredToId: userId,
-                        // Also check offer hasn't expired (offeredAt must be within last 10 seconds)
-                        ...(jAny.offeredAt ? {
-                            offeredAt: {
-                                gte: minOfferTime
-                            }
-                        } : {})
+                        status: 'ASSIGNING' // Only update if still in ASSIGNING (not yet accepted)
                     },
                     data: {
                         status: 'ASSIGNED',
                         statusUpdatedAt: now,
                         providerId: userId,
                         acceptedAt: now,
-                        offeredToId: null, // Clear the offer
+                        offeredToId: null, // Clear any legacy offer data
                         offeredAt: null
                     }
                 });
                 
                 if (updateResult.count === 0) {
-                    throw new Error('This job offer is no longer available. It may have expired or been offered to another provider.');
+                    throw new Error('This job has already been accepted by another provider.');
                 }
                 
                 // Fetch the updated job

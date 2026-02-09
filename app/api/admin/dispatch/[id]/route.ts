@@ -37,14 +37,14 @@ export async function POST(
       }, { status: 400 });
     }
 
-    console.log(`[Admin Dispatch] Manually triggering dispatch for job ${jobId}`);
-    const offeredToId = await dispatchJob(jobId);
+    console.log(`[Admin Dispatch] Manually triggering broadcast dispatch for job ${jobId}`);
+    const eligibleProviders = await dispatchJob(jobId);
 
-    if (offeredToId) {
+    if (eligibleProviders && eligibleProviders.length > 0) {
       return NextResponse.json({ 
         success: true, 
-        message: `Job dispatched to provider ${offeredToId}`,
-        offeredToId 
+        message: `Job broadcast to ${eligibleProviders.length} providers`,
+        eligibleProviders 
       });
     } else {
       return NextResponse.json({ 

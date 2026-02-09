@@ -80,4 +80,4 @@ export const CATEGORY_META: Record<ServiceCategory, {
 };
 
 export const CANCELLATION_FEE_PERCENT = 0.20; // 20%
-export const PLATFORM_FEE_PERCENT = 0.18; // 18%
+export const PLATFORM_FEE_PERCENT = 0.20; // 20%

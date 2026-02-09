@@ -130,13 +130,13 @@ export async function POST(
       return { totalPrice, jobStatus: updatedJob.status, allLocked, jobId: visit.jobId };
     });
 
-    // After transaction: Dispatch job to providers if all visits are locked
+    // After transaction: Broadcast job to eligible providers if all visits are locked
     if (result.allLocked && result.jobStatus === 'ASSIGNING') {
       try {
-        console.log(`[Dispatch] Triggering dispatch for job ${result.jobId}`);
-        const offeredToId = await dispatchJob(result.jobId);
-        if (offeredToId) {
-          console.log(`[Dispatch] Job ${result.jobId} offered to provider ${offeredToId}`);
+        console.log(`[Dispatch] Triggering broadcast dispatch for job ${result.jobId}`);
+        const eligibleProviders = await dispatchJob(result.jobId);
+        if (eligibleProviders && eligibleProviders.length > 0) {
+          console.log(`[Dispatch] Job ${result.jobId} broadcast to ${eligibleProviders.length} providers`);
         } else {
           console.warn(`[Dispatch] No eligible providers found for job ${result.jobId} - job will remain in ASSIGNING status`);
           console.warn(`[Dispatch] Check: Are there active online providers? Do they match the job category/capabilities?`);

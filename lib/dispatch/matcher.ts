@@ -176,75 +176,27 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
 }
 
 /**
- * Step 5: Sequential Provider Offers (10s window)
- * Moves from broadcast to one-by-one offering.
+ * Broadcast mode: Job is visible to ALL eligible providers simultaneously.
+ * First provider to accept gets the job.
+ * No offeredToId is set - the job remains visible to all until accepted.
  */
-export async function dispatchJob(jobId: string): Promise<string | null> {
+export async function dispatchJob(jobId: string): Promise<string[] | null> {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job) return null;
 
   const matches = await findEligibleProviders(jobId);
-  const jAny = job as any;
   console.log(`[Dispatch] Job ${jobId} (category: ${job.category}, requiredCapability: ${job.requiredCapability}) found ${matches.length} eligible providers`);
+  
   if (matches.length === 0) {
     console.warn(`[Dispatch] No matches for job ${jobId} - category: ${job.category}, requiredCapability: ${job.requiredCapability}`);
-    // Reset if no matches left or none found
-    if (jAny.offeredToId) {
-      await prisma.job.update({
-        where: { id: jobId },
-        data: { offeredToId: null, offeredAt: null }
-      });
-    }
     return null;
   }
 
-  const now = new Date();
-  const OFFER_TIMEOUT_MS = 10000; // 10 seconds per spec
+  // Broadcast mode: Don't set offeredToId - job is visible to all matching providers
+  // Just log which providers are eligible
+  const eligibleProviderIds = matches.map(m => m.providerId);
+  console.log(`[Dispatch] Job ${jobId} broadcast to ${eligibleProviderIds.length} providers:`, eligibleProviderIds);
+  matches.forEach(m => console.log(`  - Provider ${m.providerId}: ${m.matchReason}`));
 
-  // 1. If currently offered and within 10s, stay (don't move to next provider)
-  if (jAny.offeredToId && jAny.offeredAt) {
-    const elapsed = now.getTime() - new Date(jAny.offeredAt).getTime();
-    if (elapsed < OFFER_TIMEOUT_MS) {
-      console.log(`[Dispatch] Job ${jobId} still offered to provider ${jAny.offeredToId}, ${Math.round((OFFER_TIMEOUT_MS - elapsed) / 1000)}s remaining`);
-      return jAny.offeredToId;
-    } else {
-      console.log(`[Dispatch] Job ${jobId} offer to provider ${jAny.offeredToId} expired (${Math.round(elapsed / 1000)}s elapsed), moving to next provider`);
-    }
-  }
-
-  // 2. Either no offer yet, or current offer expired. Find next.
-  let nextIndex = 0;
-  if (job.offeredToId) {
-    const currentIndex = matches.findIndex(m => m.providerId === job.offeredToId);
-    if (currentIndex === -1) {
-      // Current provider is no longer in matches (maybe went offline), start from beginning
-      nextIndex = 0;
-    } else {
-      nextIndex = (currentIndex + 1) % matches.length;
-    }
-  }
-
-  const nextMatch = matches[nextIndex];
-  console.log(`[Dispatch] Offering job ${jobId} to provider ${nextMatch.providerId} (${nextMatch.matchReason})`);
-
-  // Use updateMany to ensure we only update if job is still in ASSIGNING status (prevent race conditions)
-  const updateResult = await prisma.job.updateMany({
-    where: { 
-      id: jobId,
-      status: 'ASSIGNING' // Only update if still in ASSIGNING status
-    },
-    data: {
-      offeredToId: nextMatch.providerId,
-      offeredAt: now,
-    }
-  });
-
-  if (updateResult.count === 0) {
-    console.warn(`[Dispatch] Job ${jobId} is no longer in ASSIGNING status, cannot update offer`);
-    return null;
-  }
-
-  console.log(`[Dispatch] Job ${jobId} updated - offeredToId: ${nextMatch.providerId}, offeredAt: ${now.toISOString()}`);
-
-  return nextMatch.providerId;
+  return eligibleProviderIds;
 }

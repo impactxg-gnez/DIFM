@@ -1,237 +1,253 @@
-/**
- * Phase 2: Job creation form with intelligent pricing
- * Single text input with parts question
- */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { ServiceCategory, PRICE_MATRIX, SERVICE_CATEGORIES } from '@/lib/constants';
+import { getTierByCode, TierCode, getTradeLabel } from '@/lib/pricing/matrix';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { MapPin } from 'lucide-react';
 import useSWR from 'swr';
 
 interface JobCreationFormProps {
-    onSubmit: (details: { description: string; location: string; partsExpectedAtBooking?: string }) => void;
+    onSubmit: (details: { description: string; location: string; isASAP: boolean; scheduledAt?: Date }) => void;
     onCancel: () => void;
     loading: boolean;
     defaultLocation?: string;
 }
 
 export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation = '' }: JobCreationFormProps) {
-    const [step, setStep] = useState<'DETAILS' | 'CONFIRM'>('DETAILS');
+    const category: ServiceCategory = 'HANDYMAN';
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState(defaultLocation);
+    const [isASAP, setIsASAP] = useState(true);
+    const [scheduledTime, setScheduledTime] = useState('');
     const [debouncedDesc, setDebouncedDesc] = useState('');
-    const [partsExpected, setPartsExpected] = useState<string>('');
+
+    // Autocomplete State
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setLocation(defaultLocation);
     }, [defaultLocation]);
 
-    // Debounce description for price preview
     useEffect(() => {
-        const timer = setTimeout(() => setDebouncedDesc(description), 400);
+        const timer = setTimeout(async () => {
+            if (location.length > 2 && showSuggestions) {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&addressdetails=1&limit=5`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setSuggestions(data);
+                    }
+                } catch (e) {
+                    console.error("Autocomplete failed", e);
+                }
+            } else {
+                setSuggestions([]);
+            }
+        }, 500);
+
         return () => clearTimeout(timer);
+    }, [location, showSuggestions]);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [wrapperRef]);
+
+    const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setLocation(e.target.value);
+        setShowSuggestions(true);
+    };
+
+    const selectSuggestion = (address: string) => {
+        setLocation(address);
+        setShowSuggestions(false);
+        setSuggestions([]);
+    };
+
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedDesc(description), 400);
+        return () => clearTimeout(t);
     }, [description]);
 
-    // Fetch price preview from API
     const fetcher = async () => {
-        if (!debouncedDesc.trim()) return null;
+        if (!debouncedDesc) return null;
         const res = await fetch('/api/pricing/preview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category: 'HANDYMAN', description: debouncedDesc }),
+            body: JSON.stringify({ category, description: debouncedDesc }),
         });
         if (!res.ok) return null;
         return res.json();
     };
 
     const { data: pricePreview, isLoading: priceLoading } = useSWR(
-        debouncedDesc ? ['price-preview', debouncedDesc] : null,
+        debouncedDesc ? ['price-preview', debouncedDesc, category] : null,
         fetcher,
         { refreshInterval: 0 }
     );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!description.trim() || !location.trim()) {
-            alert('Please enter both description and location');
-            return;
+        if (showSuggestions && suggestions.length > 0) {
+            // allow free text; no-op
         }
-        setStep('CONFIRM');
+
+        onSubmit({
+            description,
+            location,
+            isASAP,
+            scheduledAt: isASAP ? undefined : new Date(scheduledTime)
+        });
     };
 
-    const handleConfirm = () => {
-        onSubmit({ description, location, partsExpectedAtBooking: partsExpected || undefined });
+    const basePrice = PRICE_MATRIX[category];
+    const displayedPrice = pricePreview?.totalPrice ?? basePrice;
+
+    const formatItemLabel = (item: any) => {
+        const tier = getTierByCode(item.itemType as TierCode);
+        const tradeLabel = item.routeCategory
+            ? SERVICE_CATEGORIES[item.routeCategory as ServiceCategory] || getTradeLabel(item.routeCategory as any)
+            : 'Visit';
+        return `${tradeLabel} — ${tier?.name || item.itemType}`;
     };
-
-    const displayedPrice = pricePreview?.totalPrice ?? 0;
-
-    if (step === 'CONFIRM') {
-        return (
-            <Card className="w-full max-w-lg mx-auto">
-                <CardHeader>
-                    <CardTitle>Confirm Your Booking</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                        <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                            <h3 className="font-semibold text-foreground border-b border-border pb-2">Job Summary</h3>
-                            <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
-                                <span className="text-muted-foreground">Service:</span>
-                                <span className="font-medium">{description}</span>
-                                <span className="text-muted-foreground">Location:</span>
-                                <span className="font-medium">{location}</span>
-                            </div>
-                        </div>
-
-                        {pricePreview && (
-                            <div className="bg-primary/10 p-4 rounded-lg space-y-2 border border-primary/20">
-                                <h3 className="font-semibold text-primary border-b border-primary/20 pb-2">Price Breakdown</h3>
-                                <div className="space-y-1">
-                                    {pricePreview.items.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between text-sm text-primary/80">
-                                            <span>{item.quantity}x {item.description || item.itemType}</span>
-                                            <span>£{item.totalPrice.toFixed(2)}</span>
-                                        </div>
-                                    ))}
-                                    <div className="flex justify-between font-bold text-lg text-primary pt-2 border-t border-primary/20 mt-2">
-                                        <span>Total</span>
-                                        <span>£{pricePreview.totalPrice.toFixed(2)}</span>
-                                    </div>
-                                    <p className="text-xs text-blue-600 mt-1">
-                                        Price locked upon booking. Includes {partsExpected === 'YES' ? 'labour only' : 'standard labour'}.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-3">
-                            <h4 className="font-medium text-foreground">What happens next?</h4>
-                            <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
-                                <li>We'll simulate finding a provider nearby.</li>
-                                <li>You'll see their name and details once assigned.</li>
-                                <li>Payment is handled after the job is complete.</li>
-                                <li>Support is available if any issues arise.</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4 pt-2">
-                        <Button type="button" variant="outline" onClick={() => setStep('DETAILS')} disabled={loading}>
-                            Back
-                        </Button>
-                        <Button onClick={handleConfirm} className="flex-1" disabled={loading}>
-                            {loading ? 'Confirming...' : `Confirm & Book`}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
 
     return (
         <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                    <span className="text-foreground">New Job Request</span>
-                    {displayedPrice > 0 && (
-                        <span className="text-blue-600 font-bold">£{displayedPrice.toFixed(2)}</span>
-                    )}
+                    <span className="text-gray-900">Handyman request</span>
+                    <span className="text-blue-600 font-bold">£{displayedPrice.toFixed(2)}</span>
                 </CardTitle>
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-2 relative" ref={wrapperRef}>
+                        <Label>Location</Label>
+                        <div className="relative">
+                            <Input
+                                value={location}
+                                onChange={handleLocationChange}
+                                onFocus={() => setShowSuggestions(true)}
+                                placeholder="e.g. 123 Main St, London"
+                                required
+                                autoComplete="off"
+                            />
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                                    {suggestions.map((s, i) => (
+                                        <div
+                                            key={i}
+                                            className="p-3 hover:bg-gray-100 cursor-pointer text-sm flex items-start gap-2"
+                                            onClick={() => selectSuggestion(s.display_name)}
+                                        >
+                                            <MapPin className="w-4 h-4 mt-0.5 text-gray-500 shrink-0" />
+                                            <span className="text-gray-900">{s.display_name}</span>
+                                        </div>
+                                    ))}
+                                    <div className="p-2 border-t text-xs text-right text-gray-400">Powered by OpenStreetMap</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="space-y-2">
                         <Label>What needs doing?</Label>
                         <Input
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="e.g. Fix leaking tap, Hang two shelves and install a fan"
-                            required
-                            className="text-base"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            Describe your request in plain English
-                        </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Location</Label>
-                        <Input
-                            value={location}
-                            onChange={(e) => setLocation(e.target.value)}
-                            placeholder="e.g. 123 Main St, London"
+                            placeholder="e.g. Hang two shelves and fix a leaking tap"
                             required
                         />
                     </div>
 
-                    {pricePreview && pricePreview.items && pricePreview.items.length > 0 && (
-                        <div className="space-y-3 rounded-xl border border-primary/20 bg-background/50 backdrop-blur-sm p-4 shadow-inner">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-foreground">Price Estimate</span>
-                                <span className="text-xs text-muted-foreground">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
-                            </div>
+                    <div className="space-y-3 rounded-xl border border-blue-100 bg-white/70 backdrop-blur-sm p-4 shadow-inner">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-slate-800">Live Price Breakdown</span>
+                            <span className="text-xs text-slate-500">{priceLoading ? 'Calculating...' : 'Auto-updates'}</span>
+                        </div>
+                        {pricePreview?.items?.length ? (
                             <div className="space-y-2">
                                 {pricePreview.items.map((item: any, idx: number) => (
-                                    <div key={idx} className="flex justify-between text-sm text-muted-foreground">
-                                        <span className="font-medium">
-                                            {item.quantity > 1 ? `${item.quantity}x ` : ''}
-                                            {item.description || item.itemType}
-                                        </span>
+                                    <div key={idx} className="flex justify-between text-sm text-slate-700">
+                                        <span className="font-medium">{item.quantity}x {formatItemLabel(item)}</span>
                                         <span>£{item.totalPrice.toFixed(2)}</span>
                                     </div>
                                 ))}
                                 <div className="flex justify-between border-t pt-2 font-semibold text-slate-900">
                                     <span>Total</span>
-                                    <span>£{displayedPrice.toFixed(2)}</span>
+                                    <span>£{pricePreview.totalPrice.toFixed(2)}</span>
                                 </div>
+                                {pricePreview.needsReview && (
+                                    <p className="text-xs text-amber-600">Flagged for admin review</p>
+                                )}
+                                {pricePreview.usedFallback && (
+                                    <p className="text-xs text-slate-500">Using fallback pricing</p>
+                                )}
+                                {pricePreview.routingNotes?.length ? (
+                                    <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+                                        {pricePreview.routingNotes.map((note: string, idx: number) => (
+                                            <li key={idx}>{note}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
                             </div>
-                        </div>
-                    )}
+                        ) : (
+                            <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{basePrice}</p>
+                        )}
+                    </div>
 
-                    <div className="space-y-2">
-                        <Label>Parts & Materials (Optional)</Label>
-                        <div className="flex gap-2">
+                    <div className="space-y-4 pt-4">
+                        <Label>When?</Label>
+                        <div className="flex gap-4">
                             <Button
                                 type="button"
-                                variant={partsExpected === 'YES' ? 'default' : 'outline'}
-                                onClick={() => setPartsExpected('YES')}
+                                variant={isASAP ? 'default' : 'outline'}
+                                onClick={() => setIsASAP(true)}
                                 className="flex-1"
                             >
-                                Yes
+                                ASAP
                             </Button>
                             <Button
                                 type="button"
-                                variant={partsExpected === 'NO' ? 'default' : 'outline'}
-                                onClick={() => setPartsExpected('NO')}
+                                variant={!isASAP ? 'default' : 'outline'}
+                                onClick={() => setIsASAP(false)}
                                 className="flex-1"
                             >
-                                No
-                            </Button>
-                            <Button
-                                type="button"
-                                variant={partsExpected === 'NOT_SURE' ? 'default' : 'outline'}
-                                onClick={() => setPartsExpected('NOT_SURE')}
-                                className="flex-1"
-                            >
-                                Not sure
+                                Schedule
                             </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Do you think parts or materials may be required? (Pricing assumes labour only)</p>
+
+                        {!isASAP && (
+                            <Input
+                                type="datetime-local"
+                                value={scheduledTime}
+                                onChange={(e) => setScheduledTime(e.target.value)}
+                                required={!isASAP}
+                            />
+                        )}
                     </div>
 
                     <div className="flex gap-4 pt-4">
                         <Button type="button" variant="ghost" onClick={onCancel} disabled={loading}>
                             Cancel
                         </Button>
-                        <Button type="submit" className="flex-1" disabled={loading || displayedPrice === 0}>
-                            Review & Book
+                        <Button type="submit" className="flex-1" disabled={loading}>
+                            {loading ? 'Confirming...' : `Book for £${displayedPrice.toFixed(2)}`}
                         </Button>
                     </div>
 
                     <p className="text-xs text-center text-gray-500">
-                        Price will be locked when you confirm the job
+                        Price locks on booking. Admin overrides require a reason.
                     </p>
                 </form>
             </CardContent>

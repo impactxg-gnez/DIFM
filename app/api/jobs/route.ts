@@ -173,51 +173,40 @@ export async function GET(request: Request) {
         if (userRole === 'CUSTOMER') {
             whereClause.customerId = userId;
         } else if (userRole === 'PROVIDER') {
-            // Milestone 2 & Step 5: Sequential Assignment
-            // A provider sees a job if:
+            // Broadcast mode: Provider sees a job if:
             // 1. It is assigned to them (providerId === userId)
-            // 2. It is currently offered to them (offeredToId === userId AND status === 'ASSIGNING')
-            // 3. It is ASSIGNING and matches their category/capabilities (fallback if dispatch didn't set offeredToId)
+            // 2. It is ASSIGNING and matches their category/capabilities (broadcast to all eligible)
             const orConditions: any[] = [
-                { providerId: userId },
-                { offeredToId: userId, status: 'ASSIGNING' }
+                { providerId: userId }
             ];
 
-            // Fallback: If provider is active and online, also show ASSIGNING jobs that match their category
-            // Show jobs even if offeredToId is set (they might have expired or be cycling through providers)
+            // Broadcast: If provider is active and online, show all ASSIGNING jobs that match their category
             if (providerMatchesAssigningJobs) {
                 const userCategories = user.categories?.split(',').filter(Boolean) || [];
                 const userCapabilities = user.capabilities?.split(',').filter(Boolean) || [];
                 
-                // Build category/capability matching conditions
-                const categoryConditions: any[] = [];
-                if (userCategories.length > 0) {
-                    categoryConditions.push({ category: { in: userCategories } });
-                }
-                if (user.providerType === 'HANDYMAN') {
-                    categoryConditions.push({ category: 'HANDYMAN' });
-                }
-                if (userCapabilities.length > 0) {
-                    categoryConditions.push({ requiredCapability: { in: userCapabilities } });
-                }
+                // Match ASSIGNING jobs where:
+                // - Job category matches provider categories OR
+                // - Job category is HANDYMAN and provider is HANDYMAN type OR
+                // - Job requiredCapability matches provider capabilities
+                const categoryMatch = userCategories.length > 0 ? { category: { in: userCategories } } : {};
+                const handymanMatch = user.providerType === 'HANDYMAN' ? { category: 'HANDYMAN' } : {};
                 
-                // If no specific conditions, allow all ASSIGNING jobs for handymen
-                if (categoryConditions.length === 0 && user.providerType === 'HANDYMAN') {
-                    categoryConditions.push({}); // Match all
-                }
+                orConditions.push({
+                    AND: [
+                        { status: 'ASSIGNING' },
+                        {
+                            OR: [
+                                categoryMatch,
+                                handymanMatch,
+                                // If job has requiredCapability, check if provider has it
+                                ...(userCapabilities.length > 0 ? [{ requiredCapability: { in: userCapabilities } }] : [])
+                            ].filter(c => Object.keys(c).length > 0) // Remove empty conditions
+                        }
+                    ]
+                });
                 
-                if (categoryConditions.length > 0) {
-                    orConditions.push({
-                        AND: [
-                            { status: 'ASSIGNING' },
-                            {
-                                OR: categoryConditions
-                            }
-                        ]
-                    });
-                }
-                
-                console.log(`[Jobs API] Provider ${userId} (categories: ${userCategories.join(',')}, capabilities: ${userCapabilities.join(',')}, type: ${user.providerType}) - including fallback for ASSIGNING jobs`);
+                console.log(`[Jobs API] Provider ${userId} (categories: ${userCategories.join(',')}, capabilities: ${userCapabilities.join(',')}) - broadcast mode, showing all matching ASSIGNING jobs`);
             }
             
             whereClause.OR = orConditions;
