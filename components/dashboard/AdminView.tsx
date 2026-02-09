@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { SERVICE_CATEGORIES, PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { getNextStates } from '@/lib/jobStateMachine';
 import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2 } from 'lucide-react';
