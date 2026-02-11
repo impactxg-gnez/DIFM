@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
-    "test_parser.ts"
+    "test_parser.ts",
+    "scripts/**/*"
   ]
 }
