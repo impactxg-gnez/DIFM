@@ -176,6 +176,8 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['flat', 'clean'], itemId: 'apartment_cleaning_standard', description: 'flat clean' },
   { keywords: ['clean', 'house'], itemId: 'apartment_cleaning_standard', description: 'clean house' },
   { keywords: ['house', 'clean'], itemId: 'apartment_cleaning_standard', description: 'house clean' },
+  { keywords: ['clean', 'room'], itemId: 'apartment_cleaning_standard', description: 'clean room' },
+  { keywords: ['room', 'clean'], itemId: 'apartment_cleaning_standard', description: 'room clean' },
   { keywords: ['deep', 'clean'], itemId: 'eot_cleaning_1bed', description: 'deep clean' },
   { keywords: ['end', 'tenancy'], itemId: 'eot_cleaning_1bed', description: 'end of tenancy' },
   { keywords: ['tenancy', 'clean'], itemId: 'eot_cleaning_1bed', description: 'tenancy clean' },
@@ -269,6 +271,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
   'apartment_cleaning_standard': [
     'clean my apartment', 'apartment clean', 'clean apartment', 'flat clean', 'clean my flat',
     'clean house', 'house clean', 'clean home', 'home clean',
+    'clean room', 'room clean', 'clean my room', 'my room clean',
     'my apartment', 'apartment is', 'apartment needs', 'my flat', 'flat is',
     'oven clean', 'deep clean apartment', 'deep clean flat'
   ],

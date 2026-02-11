@@ -54,8 +54,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     // 2. Parse Text
     const parseResult = parseJobDescription(description, catalogue);
 
-    // 3. Map detected IDs to Items
-    let detectedItems = parseResult.detectedItemIds
+    // 3. Map detected IDs to Items (ensure uniqueness)
+    const uniqueItemIds = [...new Set(parseResult.detectedItemIds)]; // Remove any duplicates
+    let detectedItems = uniqueItemIds
         .map(id => catalogue.find(c => c.job_item_id === id))
         .filter(Boolean) as any[]; // cast to simplify TS for now
 
@@ -85,8 +86,8 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         }
         // Cleaning-related keywords
         else if (lower.includes('clean') || lower.includes('cleaning')) {
-            // Prefer standard apartment cleaning if apartment/flat is mentioned
-            if (lower.includes('apartment') || lower.includes('flat')) {
+            // Prefer standard apartment cleaning if apartment/flat/room/house is mentioned
+            if (lower.includes('apartment') || lower.includes('flat') || lower.includes('room') || lower.includes('house')) {
                 const fallbackItem = catalogue.find(c => c.job_item_id === 'apartment_cleaning_standard');
                 if (fallbackItem) {
                     detectedItems = [fallbackItem];
@@ -102,6 +103,16 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             }
         }
     }
+    
+    // Ensure no duplicates in final detectedItems array
+    const seenIds = new Set<string>();
+    detectedItems = detectedItems.filter(item => {
+        if (seenIds.has(item.job_item_id)) {
+            return false;
+        }
+        seenIds.add(item.job_item_id);
+        return true;
+    });
     
     // 4b. If still no match after fallback, mark as needs clarification
     if (detectedItems.length === 0) {
