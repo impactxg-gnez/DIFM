@@ -54,9 +54,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     // 2. Parse Text
     const parseResult = parseJobDescription(description, catalogue);
 
-    // 3. Map detected IDs to Items (ensure uniqueness)
-    const uniqueItemIds = [...new Set(parseResult.detectedItemIds)]; // Remove any duplicates
-    let detectedItems = uniqueItemIds
+    // 3. Map detected IDs to Items (preserve quantities - duplicates are intentional)
+    // parseJobDescription now returns items with quantities as duplicates in the array
+    let detectedItems = parseResult.detectedItemIds
         .map(id => catalogue.find(c => c.job_item_id === id))
         .filter(Boolean) as any[]; // cast to simplify TS for now
 
@@ -104,15 +104,8 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         }
     }
     
-    // Ensure no duplicates in final detectedItems array
-    const seenIds = new Set<string>();
-    detectedItems = detectedItems.filter(item => {
-        if (seenIds.has(item.job_item_id)) {
-            return false;
-        }
-        seenIds.add(item.job_item_id);
-        return true;
-    });
+    // Note: Duplicates are now intentional - they represent quantities
+    // The visit generation engine will handle bundling correctly
     
     // 4b. If still no match after fallback, mark as needs clarification
     if (detectedItems.length === 0) {

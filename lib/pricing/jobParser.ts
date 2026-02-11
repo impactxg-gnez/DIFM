@@ -315,6 +315,46 @@ const KEYWORD_MAP: Record<string, string[]> = {
   ],
 };
 
+// Extract quantity from a segment (e.g., "install 4 shelves" -> 4, "hang picture" -> 1)
+function extractQuantity(segment: string): { quantity: number; cleanedSegment: string } {
+  // Match patterns like "4 shelves", "2 pictures", "three mirrors", etc.
+  // Look for numbers at the start or before the main noun
+  const lower = segment.toLowerCase().trim();
+  
+  // Pattern 1: Number at start (e.g., "4 shelves", "2 pictures")
+  const startNumberMatch = lower.match(/^(\d+)\s+/);
+  if (startNumberMatch) {
+    const quantity = parseInt(startNumberMatch[1], 10);
+    const cleanedSegment = segment.substring(startNumberMatch[0].length).trim();
+    return { quantity: Math.max(1, Math.min(quantity, 100)), cleanedSegment }; // Cap at 100
+  }
+  
+  // Pattern 2: Number before noun (e.g., "install 4 shelves", "hang 2 pictures")
+  const beforeNounMatch = lower.match(/\b(\d+)\s+(shelf|shelves|picture|pictures|mirror|mirrors|tv|tvs|door|doors|window|windows|socket|sockets|plug|plugs|light|lights|bulb|bulbs|tap|taps|pipe|pipes|cabinet|cabinets|chair|chairs|table|tables|item|items|thing|things)\b/i);
+  if (beforeNounMatch) {
+    const quantity = parseInt(beforeNounMatch[1], 10);
+    // Remove the number from the segment for parsing
+    const cleanedSegment = segment.replace(new RegExp(`\\b${beforeNounMatch[1]}\\s+`, 'i'), '').trim();
+    return { quantity: Math.max(1, Math.min(quantity, 100)), cleanedSegment };
+  }
+  
+  // Pattern 3: Written numbers (e.g., "two shelves", "three pictures")
+  const writtenNumbers: Record<string, number> = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+  };
+  for (const [word, num] of Object.entries(writtenNumbers)) {
+    const regex = new RegExp(`\\b${word}\\s+`, 'i');
+    if (regex.test(lower)) {
+      const cleanedSegment = segment.replace(regex, '').trim();
+      return { quantity: num, cleanedSegment };
+    }
+  }
+  
+  // Default: quantity = 1
+  return { quantity: 1, cleanedSegment: segment };
+}
+
 // Segment description by common separators
 function segmentDescription(text: string): string[] {
   // Split by "and", commas, semicolons, "plus", "also", "then"
@@ -461,7 +501,7 @@ export function parseJobDescription(
   catalogue: CatalogueItem[],
   customPatterns?: KeywordPattern[]
 ): ParseResult {
-  const detectedIds = new Set<string>();
+  const detectedIds: string[] = []; // Array (not Set) to allow duplicates for quantities
   const segmentConfidences: number[] = [];
 
   // Segment the description to detect multiple services
@@ -471,15 +511,18 @@ export function parseJobDescription(
 
   // Parse each segment independently
   for (const segment of segments) {
-    const segmentLower = segment.toLowerCase();
+    // Extract quantity from segment (e.g., "install 4 shelves" -> quantity=4, cleaned="install shelves")
+    const { quantity, cleanedSegment } = extractQuantity(segment);
+    const segmentLower = cleanedSegment.toLowerCase();
     let segmentDetected = false;
     let segmentConfidence = 0;
+    let detectedItemId: string | null = null;
 
     // Step 1: Detect category for this segment
     const category = detectCategory(segmentLower);
     
     if (category) {
-      console.log(`[JobParser] Segment "${segment}" detected category: ${category}`);
+      console.log(`[JobParser] Segment "${segment}" detected category: ${category}, quantity: ${quantity}`);
       
       // Step 2: Find best catalogue item for this category
       const itemId = findBestCatalogueItem(category, segmentLower, catalogue, customPatterns);
@@ -487,10 +530,10 @@ export function parseJobDescription(
       if (itemId) {
         const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
         if (catalogueItem) {
-          detectedIds.add(itemId);
+          detectedItemId = itemId;
           segmentDetected = true;
           segmentConfidence = 0.9;
-          console.log(`[JobParser] Segment "${segment}" -> ${itemId} (${catalogueItem.display_name})`);
+          console.log(`[JobParser] Segment "${segment}" -> ${itemId} (${catalogueItem.display_name}) x${quantity}`);
         }
       } else {
         console.warn(`[JobParser] Category "${category}" detected but no catalogue item found for segment: "${segment}"`);
@@ -506,14 +549,14 @@ export function parseJobDescription(
             segmentLower.includes('big') || segmentLower.includes('large')) {
           const item = catalogue.find(c => c.job_item_id === 'tv_mount_large');
           if (item) {
-            detectedIds.add('tv_mount_large');
+            detectedItemId = 'tv_mount_large';
             segmentDetected = true;
             segmentConfidence = 0.9;
           }
         } else {
           const item = catalogue.find(c => c.job_item_id === 'tv_mount_standard');
           if (item) {
-            detectedIds.add('tv_mount_standard');
+            detectedItemId = 'tv_mount_standard';
             segmentDetected = true;
             segmentConfidence = 0.9;
           }
@@ -535,7 +578,7 @@ export function parseJobDescription(
           if (matchedKeyword) {
             const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
             if (catalogueItem) {
-              detectedIds.add(itemId);
+              detectedItemId = itemId;
               segmentDetected = true;
               segmentConfidence = 0.85;
               console.log(`[JobParser] Segment "${segment}" matched "${matchedKeyword}" -> ${itemId}`);
@@ -553,10 +596,18 @@ export function parseJobDescription(
         c.job_item_id === 'shelf_install_single'
       );
       if (fallbackItem) {
-        detectedIds.add(fallbackItem.job_item_id);
+        detectedItemId = fallbackItem.job_item_id;
         segmentConfidence = 0.5; // Low confidence for fallback
         console.log(`[JobParser] Segment "${segment}" -> fallback to handyman (${fallbackItem.job_item_id})`);
       }
+    }
+
+    // Add the item ID multiple times based on quantity
+    if (detectedItemId) {
+      for (let i = 0; i < quantity; i++) {
+        detectedIds.push(detectedItemId);
+      }
+      console.log(`[JobParser] Added ${quantity} instance(s) of ${detectedItemId}`);
     }
 
     segmentConfidences.push(segmentConfidence);
@@ -567,8 +618,10 @@ export function parseJobDescription(
     ? segmentConfidences.reduce((sum, c) => sum + c, 0) / segmentConfidences.length
     : 0;
 
+  console.log(`[JobParser] Final detected items (${detectedIds.length} total):`, detectedIds);
+
   return {
-    detectedItemIds: Array.from(detectedIds),
+    detectedItemIds: detectedIds, // Array with duplicates for quantities
     confidence: overallConfidence
   };
 }
