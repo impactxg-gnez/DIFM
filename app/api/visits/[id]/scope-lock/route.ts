@@ -33,26 +33,53 @@ export async function POST(
     }
 
     // 1. Process uncertainty & compute final effective minutes
+    // Check ALL items in visit (primary + addons) for BUFFER handling
     let extraMinutes = 0;
     let forceH3 = false;
 
+    // Get primary item
     const primaryItem = await getCatalogueItem(visit.primary_job_item_id);
+    
+    // Get all addon items
+    const addonItems = await Promise.all(
+      (visit.addon_job_item_ids || []).map((itemId: string) => getCatalogueItem(itemId))
+    );
+    
+    // All items in this visit (primary + addons)
+    const allItems = [primaryItem, ...addonItems].filter(Boolean);
 
+    // Check each answer for uncertainty triggers
     for (const [, answer] of Object.entries(answers)) {
       if (answer === 'not_sure' || answer === 'No' || answer === 'No / Not sure') {
-        if (primaryItem?.uncertainty_prone) {
-          if (primaryItem.uncertainty_handling === 'BUFFER') {
-            extraMinutes += primaryItem.risk_buffer_minutes || 0;
-          } else if (primaryItem.uncertainty_handling === 'FORCE_H3') {
-            forceH3 = true;
+        // Check ALL items in the visit for BUFFER/FORCE_H3 handling
+        for (const item of allItems) {
+          if (!item) continue;
+          
+          if (item.uncertainty_prone) {
+            if (item.uncertainty_handling === 'BUFFER') {
+              // Sum risk_buffer_minutes for each BUFFER item with "not_sure" answer
+              extraMinutes += item.risk_buffer_minutes || 0;
+              console.log(`[ScopeLock] BUFFER applied: ${item.job_item_id} adds ${item.risk_buffer_minutes}min buffer`);
+            } else if (item.uncertainty_handling === 'FORCE_H3') {
+              // FORCE_H3 takes precedence
+              forceH3 = true;
+              console.log(`[ScopeLock] FORCE_H3 triggered by: ${item.job_item_id}`);
+            }
           }
         }
       }
     }
 
+    // Calculate effective minutes: base_minutes + sum of all BUFFER risk_buffer_minutes
     const effectiveMinutes = (visit.base_minutes ?? 0) + extraMinutes;
+    
+    // Recalculate tier based on effective_minutes (unless FORCE_H3)
     const finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
+    
+    // Recalculate price based on new tier
     const finalPrice = calculatePrice(finalTier, visit.item_class);
+    
+    console.log(`[ScopeLock] Visit ${visitId}: base=${visit.base_minutes}min, buffer=${extraMinutes}min, effective=${effectiveMinutes}min, tier=${finalTier}, price=£${finalPrice}`);
 
     // 2. Immutable ScopeSummary snapshot (minimal contract text for now)
     const includes_text = 'This visit covers the items listed above.';
