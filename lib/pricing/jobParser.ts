@@ -94,6 +94,19 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['shower', 'leak'], itemId: 'tap_leak_fix', description: 'shower leak' },
   { keywords: ['bath', 'leak'], itemId: 'tap_leak_fix', description: 'bath leak' },
   
+  // Concealed leak investigation (FORCE_H3) - must come before general leak patterns
+  { keywords: ['hidden', 'leak'], itemId: 'concealed_leak_investigation', description: 'hidden leak' },
+  { keywords: ['concealed', 'leak'], itemId: 'concealed_leak_investigation', description: 'concealed leak' },
+  { keywords: ['leak', 'behind'], itemId: 'concealed_leak_investigation', description: 'leak behind wall' },
+  { keywords: ['leak', 'wall'], itemId: 'concealed_leak_investigation', description: 'leak behind wall' },
+  { keywords: ['water', 'through', 'wall'], itemId: 'concealed_leak_investigation', description: 'water coming through wall' },
+  { keywords: ['water', 'wall'], itemId: 'concealed_leak_investigation', description: 'water through wall' },
+  { keywords: ['unknown', 'leak'], itemId: 'concealed_leak_investigation', description: 'unknown leak source' },
+  { keywords: ['leak', 'source'], itemId: 'concealed_leak_investigation', description: 'unknown leak source' },
+  { keywords: ['investigate', 'leak'], itemId: 'concealed_leak_investigation', description: 'investigate leak' },
+  { keywords: ['investigate', 'hidden'], itemId: 'concealed_leak_investigation', description: 'investigate hidden leak' },
+  { keywords: ['investigate', 'water'], itemId: 'concealed_leak_investigation', description: 'investigate water leak' },
+  
   // ========== ELECTRICAL PATTERNS ==========
   { keywords: ['socket', 'replace'], itemId: 'socket_replace', description: 'replace socket' },
   { keywords: ['socket', 'broken'], itemId: 'socket_replace', description: 'broken socket' },
@@ -233,6 +246,16 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'window', 'broken window', 'repair window', 'fix window',
     'door hinge', 'door handle', 'door lock', 'window handle',
     'my door', 'door is', 'door needs', 'my window', 'window is', 'window needs'
+  ],
+  
+  // Plumbing - concealed leak investigation (FORCE_H3) - must come before general leak patterns
+  'concealed_leak_investigation': [
+    'hidden leak', 'concealed leak', 'leak behind wall', 'leak behind',
+    'water coming through wall', 'water through wall', 'water wall',
+    'unknown leak source', 'unknown leak', 'leak source',
+    'investigate leak', 'investigate hidden', 'investigate water',
+    'investigate hidden leak', 'investigate concealed leak',
+    'hidden water leak', 'concealed water leak', 'behind wall leak'
   ],
   
   // Plumbing - expanded with variations
@@ -479,7 +502,7 @@ function findBestCatalogueItem(
 // Find fallback catalogue item for a category
 function findFallbackItem(category: string, catalogue: CatalogueItem[]): string | null {
   const fallbackMap: Record<string, string[]> = {
-    PLUMBING: ['tap_leak_fix'],
+    PLUMBING: ['concealed_leak_investigation', 'tap_leak_fix'],
     ELECTRICAL: ['socket_replace'],
     CLEANING: ['apartment_cleaning_standard', 'eot_cleaning_1bed'],
     PAINTING: ['paint_wall_standard', 'paint_touchup'],

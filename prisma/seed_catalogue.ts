@@ -87,6 +87,18 @@ const CATALOGUE_ITEMS = [
         risk_buffer_minutes: 15
     },
     {
+        job_item_id: 'concealed_leak_investigation',
+        display_name: 'Investigate concealed pipe leak',
+        item_class: 'STANDARD',
+        required_capability_tags: ['PLUMBING'],
+        time_weight_minutes: 60,
+        allowed_addon: false,
+        uncertainty_prone: true,
+        uncertainty_handling: 'FORCE_H3',
+        risk_buffer_minutes: 0,
+        notes: 'Hidden or behind-wall plumbing work'
+    },
+    {
         job_item_id: 'toilet_repair_simple',
         display_name: 'Toilet Flush Repair (Internal)',
         item_class: 'STANDARD',
