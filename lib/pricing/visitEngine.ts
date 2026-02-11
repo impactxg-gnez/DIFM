@@ -29,10 +29,9 @@ export const TIER_PRICES: Record<string, number> = {
 };
 
 export const TIER_ITEM_CAPS: Record<string, number> = {
-    // Allow small add-ons to be bundled into a single H1 visit (per DIFM V1 acceptance criteria)
-    // BUT: Similar tasks like "hang mirror" and "hang picture" should be separate visits
-    // So we limit to 1 item per visit for hanging/mounting tasks to ensure proper visit isolation
-    H1: 1,  // Changed from 2 to 1 to prevent bundling similar tasks
+    // Allow bundling of similar tasks (e.g., "hang mirror" + "hang picture") into single visit
+    // Costs are summed (e.g., 60 + 60 = 120) rather than recalculated by tier
+    H1: 2,  // Allow 2 items in H1 visit
     H2: 2,
     H3: 4,
 };
@@ -57,6 +56,8 @@ export interface GeneratedVisit {
     total_minutes: number;
     tier: "H1" | "H2" | "H3";
     price: number;
+    // Track individual item prices for accurate summing when bundling
+    item_prices?: number[]; // Prices for each item (primary + addons)
 }
 
 export function calculateTier(minutes: number): string {
@@ -127,6 +128,7 @@ function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
     const tier = calculateTier(item.time_weight_minutes);
     const requiredCaps = item.required_capability_tags || [];
     const visitTypeLabel = inferVisitTypeLabel(item.item_class as any, requiredCaps);
+    const itemPrice = calculatePrice(tier, item.item_class);
     return {
         visit_id: '',
         item_class: item.item_class as any,
@@ -140,7 +142,8 @@ function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
         required_capability_tags: requiredCaps,
         total_minutes: item.time_weight_minutes,
         tier: tier as any,
-        price: calculatePrice(tier, item.item_class),
+        price: itemPrice,
+        item_prices: [itemPrice], // Track individual item price
     };
 }
 
@@ -184,6 +187,7 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
         const visitMinutes = Math.min(TIER_THRESHOLDS.H3, remainingMinutes);
 
         const tier = calculateTier(visitMinutes);
+        const itemPrice = calculatePrice(tier, item.item_class);
         const visit: GeneratedVisit = {
             visit_id: '',
             item_class: item.item_class as any,
@@ -197,7 +201,8 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
             required_capability_tags: requiredCaps,
             total_minutes: visitMinutes,
             tier: tier as any,
-            price: calculatePrice(tier, item.item_class),
+            price: itemPrice,
+            item_prices: [itemPrice], // Track individual item price
         };
         visits.push(visit);
     }
@@ -209,14 +214,8 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     if (visit.item_class !== 'STANDARD') return false;
     if (item.allowed_addon === false) return false;
 
-    // Don't bundle similar hanging/mounting tasks - they should be separate visits
-    // This ensures "hang mirror" and "hang picture" create 2 separate visits
-    const hangingTasks = ['mirror_hang', 'pic_hang', 'tv_mount_standard', 'tv_mount_large', 'shelf_install_single'];
-    const isHangingTask = hangingTasks.includes(item.job_item_id);
-    const visitIsHangingTask = hangingTasks.includes(visit.primary_job_item.job_item_id);
-    if (isHangingTask && visitIsHangingTask) {
-        return false; // Keep hanging tasks separate
-    }
+    // Allow bundling similar hanging/mounting tasks (e.g., "hang mirror" + "hang picture")
+    // These can be done by a single handyman in one visit
 
     // Capability compatibility check
     const itemCaps = new Set(item.required_capability_tags);
@@ -267,7 +266,22 @@ function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
     visit.required_capability_tags = Array.from(new Set([...visit.required_capability_tags, ...(item.required_capability_tags || [])]));
     visit.visit_type_label = inferVisitTypeLabel(visit.item_class, visit.required_capability_tags);
 
-    // Recalc tier/price
+    // Calculate individual item price based on its own tier
+    const itemTier = calculateTier(item.time_weight_minutes);
+    const itemPrice = calculatePrice(itemTier, item.item_class);
+    
+    // Initialize item_prices array if not present
+    if (!visit.item_prices) {
+        // If visit was created without item_prices, estimate from current price
+        visit.item_prices = [visit.price];
+    }
+    
+    // Add the new item's price to the array
+    visit.item_prices.push(itemPrice);
+    
+    // Sum all individual item prices instead of recalculating by tier
+    visit.price = visit.item_prices.reduce((sum, p) => sum + p, 0);
+    
+    // Update tier based on total minutes (for display/logging purposes)
     visit.tier = calculateTier(visit.total_minutes) as any;
-    visit.price = calculatePrice(visit.tier, visit.item_class);
 }
