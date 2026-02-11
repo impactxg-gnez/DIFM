@@ -48,23 +48,26 @@ export async function POST(
     // All items in this visit (primary + addons)
     const allItems = [primaryItem, ...addonItems].filter(Boolean);
 
-    // Check each answer for uncertainty triggers
-    for (const [, answer] of Object.entries(answers)) {
-      if (answer === 'not_sure' || answer === 'No' || answer === 'No / Not sure') {
-        // Check ALL items in the visit for BUFFER/FORCE_H3 handling
-        for (const item of allItems) {
-          if (!item) continue;
-          
-          if (item.uncertainty_prone) {
-            if (item.uncertainty_handling === 'BUFFER') {
-              // Sum risk_buffer_minutes for each BUFFER item with "not_sure" answer
-              extraMinutes += item.risk_buffer_minutes || 0;
-              console.log(`[ScopeLock] BUFFER applied: ${item.job_item_id} adds ${item.risk_buffer_minutes}min buffer`);
-            } else if (item.uncertainty_handling === 'FORCE_H3') {
-              // FORCE_H3 takes precedence
-              forceH3 = true;
-              console.log(`[ScopeLock] FORCE_H3 triggered by: ${item.job_item_id}`);
-            }
+    // Check if ANY answer indicates uncertainty ("not_sure")
+    const hasUncertaintyAnswer = Object.values(answers).some(
+      (answer) => answer === 'not_sure' || answer === 'No' || answer === 'No / Not sure'
+    );
+
+    if (hasUncertaintyAnswer) {
+      // For each item in the visit, check if it needs BUFFER or FORCE_H3
+      for (const item of allItems) {
+        if (!item) continue;
+        
+        if (item.uncertainty_prone) {
+          if (item.uncertainty_handling === 'BUFFER') {
+            // Sum risk_buffer_minutes for each BUFFER item (apply once per item)
+            extraMinutes += item.risk_buffer_minutes || 0;
+            console.log(`[ScopeLock] BUFFER applied: ${item.job_item_id} adds ${item.risk_buffer_minutes}min buffer`);
+          } else if (item.uncertainty_handling === 'FORCE_H3') {
+            // FORCE_H3 takes precedence (only need one item to trigger)
+            forceH3 = true;
+            console.log(`[ScopeLock] FORCE_H3 triggered by: ${item.job_item_id}`);
+            break; // FORCE_H3 is absolute, no need to check other items
           }
         }
       }
