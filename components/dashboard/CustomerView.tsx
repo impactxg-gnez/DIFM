@@ -311,8 +311,7 @@ export function CustomerView({ user }: { user: any }) {
                                 // Update the visit in local state with new tier/price from API response
                                 setVisits(prevVisits => 
                                     prevVisits.map(v => {
-                                        const visitIdStr = v.visit_id || v.id;
-                                        if (visitIdStr === visitId) {
+                                        if (v.visit_id === visitId) {
                                             return {
                                                 ...v,
                                                 tier: result.tier,
