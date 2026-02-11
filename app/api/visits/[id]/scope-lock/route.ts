@@ -185,6 +185,7 @@ export async function POST(
       visit_id: visitId,
       tier: finalTier,
       price: finalPrice,
+      effective_minutes: effectiveMinutes,
       total_price: result.totalPrice,
       job_status: result.jobStatus,
       all_visits_locked: result.allLocked,

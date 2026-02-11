@@ -307,9 +307,26 @@ export function CustomerView({ user }: { user: any }) {
                                 body: JSON.stringify({ answers })
                             });
                             if (res.ok) {
+                                const result = await res.json();
+                                // Update the visit in local state with new tier/price from API response
+                                setVisits(prevVisits => 
+                                    prevVisits.map(v => {
+                                        const visitIdStr = v.visit_id || v.id;
+                                        if (visitIdStr === visitId) {
+                                            return {
+                                                ...v,
+                                                tier: result.tier,
+                                                price: result.price,
+                                                total_minutes: result.effective_minutes || v.total_minutes
+                                            };
+                                        }
+                                        return v;
+                                    })
+                                );
+                                // Refresh jobs data
+                                mutate();
                                 // After scope-lock, we can show "waiting" or return to status list.
                                 setStep('WAITING');
-                                mutate();
                             }
                         } catch (e) {
                             console.error('Scope lock submission failed', e);
