@@ -31,9 +31,10 @@ export const TIER_PRICES: Record<string, number> = {
 export const TIER_ITEM_CAPS: Record<string, number> = {
     // Allow bundling of similar tasks (e.g., "hang mirror" + "hang picture") into single visit
     // Costs are summed (e.g., 60 + 60 = 120) rather than recalculated by tier
-    H1: 2,  // Allow 2 items in H1 visit
-    H2: 2,
-    H3: 4,
+    // Increased limits to allow better bundling while respecting time constraints
+    H1: 4,  // Allow up to 4 items in H1 visit (if time allows)
+    H2: 6,  // Allow up to 6 items in H2 visit
+    H3: 10, // Allow up to 10 items in H3 visit (150 min max still applies)
 };
 
 // V1 Quote Contract (Visit is the primary unit)
@@ -224,11 +225,13 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
 function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     // Rule 1: Only STANDARD items can be bundled together
     if (visit.item_class !== 'STANDARD') {
+        console.log(`[VisitEngine] canAdd: REJECTED - visit.item_class is ${visit.item_class}, not STANDARD`);
         return false;
     }
     
     // Rule 2: Item must be allowed as addon
     if (item.allowed_addon === false) {
+        console.log(`[VisitEngine] canAdd: REJECTED - ${item.job_item_id} has allowed_addon=false`);
         return false;
     }
 
@@ -238,12 +241,14 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     const allCaps = new Set([...itemCaps, ...visitCaps]);
 
     if (!canProviderHandleAll(allCaps)) {
+        console.log(`[VisitEngine] canAdd: REJECTED - capability mismatch. Item: [${Array.from(itemCaps).join(', ')}], Visit: [${Array.from(visitCaps).join(', ')}]`);
         return false;
     }
 
     // Rule 4: Total minutes must not exceed 150 (H3 max)
     const newMinutes = visit.total_minutes + item.time_weight_minutes;
     if (newMinutes > TIER_THRESHOLDS.H3) {
+        console.log(`[VisitEngine] canAdd: REJECTED - time limit exceeded. Visit: ${visit.total_minutes}min, Item: ${item.time_weight_minutes}min, Total: ${newMinutes}min > ${TIER_THRESHOLDS.H3}min`);
         return false;
     }
 
@@ -254,10 +259,12 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     const newItemCount = currentItemCount + 1; // add the new item
     
     if (newItemCount > TIER_ITEM_CAPS[newTier]) {
+        console.log(`[VisitEngine] canAdd: REJECTED - item count limit exceeded. Current: ${currentItemCount}, New: ${newItemCount}, Tier: ${newTier}, Limit: ${TIER_ITEM_CAPS[newTier]}`);
         return false;
     }
 
     // All rules passed - item can be added
+    console.log(`[VisitEngine] canAdd: ACCEPTED - ${item.job_item_id} can be added to visit (${visit.total_minutes}min + ${item.time_weight_minutes}min = ${newMinutes}min, ${currentItemCount} + 1 = ${newItemCount} items, tier: ${newTier})`);
     return true;
 }
 
