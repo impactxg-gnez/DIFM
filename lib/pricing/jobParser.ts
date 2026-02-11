@@ -383,12 +383,19 @@ function inferCategoryFromItem(item: CatalogueItem): string {
 function findBestCatalogueItem(
   category: string,
   segmentLower: string,
-  catalogue: CatalogueItem[]
+  catalogue: CatalogueItem[],
+  customPatterns?: KeywordPattern[]
 ): string | null {
   const normalizedSegment = normalizeText(segmentLower);
   
+  // Merge custom patterns (from DB) with hardcoded patterns
+  // Custom patterns take priority (checked first)
+  const allPatterns = customPatterns 
+    ? [...customPatterns, ...PATTERN_MATCHES]
+    : PATTERN_MATCHES;
+  
   // First, try pattern-based matching (handles variations like "pipe is leaking")
-  for (const pattern of PATTERN_MATCHES) {
+  for (const pattern of allPatterns) {
     if (patternMatches(normalizedSegment, pattern.keywords)) {
       const catalogueItem = catalogue.find(c => c.job_item_id === pattern.itemId);
       if (catalogueItem) {
@@ -446,7 +453,11 @@ function findFallbackItem(category: string, catalogue: CatalogueItem[]): string 
   return null;
 }
 
-export function parseJobDescription(text: string, catalogue: CatalogueItem[]): ParseResult {
+export function parseJobDescription(
+  text: string, 
+  catalogue: CatalogueItem[],
+  customPatterns?: KeywordPattern[]
+): ParseResult {
   const detectedIds = new Set<string>();
   const segmentConfidences: number[] = [];
 
@@ -468,7 +479,7 @@ export function parseJobDescription(text: string, catalogue: CatalogueItem[]): P
       console.log(`[JobParser] Segment "${segment}" detected category: ${category}`);
       
       // Step 2: Find best catalogue item for this category
-      const itemId = findBestCatalogueItem(category, segmentLower, catalogue);
+      const itemId = findBestCatalogueItem(category, segmentLower, catalogue, customPatterns);
       
       if (itemId) {
         const catalogueItem = catalogue.find(c => c.job_item_id === itemId);

@@ -48,7 +48,26 @@ export async function calculateJobPrice(
 
   try {
     const catalogue = await getCatalogue();
-    const parsed = parseJobDescription(description, catalogue);
+    
+    // Load patterns from DB (optional, falls back to hardcoded patterns if DB fails)
+    let dbPatterns: any[] | undefined;
+    try {
+      const { prisma } = await import('../lib/prisma');
+      const patterns = await prisma.jobPattern.findMany({
+        where: { isActive: true },
+        orderBy: { priority: 'desc' }
+      });
+      dbPatterns = patterns.map(p => ({
+        keywords: typeof p.keywords === 'string' ? JSON.parse(p.keywords) : p.keywords,
+        itemId: p.catalogueItemId,
+        description: p.description
+      }));
+    } catch (error) {
+      console.warn('[Calculator] Failed to load patterns from DB, using hardcoded patterns:', error);
+      // Continue with hardcoded patterns
+    }
+    
+    const parsed = parseJobDescription(description, catalogue, dbPatterns);
 
     const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {
       const item = getCatalogueItemSync(id, catalogue);

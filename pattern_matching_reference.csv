@@ -11,7 +11,7 @@ PLUMBING,"tap, leaking",tap_leak_fix,tap leaking,"tap is leaking, my tap is leak
 PLUMBING,"sink, leak",tap_leak_fix,sink leak,"sink leak, leaking sink"
 PLUMBING,"sink, leaking",tap_leak_fix,sink leaking,"sink is leaking, my sink leaking"
 PLUMBING,"faucet, leak",tap_leak_fix,faucet leak,"faucet leak, leaking faucet"
-PLUMBING,"faucet, leaking",tap_leak_fix,faucet leaking,"faucet is leaking"
+PLUMBING,"faucet, leaking",tap_leak_fix,faucet leaking,faucet is leaking
 PLUMBING,"water, leak",tap_leak_fix,water leak,"water leak, water is leaking"
 PLUMBING,"drip, tap",tap_leak_fix,dripping tap,"dripping tap, tap dripping"
 PLUMBING,"drip, pipe",tap_leak_fix,dripping pipe,"dripping pipe, pipe dripping"

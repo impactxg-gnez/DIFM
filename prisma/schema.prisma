@@ -321,3 +321,19 @@ model ScopeSummary {
   createdAt             DateTime @default(now())
 }
 
+model JobPattern {
+  id              String   @id @default(uuid())
+  category        String   // PLUMBING, ELECTRICAL, HANDYMAN, etc.
+  keywords        String   // JSON array: ["pipe", "leak"]
+  catalogueItemId String   // e.g., "tap_leak_fix"
+  description     String   // Human-readable description
+  examplePhrases  String?  // Optional: example user inputs
+  isActive        Boolean  @default(true)
+  priority        Int      @default(0) // Higher priority = checked first
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([category])
+  @@index([catalogueItemId])
+}

@@ -20,6 +20,7 @@ const tabs = [
     { id: 'providers', label: 'Providers', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'pricing', label: 'Pricing Rules', icon: Wallet },
+    { id: 'patterns', label: 'Pattern Matching', icon: Sparkles },
     { id: 'categories', label: 'Categories', icon: Sliders },
 ];
 
@@ -34,6 +35,7 @@ export function AdminView({ user }: { user: any }) {
     const { data: providers, mutate: mutateProviders } = useSWR(activeTab === 'providers' ? '/api/admin/providers' : null, fetcher);
     const { data: paymentsData, mutate: mutatePayments } = useSWR(activeTab === 'payments' ? '/api/admin/payments' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
+    const { data: patterns, mutate: mutatePatterns } = useSWR(activeTab === 'patterns' ? '/api/admin/job-patterns' : null, fetcher);
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -726,6 +728,307 @@ export function AdminView({ user }: { user: any }) {
         }
     };
 
+    const [editingPattern, setEditingPattern] = useState<any>(null);
+    const [newPattern, setNewPattern] = useState({
+        category: '',
+        keywords: '',
+        catalogueItemId: '',
+        description: '',
+        examplePhrases: '',
+        priority: 0,
+        isActive: true
+    });
+
+    const handleSavePattern = useCallback(async (pattern: any) => {
+        try {
+            const keywordsArray = pattern.keywords.split(',').map((k: string) => k.trim()).filter(Boolean);
+            const response = await fetch('/api/admin/job-patterns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...pattern,
+                    keywords: keywordsArray
+                }),
+            });
+            if (response.ok) {
+                mutatePatterns();
+                setEditingPattern(null);
+                setNewPattern({
+                    category: '',
+                    keywords: '',
+                    catalogueItemId: '',
+                    description: '',
+                    examplePhrases: '',
+                    priority: 0,
+                    isActive: true
+                });
+            } else {
+                const error = await response.json();
+                alert(`Failed to save pattern: ${error.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Failed to save pattern:', error);
+            alert('Failed to save pattern');
+        }
+    }, [mutatePatterns]);
+
+    const handleDeletePattern = useCallback(async (id: string) => {
+        if (!confirm('Are you sure you want to delete this pattern?')) return;
+        try {
+            const response = await fetch(`/api/admin/job-patterns?id=${id}`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                mutatePatterns();
+            } else {
+                const error = await response.json();
+                alert(`Failed to delete pattern: ${error.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Failed to delete pattern:', error);
+            alert('Failed to delete pattern');
+        }
+    }, [mutatePatterns]);
+
+    const handleImportCSV = useCallback(async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv';
+        input.onchange = async (e: any) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const text = await file.text();
+            const lines = text.split('\n').filter((l: string) => l.trim());
+            const headers = lines[0].split(',').map((h: string) => h.trim());
+            
+            let imported = 0;
+            let errors = 0;
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
+                if (values.length < 4) continue;
+                
+                try {
+                    const category = values[0];
+                    const keywordsStr = values[1].replace(/^"|"$/g, '');
+                    const catalogueItemId = values[2];
+                    const description = values[3];
+                    const examplePhrases = values[4] || '';
+                    
+                    const keywords = keywordsStr.split(',').map((k: string) => k.trim()).filter(Boolean);
+                    
+                    const response = await fetch('/api/admin/job-patterns', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            category,
+                            keywords,
+                            catalogueItemId,
+                            description,
+                            examplePhrases,
+                            isActive: true,
+                            priority: 0
+                        }),
+                    });
+                    
+                    if (response.ok) {
+                        imported++;
+                    } else {
+                        errors++;
+                    }
+                } catch (err) {
+                    errors++;
+                }
+            }
+            
+            alert(`Import complete!\nImported: ${imported}\nErrors: ${errors}`);
+            mutatePatterns();
+        };
+        input.click();
+    }, [mutatePatterns]);
+
+    const patternsContent = useMemo(() => {
+        if (!patterns) return <div className="p-6 text-center text-gray-400">Loading patterns...</div>;
+        
+        return (
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h3 className="text-lg font-semibold text-white">Job Pattern Matching</h3>
+                        <p className="text-sm text-gray-400">Manage semantic patterns for job description parsing</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={handleImportCSV} variant="outline" size="sm">
+                            Import CSV
+                        </Button>
+                        <Button 
+                            onClick={() => setEditingPattern({ ...newPattern, id: undefined })} 
+                            size="sm"
+                        >
+                            Add Pattern
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Add/Edit Pattern Dialog */}
+                {editingPattern && (
+                    <Card className="p-4 bg-white/90 border-2 border-indigo-500">
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-semibold text-gray-900">
+                                    {editingPattern.id ? 'Edit Pattern' : 'Add New Pattern'}
+                                </h4>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => setEditingPattern(null)}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <Label className="text-gray-700">Category</Label>
+                                    <Input
+                                        value={editingPattern.category}
+                                        onChange={(e) => setEditingPattern({ ...editingPattern, category: e.target.value.toUpperCase() })}
+                                        placeholder="PLUMBING, ELECTRICAL, etc."
+                                        className="bg-white"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-gray-700">Catalogue Item ID</Label>
+                                    <Input
+                                        value={editingPattern.catalogueItemId}
+                                        onChange={(e) => setEditingPattern({ ...editingPattern, catalogueItemId: e.target.value })}
+                                        placeholder="tap_leak_fix"
+                                        className="bg-white"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <Label className="text-gray-700">Keywords (comma-separated)</Label>
+                                <Input
+                                    value={editingPattern.keywords}
+                                    onChange={(e) => setEditingPattern({ ...editingPattern, keywords: e.target.value })}
+                                    placeholder="pipe, leak"
+                                    className="bg-white"
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-gray-700">Description</Label>
+                                <Input
+                                    value={editingPattern.description}
+                                    onChange={(e) => setEditingPattern({ ...editingPattern, description: e.target.value })}
+                                    placeholder="pipe leak"
+                                    className="bg-white"
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-gray-700">Example Phrases (optional)</Label>
+                                <Input
+                                    value={editingPattern.examplePhrases || ''}
+                                    onChange={(e) => setEditingPattern({ ...editingPattern, examplePhrases: e.target.value })}
+                                    placeholder="fix a leaking pipe, my pipe is leaking"
+                                    className="bg-white"
+                                />
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={editingPattern.isActive}
+                                        onChange={(e) => setEditingPattern({ ...editingPattern, isActive: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <Label className="text-gray-700">Active</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Label className="text-gray-700">Priority:</Label>
+                                    <Input
+                                        type="number"
+                                        value={editingPattern.priority || 0}
+                                        onChange={(e) => setEditingPattern({ ...editingPattern, priority: parseInt(e.target.value) || 0 })}
+                                        className="w-20 bg-white"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => handleSavePattern(editingPattern)}>Save</Button>
+                                <Button variant="outline" onClick={() => setEditingPattern(null)}>Cancel</Button>
+                            </div>
+                        </div>
+                    </Card>
+                )}
+
+                {/* Patterns List */}
+                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {patterns.length === 0 ? (
+                        <Card className="p-8 text-center bg-white/60 border border-dashed border-white/10">
+                            <p className="text-gray-500 mb-2">No patterns found.</p>
+                            <p className="text-sm text-gray-400">Click "Add Pattern" to create your first pattern.</p>
+                        </Card>
+                    ) : (
+                        patterns.map((pattern: any) => {
+                            const keywords = typeof pattern.keywords === 'string' 
+                                ? JSON.parse(pattern.keywords) 
+                                : pattern.keywords;
+                            return (
+                                <Card key={pattern.id} className="p-4 bg-white/70 border border-white/10 hover:bg-white/80 transition-colors">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Badge variant="outline" className="text-xs">{pattern.category}</Badge>
+                                                {pattern.priority > 0 && (
+                                                    <Badge variant="secondary" className="text-xs">Priority: {pattern.priority}</Badge>
+                                                )}
+                                                {!pattern.isActive && (
+                                                    <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                                                )}
+                                                <span className="font-semibold text-white">{pattern.description}</span>
+                                            </div>
+                                            <div className="text-sm text-gray-400 mt-1">
+                                                Keywords: <span className="text-gray-300">{keywords.join(', ')}</span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                → <span className="text-indigo-300">{pattern.catalogueItemId}</span>
+                                            </div>
+                                            {pattern.examplePhrases && (
+                                                <div className="text-xs text-gray-500 mt-1 italic">
+                                                    Examples: {pattern.examplePhrases}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline"
+                                                onClick={() => setEditingPattern({ 
+                                                    ...pattern, 
+                                                    keywords: Array.isArray(keywords) ? keywords.join(', ') : keywords
+                                                })}
+                                            >
+                                                Edit
+                                            </Button>
+                                            <Button 
+                                                size="sm" 
+                                                variant="destructive"
+                                                onClick={() => handleDeletePattern(pattern.id)}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </Card>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        );
+    }, [patterns, editingPattern, newPattern, handleSavePattern, handleDeletePattern, handleImportCSV]);
+
     const categoriesContent = (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -761,6 +1064,7 @@ export function AdminView({ user }: { user: any }) {
         providers: providersContent,
         payments: paymentsContent,
         pricing: pricingContent,
+        patterns: patternsContent,
         categories: categoriesContent,
     };
 
