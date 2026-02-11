@@ -52,7 +52,7 @@ export async function calculateJobPrice(
     // Load patterns from DB (optional, falls back to hardcoded patterns if DB fails)
     let dbPatterns: any[] | undefined;
     try {
-      const { prisma } = await import('../lib/prisma');
+      const { prisma } = await import('../prisma');
       const patterns = await prisma.jobPattern.findMany({
         where: { isActive: true },
         orderBy: { priority: 'desc' }
