@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ScopeLock } from '@/components/booking/ScopeLock';
 import useSWR from 'swr';
@@ -54,7 +54,12 @@ export function CustomerView({ user }: { user: any }) {
     const [step, setStep] = useState<'LIST' | 'CREATE' | 'SCOPE_LOCK' | 'WAITING'>('LIST');
     // 🔒 Visit-first state (no job/price assumptions)
     const [visits, setVisits] = useState<Visit[]>([]);
-    const [totalPrice, setTotalPrice] = useState<number>(0);
+    
+    // Total price is derived from visits - always recalculates when visits change
+    const totalPrice = useMemo(
+        () => visits.reduce((sum, v) => sum + (v.price || 0), 0),
+        [visits]
+    );
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
@@ -129,7 +134,7 @@ export function CustomerView({ user }: { user: any }) {
             if (res.ok) {
                 const quote = await res.json();
                 setVisits(Array.isArray(quote.visits) ? quote.visits : []);
-                setTotalPrice(Number(quote.total_price || 0));
+                // totalPrice is now derived from visits, no need to set it
                 setStep('SCOPE_LOCK');
                 mutate();
             }
@@ -152,7 +157,7 @@ export function CustomerView({ user }: { user: any }) {
 
         setStep('LIST');
         setVisits([]);
-        setTotalPrice(0);
+        // totalPrice is now derived from visits, no need to reset it
         mutate();
     };
 
@@ -334,7 +339,7 @@ export function CustomerView({ user }: { user: any }) {
                     onCancel={() => {
                         setStep('LIST');
                         setVisits([]);
-                        setTotalPrice(0);
+                        // totalPrice is now derived from visits, no need to reset it
                     }}
                 />
             );
