@@ -148,30 +148,41 @@ function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
 }
 
 function bundleStandard(items: CatalogueItem[]): GeneratedVisit[] {
-    // Greedy pack by time desc
+    // Greedy packing algorithm: sort by time descending, pack into existing visits first
     const sorted = [...items].sort((a, b) => b.time_weight_minutes - a.time_weight_minutes);
     const visits: GeneratedVisit[] = [];
 
+    console.log(`[VisitEngine] bundleStandard: Processing ${items.length} items`);
+
     for (const item of sorted) {
-        // Handle items that exceed H3 threshold (>150 minutes)
+        // Handle items that exceed H3 threshold (>150 minutes) - split them
         if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
-            visits.push(...splitLargeItem(item));
+            const splitVisits = splitLargeItem(item);
+            visits.push(...splitVisits);
+            console.log(`[VisitEngine] Split large item ${item.job_item_id} (${item.time_weight_minutes}min) into ${splitVisits.length} visits`);
             continue;
         }
 
+        // Try to add item to an existing visit (greedy packing)
         let placed = false;
         for (const v of visits) {
             if (canAdd(item, v)) {
                 addToVisit(item, v);
                 placed = true;
-                break;
+                console.log(`[VisitEngine] Added ${item.job_item_id} (${item.time_weight_minutes}min) to existing visit (total: ${v.total_minutes}min, items: ${1 + v.addon_job_items.length})`);
+                break; // Stop searching once placed
             }
         }
+
+        // Only create new visit if item couldn't be added to any existing visit
         if (!placed) {
-            visits.push(createSingleItemVisit(item));
+            const newVisit = createSingleItemVisit(item);
+            visits.push(newVisit);
+            console.log(`[VisitEngine] Created new visit for ${item.job_item_id} (${item.time_weight_minutes}min)`);
         }
     }
 
+    console.log(`[VisitEngine] bundleStandard: Created ${visits.length} visits from ${items.length} items`);
     return visits;
 }
 
@@ -211,29 +222,42 @@ function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
 }
 
 function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
-    if (visit.item_class !== 'STANDARD') return false;
-    if (item.allowed_addon === false) return false;
+    // Rule 1: Only STANDARD items can be bundled together
+    if (visit.item_class !== 'STANDARD') {
+        return false;
+    }
+    
+    // Rule 2: Item must be allowed as addon
+    if (item.allowed_addon === false) {
+        return false;
+    }
 
-    // Allow bundling similar hanging/mounting tasks (e.g., "hang mirror" + "hang picture")
-    // These can be done by a single handyman in one visit
-
-    // Capability compatibility check
-    const itemCaps = new Set(item.required_capability_tags);
-    const visitCaps = new Set(visit.required_capability_tags);
+    // Rule 3: Capability compatibility check - single provider must handle all capabilities
+    const itemCaps = new Set(item.required_capability_tags || []);
+    const visitCaps = new Set(visit.required_capability_tags || []);
     const allCaps = new Set([...itemCaps, ...visitCaps]);
 
-    // Check if a single provider can handle all capabilities
-    if (!canProviderHandleAll(allCaps)) return false;
+    if (!canProviderHandleAll(allCaps)) {
+        return false;
+    }
 
+    // Rule 4: Total minutes must not exceed 150 (H3 max)
     const newMinutes = visit.total_minutes + item.time_weight_minutes;
-    // Cap at 150 (H3 max)
-    if (newMinutes > TIER_THRESHOLDS.H3) return false;
+    if (newMinutes > TIER_THRESHOLDS.H3) {
+        return false;
+    }
 
+    // Rule 5: Item count must not exceed tier limit for the new tier
     const newTier = calculateTier(newMinutes);
-    const newCount = 1 + visit.addon_job_items.length + 1; // current Items + this one
+    // Count: 1 primary item + existing addon items + 1 new addon item
+    const currentItemCount = 1 + visit.addon_job_items.length; // primary + existing addons
+    const newItemCount = currentItemCount + 1; // add the new item
+    
+    if (newItemCount > TIER_ITEM_CAPS[newTier]) {
+        return false;
+    }
 
-    if (newCount > TIER_ITEM_CAPS[newTier]) return false;
-
+    // All rules passed - item can be added
     return true;
 }
 
