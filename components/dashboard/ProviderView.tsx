@@ -15,6 +15,26 @@ import { CameraUpload } from '@/components/ui/CameraUpload';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+function TimerDisplay({ startTime }: { startTime: string | Date }) {
+    const [elapsed, setElapsed] = useState('');
+
+    useEffect(() => {
+        const start = new Date(startTime).getTime();
+        const update = () => {
+            const now = Date.now();
+            const diff = Math.max(0, now - start);
+            const mins = Math.floor(diff / 60000);
+            const secs = Math.floor((diff % 60000) / 1000);
+            setElapsed(`${mins}m ${secs.toString().padStart(2, '0')}s`);
+        };
+        update();
+        const interval = setInterval(update, 1000);
+        return () => clearInterval(interval);
+    }, [startTime]);
+
+    return <span className="font-mono">{elapsed}</span>;
+}
+
 
 export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
@@ -183,6 +203,11 @@ export function ProviderView({ user }: { user: any }) {
         if (!completionDialog.jobId) return;
         if (!completionNotes.trim()) {
             alert('Completion notes are required');
+            return;
+        }
+
+        if (!completionPhotos || completionPhotos.trim() === '') {
+            alert('Photo/Video evidence is required for completion');
             return;
         }
 
@@ -403,9 +428,9 @@ export function ProviderView({ user }: { user: any }) {
                             <div className="mb-4 p-3 bg-green-50 rounded border border-green-100 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] font-semibold text-green-700 uppercase">Timer Active</p>
-                                    <p className="text-lg font-black font-mono text-green-900">
-                                        {Math.floor((Date.now() - new Date(job.timerStartedAt).getTime()) / 60000)}m elapsed
-                                    </p>
+                                    <div className="text-lg font-black font-mono text-green-900">
+                                        <TimerDisplay startTime={job.timerStartedAt} /> elapsed
+                                    </div>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] font-semibold text-green-700 uppercase">Access</p>
@@ -428,10 +453,10 @@ export function ProviderView({ user }: { user: any }) {
                             )}
 
                             {job.status === 'ON_SITE' && (
-                                <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-green-600 hover:bg-green-700">Start Job</Button>
+                                <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-blue-600 hover:bg-blue-700 mb-2">Start Work</Button>
                             )}
 
-                            {job.status === 'IN_PROGRESS' && (
+                            {(job.status === 'IN_PROGRESS' || job.status === 'ON_SITE') && (
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="bg-green-600 hover:bg-green-700">Complete Job</Button>
                                     <Button

@@ -6,7 +6,7 @@ import { ServiceCategory } from '@/lib/constants';
 import { calculateJobPrice } from '@/lib/pricing/calculator';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { computeStuck } from '@/lib/jobStateMachine';
-import { ensureDispatchProgress } from '@/lib/dispatch/dispatchTracker';
+import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispatchTracker';
 
 export async function POST(request: Request) {
     try {
@@ -134,6 +134,7 @@ export async function GET(request: Request) {
         }
 
         // ⏱️ Auto-advance dispatch timeouts before listing/fetching
+        await activateBookedJobs();
         await ensureDispatchProgress();
 
         // Get User to check categories if Provider

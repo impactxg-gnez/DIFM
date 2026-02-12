@@ -46,3 +46,66 @@ export async function ensureDispatchProgress() {
 
     return results;
 }
+
+/**
+ * Moves jobs from BOOKED to ASSIGNING if they are ready for dispatch
+ */
+export async function activateBookedJobs() {
+    const bookedJobs = await prisma.job.findMany({
+        where: {
+            status: 'BOOKED'
+        },
+        include: {
+            visits: true
+        }
+    });
+
+    const results = [];
+    const now = new Date();
+
+    for (const job of bookedJobs) {
+        // V1: Job is ready for dispatch if it has a SCHEDULED (scope-locked) visit
+        const isReady = job.visits.some((v: any) => v.status === 'SCHEDULED');
+
+        if (!isReady) continue;
+
+        // Condition for activation: ASAP or scheduled in the next 60 minutes
+        let shouldActivate = false;
+        if (job.isASAP) {
+            shouldActivate = true;
+        } else if (job.scheduledAt) {
+            const scheduled = new Date(job.scheduledAt);
+            const diffMs = scheduled.getTime() - now.getTime();
+            const diffMins = diffMs / (1000 * 60);
+
+            // Activate if scheduled in the next 60 mins (or if already past)
+            if (diffMins <= 60) {
+                shouldActivate = true;
+            }
+        }
+
+        if (shouldActivate) {
+            console.log(`[DispatchTracker] Activating booked job ${job.id} (isASAP: ${job.isASAP}). Moving to ASSIGNING.`);
+            await prisma.job.update({
+                where: { id: job.id },
+                data: {
+                    status: 'ASSIGNING',
+                    statusUpdatedAt: now
+                }
+            });
+
+            await prisma.jobStateChange.create({
+                data: {
+                    jobId: job.id,
+                    fromStatus: 'BOOKED',
+                    toStatus: 'ASSIGNING',
+                    reason: 'Job activated for dispatch',
+                }
+            });
+
+            results.push({ jobId: job.id, action: 'ACTIVATED' });
+        }
+    }
+
+    return results;
+}
