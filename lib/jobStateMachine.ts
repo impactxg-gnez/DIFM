@@ -47,7 +47,8 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
 // Add cancellation transitions to all non-terminal states
 const NON_TERMINAL_STATES: JobStatus[] = [
   'REQUESTED', 'PRICED', 'BOOKED', 'ASSIGNING', 'ASSIGNED',
-  'PREAUTHORISED', 'ARRIVING', 'IN_PROGRESS', 'SCOPE_MISMATCH', 'PARTS_REQUIRED'
+  'PREAUTHORISED', 'ARRIVING', 'IN_PROGRESS', 'SCOPE_MISMATCH', 'PARTS_REQUIRED',
+  'RESCHEDULE_REQUIRED'
 ];
 
 NON_TERMINAL_STATES.forEach(state => {

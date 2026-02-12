@@ -12,7 +12,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd } = body as any;
+        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd, scheduledAt } = body as any;
 
         const cookieStore = await cookies();
         const userId = cookieStore.get('userId')?.value;
@@ -136,6 +136,13 @@ export async function POST(
                         arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
                         arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
                         timerStartedAt: (status === 'IN_PROGRESS' && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        scheduledAt: scheduledAt ? new Date(scheduledAt) : job.scheduledAt,
+                        // If rescheduling from RESCHEDULE_REQUIRED to BOOKED, clear old offer data
+                        ...(status === 'BOOKED' && currentStatus === 'RESCHEDULE_REQUIRED' ? {
+                            offeredToId: null,
+                            offeredAt: null,
+                            triedProviderIds: null,
+                        } : {}),
 
                         // Update completion evidence
                         ...(status === 'COMPLETED' ? {
