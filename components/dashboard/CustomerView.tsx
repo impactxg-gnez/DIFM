@@ -389,7 +389,7 @@ export function CustomerView({ user }: { user: any }) {
                                 <Badge variant="outline" className="border-white/10 text-gray-400">
                                     Job Reference: {job.id.slice(0, 8)}
                                 </Badge>
-                                <Badge className={isReschedule ? "bg-amber-600" : "bg-blue-600"}>
+                                <Badge status={job.status}>
                                     {getCustomerStatus(job)}
                                 </Badge>
                             </div>
@@ -469,7 +469,7 @@ export function CustomerView({ user }: { user: any }) {
                                             <div key={v.visit_id || `${job.id}-${idx}`} className="space-y-4">
                                                 <VisitCard visit={v} index={idx} />
 
-                                                {job.status === 'MISMATCH_PENDING' && (
+                                                {['MISMATCH_PENDING', 'SCOPE_MISMATCH'].includes(job.status) && (
                                                     <Card className="bg-red-500/10 border-red-500/20 p-4">
                                                         <div className="space-y-3">
                                                             <p className="text-sm font-medium text-red-400">
