@@ -32,7 +32,7 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       v.required_capability_tags_union.forEach((cap: string) => allRequiredCapabilities.add(cap));
     }
   });
-  
+
   // For matching, use the primary capability from the first visit or job.requiredCapability
   const primaryCapability = Array.from(allRequiredCapabilities)[0] || job.requiredCapability;
 
@@ -44,159 +44,165 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       isOnline: true, // Only online providers
     }
   });
-  
-  console.log(`[Dispatch] Found ${activeProviders.length} active online providers for job ${jobId}`);
-  if (activeProviders.length === 0) {
-    console.warn(`[Dispatch] No active online providers available`);
-  }
 
   const matches: JobMatchResult[] = [];
 
   // Step 1: Try to match with Handymen first
-  // BUT: Skip handymen for CLEANING jobs (cleaners only)
   if (job.category !== 'CLEANING') {
     const handymen = activeProviders.filter(p => p.providerType === 'HANDYMAN');
-    console.log(`[Dispatch] Found ${handymen.length} handymen for job ${jobId} (category: ${job.category}, primaryCapability: ${primaryCapability})`);
-
     for (const handyman of handymen) {
       const handymanCategories = handyman.categories?.split(',').filter(Boolean) || [];
       const handymanCapabilities = handyman.capabilities?.split(',').filter(Boolean) || [];
 
-      console.log(`[Dispatch] Checking handyman ${handyman.id}: categories=[${handymanCategories.join(',')}], capabilities=[${handymanCapabilities.join(',')}]`);
-
-      // Check if handyman can handle all job items
       let canHandle = true;
       let matchReason = 'Handyman match';
 
-      // If job requires specific capability, check if handyman has it
       if (primaryCapability) {
         if (!handymanCapabilities.includes(primaryCapability)) {
-          console.log(`[Dispatch] Handyman ${handyman.id} missing required capability: ${primaryCapability}`);
           canHandle = false;
         } else {
           matchReason = `Handyman with ${primaryCapability} capability`;
         }
       }
 
-      // Check category match - be more lenient
       if (job.category && job.category !== 'HANDYMAN') {
-        // If job is not HANDYMAN category, handyman needs to have that category OR the capability
         if (!handymanCategories.includes(job.category)) {
-          // If no capability match either, then can't handle
           if (primaryCapability && !handymanCapabilities.includes(primaryCapability)) {
-            console.log(`[Dispatch] Handyman ${handyman.id} doesn't have category ${job.category} or capability ${primaryCapability}`);
             canHandle = false;
           } else if (!primaryCapability) {
-            // If no specific capability required, allow if handyman has general capabilities
-            console.log(`[Dispatch] Handyman ${handyman.id} doesn't have category ${job.category}, but no specific capability required - allowing`);
             canHandle = true;
             matchReason = `Handyman - general ${job.category} job`;
           }
         }
       }
 
-      // If job is HANDYMAN category, any handyman can potentially handle it
       if (job.category === 'HANDYMAN') {
         canHandle = true;
         matchReason = 'Handyman - general job';
       }
 
       if (canHandle) {
-        console.log(`[Dispatch] Handyman ${handyman.id} matched: ${matchReason}`);
         matches.push({
           providerId: handyman.id,
           providerType: 'HANDYMAN',
           matchReason
         });
-      } else {
-        console.log(`[Dispatch] Handyman ${handyman.id} rejected`);
       }
     }
   }
 
-  // Step 2: If no handyman matches, escalate to specialists
-  if (matches.length === 0) {
-    const specialists = activeProviders.filter(p => p.providerType === 'SPECIALIST');
-    console.log(`[Dispatch] Found ${specialists.length} specialists for job ${jobId} (category: ${job.category})`);
+  // Step 2: Escalation to specialists
+  const specialists = activeProviders.filter(p => p.providerType === 'SPECIALIST');
+  for (const specialist of specialists) {
+    const specialistCategories = specialist.categories?.split(',').filter(Boolean) || [];
+    const specialistCapabilities = specialist.capabilities?.split(',').filter(Boolean) || [];
 
-    for (const specialist of specialists) {
-      const specialistCategories = specialist.categories?.split(',').filter(Boolean) || [];
-      const specialistCapabilities = specialist.capabilities?.split(',').filter(Boolean) || [];
-      console.log(`[Dispatch] Checking specialist ${specialist.id}: categories=[${specialistCategories.join(',')}], capabilities=[${specialistCapabilities.join(',')}]`);
-
-      // Cleaners: Only match CLEANING category jobs, never repair/installation
-      if (specialistCategories.includes('CLEANING')) {
-        // Cleaner providers only see CLEANING category jobs
-        if (job.category === 'CLEANING') {
-          // Check if job requires specific cleaning capability from visits
-          if (primaryCapability && primaryCapability.startsWith('C-')) {
-            // If job requires a capability (e.g., C-DEEP-BATHROOM), check if cleaner has it
-            if (specialistCapabilities.includes(primaryCapability)) {
-              console.log(`[Dispatch] Specialist ${specialist.id} matched: Cleaner with ${primaryCapability} capability`);
-              matches.push({
-                providerId: specialist.id,
-                providerType: 'SPECIALIST',
-                matchReason: `Cleaner with ${primaryCapability} capability`
-              });
-            } else {
-              console.log(`[Dispatch] Specialist ${specialist.id} (cleaner) missing required capability: ${primaryCapability}`);
-            }
-          } else {
-            // General cleaning job - any cleaner can handle it
-            console.log(`[Dispatch] Specialist ${specialist.id} matched: Cleaner - general cleaning job`);
+    if (specialistCategories.includes('CLEANING')) {
+      if (job.category === 'CLEANING') {
+        if (primaryCapability && primaryCapability.startsWith('C-')) {
+          if (specialistCapabilities.includes(primaryCapability)) {
             matches.push({
               providerId: specialist.id,
               providerType: 'SPECIALIST',
-              matchReason: 'Cleaner - general cleaning job'
+              matchReason: `Cleaner with ${primaryCapability} capability`
             });
           }
         } else {
-          console.log(`[Dispatch] Specialist ${specialist.id} (cleaner) cannot handle non-cleaning job: ${job.category}`);
-        }
-        // Cleaners never match non-cleaning jobs (HANDYMAN, PLUMBER, ELECTRICIAN, etc.)
-      } else {
-        // Other specialists (plumber, electrician, etc.) match their category
-        if (job.category && specialistCategories.includes(job.category)) {
-          console.log(`[Dispatch] Specialist ${specialist.id} matched: Specialist - ${job.category}`);
           matches.push({
             providerId: specialist.id,
             providerType: 'SPECIALIST',
-            matchReason: `Specialist - ${job.category}`
+            matchReason: 'Cleaner - general cleaning job'
           });
-        } else {
-          console.log(`[Dispatch] Specialist ${specialist.id} (categories: ${specialistCategories.join(',')}) does not match job category: ${job.category}`);
         }
+      }
+    } else {
+      if (job.category && specialistCategories.includes(job.category)) {
+        matches.push({
+          providerId: specialist.id,
+          providerType: 'SPECIALIST',
+          matchReason: `Specialist - ${job.category}`
+        });
       }
     }
   }
 
-  console.log(`[Dispatch] Total matches for job ${jobId}: ${matches.length}`);
-  matches.forEach(m => console.log(`  - Provider ${m.providerId}: ${m.matchReason}`));
-  return matches;
+  // Deterministic sort: Handymen first (they are already first in our loops, but let's be explicit)
+  // Then by rating (placeholder) or ID for consistency
+  return matches.sort((a, b) => {
+    if (a.providerType === 'HANDYMAN' && b.providerType !== 'HANDYMAN') return -1;
+    if (a.providerType !== 'HANDYMAN' && b.providerType === 'HANDYMAN') return 1;
+    return a.providerId.localeCompare(b.providerId);
+  });
 }
 
 /**
- * Broadcast mode: Job is visible to ALL eligible providers simultaneously.
- * First provider to accept gets the job.
- * No offeredToId is set - the job remains visible to all until accepted.
+ * Sequential Dispatch: Move to the next provider in the queue
  */
-export async function dispatchJob(jobId: string): Promise<string[] | null> {
+export async function advanceSequentialDispatch(jobId: string): Promise<string | null> {
+  const matches = await findEligibleProviders(jobId);
+
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.job.findUnique({ where: { id: jobId } });
+    if (!job) return null;
+
+    if (job.status !== 'ASSIGNING') return null;
+
+    if (matches.length === 0) {
+      console.warn(`[Dispatch] No matching providers for job ${jobId}. Failing dispatch.`);
+      await tx.job.update({
+        where: { id: jobId },
+        data: { status: 'RESCHEDULE_REQUIRED', statusUpdatedAt: new Date() }
+      });
+      return null;
+    }
+
+    const triedIds = job.triedProviderIds ? job.triedProviderIds.split(',').filter(Boolean) : [];
+
+    // Find the next provider who hasn't been tried yet
+    const nextMatch = matches.find(m => !triedIds.includes(m.providerId));
+
+    if (!nextMatch) {
+      console.log(`[Dispatch] All matching providers (${triedIds.length}) have been tried for job ${jobId}.`);
+      await tx.job.update({
+        where: { id: jobId },
+        data: { status: 'RESCHEDULE_REQUIRED', statusUpdatedAt: new Date() }
+      });
+      return null;
+    }
+
+    const now = new Date();
+    const updatedTriedIds = [...triedIds, nextMatch.providerId].join(',');
+
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        offeredToId: nextMatch.providerId,
+        offeredAt: now,
+        triedProviderIds: updatedTriedIds,
+        statusUpdatedAt: now // Refresh timestamp for 10s countdown
+      }
+    });
+
+    console.log(`[Dispatch] Sequential offer sent to ${nextMatch.providerId} for job ${jobId} (Attempt ${triedIds.length + 1})`);
+    return nextMatch.providerId;
+  });
+}
+
+/**
+ * Trigger or Refresh dispatch for a job
+ */
+export async function dispatchJob(jobId: string): Promise<string | null> {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job) return null;
 
-  const matches = await findEligibleProviders(jobId);
-  console.log(`[Dispatch] Job ${jobId} (category: ${job.category}, requiredCapability: ${job.requiredCapability}) found ${matches.length} eligible providers`);
-  
-  if (matches.length === 0) {
-    console.warn(`[Dispatch] No matches for job ${jobId} - category: ${job.category}, requiredCapability: ${job.requiredCapability}`);
-    return null;
+  // If already assigning with an active offer, don't restart unless requested
+  if (job.status === 'ASSIGNING' && job.offeredToId && job.offeredAt) {
+    const offerAge = (Date.now() - new Date(job.offeredAt).getTime()) / 1000;
+    if (offerAge < 10) {
+      return job.offeredToId; // Offer still valid
+    }
   }
 
-  // Broadcast mode: Don't set offeredToId - job is visible to all matching providers
-  // Just log which providers are eligible
-  const eligibleProviderIds = matches.map(m => m.providerId);
-  console.log(`[Dispatch] Job ${jobId} broadcast to ${eligibleProviderIds.length} providers:`, eligibleProviderIds);
-  matches.forEach(m => console.log(`  - Provider ${m.providerId}: ${m.matchReason}`));
-
-  return eligibleProviderIds;
+  // Advance to next or first provider
+  return advanceSequentialDispatch(jobId);
 }

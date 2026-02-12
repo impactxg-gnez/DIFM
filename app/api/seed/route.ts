@@ -10,6 +10,17 @@ const SERVICE_CATEGORIES = [
 
 export async function GET() {
     try {
+        // 0. Cleanup existing jobs and related data (Admin requirement)
+        await prisma.scopeSummary.deleteMany({});
+        await prisma.visit.deleteMany({});
+        await prisma.transaction.deleteMany({});
+        await prisma.customerReview.deleteMany({});
+        await prisma.adminReview.deleteMany({});
+        await prisma.jobItem.deleteMany({});
+        await prisma.jobStateChange.deleteMany({});
+        await prisma.priceOverride.deleteMany({});
+        await prisma.job.deleteMany({});
+
         // 1. Create Demo Users
         const passwordHash = 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f'; // SHA256 of "password123"
 
@@ -28,14 +39,14 @@ export async function GET() {
         // Provider (Generic)
         await prisma.user.upsert({
             where: { email: 'provider@demo.com' },
-            update: { 
-                passwordHash, 
-                role: 'PROVIDER', 
-                categories: 'PLUMBER,ELECTRICIAN', 
+            update: {
+                passwordHash,
+                role: 'PROVIDER',
+                categories: 'PLUMBER,ELECTRICIAN',
                 providerType: 'SPECIALIST',
                 providerStatus: 'ACTIVE',
                 complianceConfirmed: true,
-                isOnline: true 
+                isOnline: true
             },
             create: {
                 email: 'provider@demo.com',
@@ -55,14 +66,14 @@ export async function GET() {
         // Simulator Provider
         await prisma.user.upsert({
             where: { email: 'simulator@demo.com' },
-            update: { 
-                passwordHash, 
-                role: 'PROVIDER', 
-                categories: 'PLUMBER,CLEANING', 
+            update: {
+                passwordHash,
+                role: 'PROVIDER',
+                categories: 'PLUMBER,CLEANING',
                 providerType: 'SPECIALIST',
                 providerStatus: 'ACTIVE',
                 complianceConfirmed: true,
-                isOnline: true 
+                isOnline: true
             },
             create: {
                 email: 'simulator@demo.com',
@@ -97,18 +108,27 @@ export async function GET() {
 
         for (const category of SERVICE_CATEGORIES) {
             // Determine provider type: HANDYMAN is handyman, all others are specialists
-            const providerType = category === 'HANDYMAN' ? 'HANDYMAN' : 'SPECIALIST';
-            
+            const isHandyman = category === 'HANDYMAN';
+            const providerType = isHandyman ? 'HANDYMAN' : 'SPECIALIST';
+
+            // For testing, handymen get ALL categories and capabilities
+            const pCategories = isHandyman
+                ? SERVICE_CATEGORIES.join(',')
+                : category;
+            const pCapabilities = isHandyman
+                ? 'HANDYMAN,PLUMBING,ELECTRICAL,SPECIALIST_GAS,CLEANING,PAINTER,CARPENTER'
+                : undefined;
+
             for (let i = 1; i <= 5; i++) {
                 const email = `${category.toLowerCase()}_${i}@demo.com`;
                 await prisma.user.upsert({
                     where: { email },
                     update: {
-                        // Update existing providers to be fully configured
                         providerType,
                         providerStatus: 'ACTIVE',
                         complianceConfirmed: true,
-                        categories: category,
+                        categories: pCategories,
+                        capabilities: pCapabilities,
                         isOnline: true,
                     },
                     create: {
@@ -116,24 +136,22 @@ export async function GET() {
                         name: `${category} Pro ${i}`,
                         passwordHash,
                         role: 'PROVIDER',
-                        categories: category,
+                        categories: pCategories,
+                        capabilities: pCapabilities,
                         providerType,
-                        providerStatus: 'ACTIVE', // Pre-approved, skip onboarding
-                        complianceConfirmed: true, // Skip onboarding
+                        providerStatus: 'ACTIVE',
+                        complianceConfirmed: true,
                         isOnline: true,
-                        // Don't set random location - let providers set their actual location via GPS
-                        // latitude: londonLat + (Math.random() - 0.5) * 0.1,
-                        // longitude: londonLng + (Math.random() - 0.5) * 0.1
                     }
                 });
             }
         }
 
-        return NextResponse.json({ 
-            message: 'Seeding Complete', 
+        return NextResponse.json({
+            message: 'Seeding Complete (Jobs Purged, Handymen Upgraded)',
             users: [
-                'customer@demo.com', 
-                'provider@demo.com', 
+                'customer@demo.com',
+                'provider@demo.com',
                 'simulator@demo.com',
                 'admin@demo.com',
                 'Plus 35 categorical providers'

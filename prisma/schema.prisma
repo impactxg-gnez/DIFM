@@ -112,6 +112,7 @@ model Job {
   // Sequential Assignment (Step 5)
   offeredToId String?
   offeredAt   DateTime?
+  triedProviderIds String? // Comma-separated list of provider IDs who have been offered the job
   
   // Arrival & Timer (Step 5)
   arrivalWindowStart DateTime?

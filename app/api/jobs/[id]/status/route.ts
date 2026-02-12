@@ -33,7 +33,7 @@ export async function POST(
             }
 
             const now = new Date();
-            
+
             if (userRole === 'PROVIDER' && job.providerId !== userId) {
                 // Special case for ASSIGNING -> ASSIGNED (Accepting job)
                 // Broadcast mode: Any eligible provider can accept
@@ -43,13 +43,13 @@ export async function POST(
                     if (!provider || provider.providerStatus !== 'ACTIVE' || !provider.isOnline) {
                         throw new Error('You must be an active, online provider to accept jobs');
                     }
-                    
+
                     const providerCategories = provider.categories?.split(',').filter(Boolean) || [];
                     const providerCapabilities = provider.capabilities?.split(',').filter(Boolean) || [];
-                    
+
                     // Check if provider matches the job
                     let isEligible = false;
-                    
+
                     // CLEANING jobs can only be done by cleaners
                     if (job.category === 'CLEANING') {
                         if (providerCategories.includes('CLEANING')) {
@@ -71,7 +71,7 @@ export async function POST(
                             isEligible = true;
                         }
                     }
-                    
+
                     if (!isEligible) {
                         throw new Error('This job does not match your skills or category');
                     }
@@ -102,9 +102,10 @@ export async function POST(
             if (currentStatus === 'ASSIGNING' && status === 'ASSIGNED' && userRole === 'PROVIDER') {
                 // Use updateMany with status condition to ensure atomic first-come-first-served
                 const updateResult = await tx.job.updateMany({
-                    where: { 
+                    where: {
                         id,
-                        status: 'ASSIGNING' // Only update if still in ASSIGNING (not yet accepted)
+                        status: 'ASSIGNING', // Only update if still in ASSIGNING
+                        offeredToId: userId  // Sequential: only if it's currently offered to THIS provider
                     },
                     data: {
                         status: 'ASSIGNED',
@@ -115,11 +116,11 @@ export async function POST(
                         offeredAt: null
                     }
                 });
-                
+
                 if (updateResult.count === 0) {
                     throw new Error('This job has already been accepted by another provider.');
                 }
-                
+
                 // Fetch the updated job
                 updatedJob = await tx.job.findUnique({ where: { id } });
                 if (!updatedJob) throw new Error('Failed to fetch updated job');
@@ -130,37 +131,37 @@ export async function POST(
                         status,
                         statusUpdatedAt: now,
                         providerId: (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') ? userId : job.providerId,
-                    cancellationReason,
-                    isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
-                    arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
-                    arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
-                    timerStartedAt: (status === 'IN_PROGRESS' && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        cancellationReason,
+                        isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
+                        arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
+                        arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
+                        timerStartedAt: (status === 'IN_PROGRESS' && !job.timerStartedAt) ? now : job.timerStartedAt,
 
-                    // Update completion evidence
-                    ...(status === 'COMPLETED' ? {
-                        completionNotes: completionNotes || "Job completed",
-                        completionPhotos: completionPhotos,
-                        partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || 'NO'),
-                        partsNotes: partsNotes || null,
-                        partsPhotos: partsPhotos || null,
-                        completionLat: completionLat || null,
-                        completionLng: completionLng || null,
-                        completionLocationVerified: completionLocationVerified || false,
-                    } : {}),
+                        // Update completion evidence
+                        ...(status === 'COMPLETED' ? {
+                            completionNotes: completionNotes || "Job completed",
+                            completionPhotos: completionPhotos,
+                            partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || 'NO'),
+                            partsNotes: partsNotes || null,
+                            partsPhotos: partsPhotos || null,
+                            completionLat: completionLat || null,
+                            completionLng: completionLng || null,
+                            completionLocationVerified: completionLocationVerified || false,
+                        } : {}),
 
-                    // Update dispute data if customer is disputing
-                    ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {
-                        disputeReason: reason || 'No reason provided',
-                        disputeNotes: disputeNotes || null,
-                        disputePhotos: disputePhotos || null,
-                        disputedAt: now,
-                    } : {}),
+                        // Update dispute data if customer is disputing
+                        ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {
+                            disputeReason: reason || 'No reason provided',
+                            disputeNotes: disputeNotes || null,
+                            disputePhotos: disputePhotos || null,
+                            disputedAt: now,
+                        } : {}),
 
-                    // Update dispute resolution if admin is resolving
-                    ...(status === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
-                        disputeResolvedAt: now,
-                        disputeResolution: reason || 'Resolved by admin',
-                    } : {}),
+                        // Update dispute resolution if admin is resolving
+                        ...(status === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
+                            disputeResolvedAt: now,
+                            disputeResolution: reason || 'Resolved by admin',
+                        } : {}),
                     }
                 });
             }

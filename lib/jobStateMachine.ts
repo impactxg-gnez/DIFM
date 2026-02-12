@@ -18,6 +18,7 @@ export const JOB_STATUSES = [
   'CLOSED',
   'CANCELLED_FREE',
   'CANCELLED_CHARGED',
+  'RESCHEDULE_REQUIRED',
 ] as const;
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
@@ -26,7 +27,7 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   REQUESTED: ['PRICED'],
   PRICED: ['BOOKED'],
   BOOKED: ['ASSIGNING'],
-  ASSIGNING: ['ASSIGNED'],
+  ASSIGNING: ['ASSIGNED', 'RESCHEDULE_REQUIRED'],
   ASSIGNED: ['PREAUTHORISED'],
   PREAUTHORISED: ['ARRIVING'],
   ARRIVING: ['IN_PROGRESS'],
@@ -40,6 +41,7 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   CLOSED: [],
   CANCELLED_FREE: ['CLOSED'],
   CANCELLED_CHARGED: ['CLOSED'],
+  RESCHEDULE_REQUIRED: ['BOOKED', 'CLOSED'],
 };
 
 // Add cancellation transitions to all non-terminal states

@@ -6,6 +6,7 @@ import { ServiceCategory } from '@/lib/constants';
 import { calculateJobPrice } from '@/lib/pricing/calculator';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { computeStuck } from '@/lib/jobStateMachine';
+import { ensureDispatchProgress } from '@/lib/dispatch/dispatchTracker';
 
 export async function POST(request: Request) {
     try {
@@ -132,6 +133,9 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // ⏱️ Auto-advance dispatch timeouts before listing/fetching
+        await ensureDispatchProgress();
+
         // Get User to check categories if Provider
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 401 });
@@ -180,37 +184,20 @@ export async function GET(request: Request) {
                 { providerId: userId }
             ];
 
-            // Broadcast: If provider is active and online, show all ASSIGNING jobs that match their category
+            // Sequential mode: Provider only sees ASSIGNING jobs if explicitly offered to them
             if (providerMatchesAssigningJobs) {
-                const userCategories = user.categories?.split(',').filter(Boolean) || [];
-                const userCapabilities = user.capabilities?.split(',').filter(Boolean) || [];
-                
-                // Match ASSIGNING jobs where:
-                // - Job category matches provider categories OR
-                // - Job category is HANDYMAN and provider is HANDYMAN type OR
-                // - Job requiredCapability matches provider capabilities
-                const categoryMatch = userCategories.length > 0 ? { category: { in: userCategories } } : {};
-                const handymanMatch = user.providerType === 'HANDYMAN' ? { category: 'HANDYMAN' } : {};
-                
                 orConditions.push({
                     AND: [
                         { status: 'ASSIGNING' },
-                        {
-                            OR: [
-                                categoryMatch,
-                                handymanMatch,
-                                // If job has requiredCapability, check if provider has it
-                                ...(userCapabilities.length > 0 ? [{ requiredCapability: { in: userCapabilities } }] : [])
-                            ].filter(c => Object.keys(c).length > 0) // Remove empty conditions
-                        }
+                        { offeredToId: userId }
                     ]
                 });
-                
-                console.log(`[Jobs API] Provider ${userId} (categories: ${userCategories.join(',')}, capabilities: ${userCapabilities.join(',')}) - broadcast mode, showing all matching ASSIGNING jobs`);
+
+                console.log(`[Jobs API] Provider ${userId} - sequential mode, showing ASSIGNING jobs offered to them`);
             }
-            
+
             whereClause.OR = orConditions;
-            
+
             // Debug logging for providers
             console.log(`[Jobs API] Provider ${userId} query: looking for jobs with ${orConditions.length} OR conditions`);
         }
