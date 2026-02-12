@@ -304,101 +304,110 @@ export function CustomerView({ user }: { user: any }) {
     };
 
     const renderVisitListFromJobs = (jobsList: any[]) => {
-        // Separate jobs that need rescheduling
-        const rescheduleJobs = jobsList.filter((j: any) => j.status === 'RESCHEDULE_REQUIRED');
-        const normalJobs = jobsList.filter((j: any) => j.status !== 'RESCHEDULE_REQUIRED');
-
-        const allVisits: Visit[] = jobsList
-            .flatMap((j: any) => Array.isArray(j.visits) ? j.visits : [])
-            .map(dbVisitToUiVisit);
-
-        const total = jobsList.reduce((sum: number, j: any) => sum + Number(j.fixedPrice || 0), 0);
+        if (jobsList.length === 0) return null;
 
         return (
-            <div className="space-y-6">
-                {/* 1️⃣ Status Message & Action Buttons for Reschedule Required */}
-                {rescheduleJobs.map((job: any) => (
-                    <Card key={`reschedule-${job.id}`} className="bg-amber-500/10 border-amber-500/20 text-white overflow-hidden">
-                        <CardContent className="p-6 space-y-4">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-amber-500/20 rounded-full">
-                                    <MapPin className="w-5 h-5 text-amber-500" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h3 className="text-lg font-bold text-amber-500">Reschedule Required</h3>
-                                    <p className="text-sm text-gray-300">
-                                        We couldn’t find an available provider for your selected time.
-                                        Please choose a new time or cancel your booking.
-                                    </p>
-                                </div>
+            <div className="space-y-12">
+                {jobsList.map((job: any) => {
+                    const jobVisits = (job.visits || []).map(dbVisitToUiVisit);
+                    const isReschedule = job.status === 'RESCHEDULE_REQUIRED';
+
+                    return (
+                        <div key={job.id} className="space-y-6">
+                            {/* 1️⃣ Job identification / Status indicator */}
+                            <div className="flex items-center gap-2 px-2">
+                                <Badge variant="outline" className="border-white/10 text-gray-400">
+                                    Job Reference: {job.id.slice(0, 8)}
+                                </Badge>
+                                <Badge className={isReschedule ? "bg-amber-600" : "bg-blue-600"}>
+                                    {getCustomerStatus(job)}
+                                </Badge>
                             </div>
 
-                            <div className="flex flex-col gap-3 sm:flex-row pt-2">
-                                {reschedulingJobId === job.id ? (
-                                    <div className="flex-1 space-y-3 p-3 bg-black/20 rounded-lg">
-                                        <Label className="text-xs uppercase tracking-wider text-gray-400">New Date & Time</Label>
-                                        <Input
-                                            type="datetime-local"
-                                            value={rescheduleTime}
-                                            onChange={(e) => setRescheduleTime(e.target.value)}
-                                            className="bg-zinc-800 border-white/10"
-                                        />
-                                        <div className="flex gap-2">
-                                            <Button
-                                                className="flex-1 bg-amber-600 hover:bg-amber-700"
-                                                onClick={() => handleRescheduleJob(job.id, rescheduleTime)}
-                                                disabled={isRescheduling || !rescheduleTime}
-                                            >
-                                                {isRescheduling ? 'Updating...' : 'Confirm New Time'}
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => setReschedulingJobId(null)}
-                                            >
-                                                Cancel
-                                            </Button>
+                            {isReschedule ? (
+                                <Card className="bg-amber-500/10 border-amber-500/20 text-white overflow-hidden">
+                                    <CardContent className="p-6 space-y-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-amber-500/20 rounded-full">
+                                                <MapPin className="w-5 h-5 text-amber-500" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h3 className="text-lg font-bold text-amber-500">Reschedule Required</h3>
+                                                <p className="text-sm text-gray-300">
+                                                    We couldn’t find an available provider for your selected time.
+                                                    Please choose a new time or cancel your booking.
+                                                </p>
+                                            </div>
                                         </div>
+
+                                        <div className="flex flex-col gap-3 sm:flex-row pt-2">
+                                            {reschedulingJobId === job.id ? (
+                                                <div className="flex-1 space-y-3 p-3 bg-black/20 rounded-lg">
+                                                    <Label className="text-xs uppercase tracking-wider text-gray-400">New Date & Time</Label>
+                                                    <Input
+                                                        type="datetime-local"
+                                                        value={rescheduleTime}
+                                                        onChange={(e) => setRescheduleTime(e.target.value)}
+                                                        className="bg-zinc-800 border-white/10"
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                                                            onClick={() => handleRescheduleJob(job.id, rescheduleTime)}
+                                                            disabled={isRescheduling || !rescheduleTime}
+                                                        >
+                                                            {isRescheduling ? 'Updating...' : 'Confirm New Time'}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            onClick={() => setReschedulingJobId(null)}
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Button
+                                                        className="flex-1 bg-amber-600 hover:bg-amber-700 font-bold"
+                                                        onClick={() => setReschedulingJobId(job.id)}
+                                                    >
+                                                        Reschedule
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        className="flex-1 font-bold"
+                                                        onClick={() => handleCancelJob(job.id)}
+                                                    >
+                                                        Cancel Job
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex gap-2 mb-2 px-2">
+                                        <Badge variant="secondary">Visits</Badge>
+                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
+                                            {jobVisits.length} VisitCards
+                                        </Badge>
                                     </div>
-                                ) : (
-                                    <>
-                                        <Button
-                                            className="flex-1 bg-amber-600 hover:bg-amber-700 font-bold"
-                                            onClick={() => setReschedulingJobId(job.id)}
-                                        >
-                                            Reschedule
-                                        </Button>
-                                        <Button
-                                            variant="destructive"
-                                            className="flex-1 font-bold"
-                                            onClick={() => handleCancelJob(job.id)}
-                                        >
-                                            Cancel Job
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
+                                    <div className="grid gap-4">
+                                        {jobVisits.map((v: Visit, idx: number) => (
+                                            <VisitCard key={v.visit_id || `${job.id}-${idx}`} visit={v} index={idx} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
-                {/* Normal Layout for other states */}
-                {normalJobs.length > 0 && (
-                    <div className="space-y-4">
-                        <div className="flex gap-2 mb-2">
-                            <Badge variant="secondary">Visits</Badge>
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
-                                {normalJobs.flatMap(j => j.visits || []).length} VisitCards
-                            </Badge>
+                            {/* Deterministic Price for THIS Job only */}
+                            <TotalPrice amount={Number(job.fixedPrice || 0)} />
+                            <div className="h-px bg-white/5 mx-4" /> {/* Separator between multiple jobs */}
                         </div>
-                        <div className="grid gap-4">
-                            {normalJobs.flatMap(j => (j.visits || []).map(dbVisitToUiVisit)).map((v, idx) => (
-                                <VisitCard key={v.visit_id || `${v.primary_job_item.job_item_id}-${idx}`} visit={v} index={idx} />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <TotalPrice amount={total} />
+                    );
+                })}
             </div>
         );
     };
