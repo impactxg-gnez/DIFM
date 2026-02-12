@@ -81,7 +81,7 @@ export async function POST(
             }
 
             // Step 5: Completion Evidence Enforcement
-            if (status === 'COMPLETED' && userRole === 'PROVIDER') {
+            if (status?.toUpperCase() === 'COMPLETED') {
                 if (!completionPhotos || completionPhotos.trim() === '') {
                     throw new Error('Photo/Video evidence is required for completion');
                 }

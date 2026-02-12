@@ -230,7 +230,7 @@ export function ProviderView({ user }: { user: any }) {
 
         setIsSubmitting(true);
         try {
-            await fetch(`/api/jobs/${completionDialog.jobId}/status`, {
+            const res = await fetch(`/api/jobs/${completionDialog.jobId}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -248,12 +248,18 @@ export function ProviderView({ user }: { user: any }) {
                     partsNotes: isCleaningJob ? null : (partsRequired === 'YES' ? partsNotes : null),
                 })
             });
-            setCompletionDialog({ open: false });
-            setCompletionNotes('');
-            setCompletionPhotos('');
-            setPartsRequired('');
-            setPartsNotes('');
-            mutate();
+
+            if (res.ok) {
+                setCompletionDialog({ open: false });
+                setCompletionNotes('');
+                setCompletionPhotos('');
+                setPartsRequired('');
+                setPartsNotes('');
+                mutate();
+            } else {
+                const err = await res.json();
+                alert(`Completion failed: ${err.error || 'Server error'}`);
+            }
         } catch (e) {
             console.error('Completion error', e);
             alert('Failed to complete job');
