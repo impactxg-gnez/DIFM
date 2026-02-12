@@ -88,8 +88,18 @@ export async function POST(
             }
 
             // Step 5: Timer & Access Logic
+            if (status === 'ON_SITE' && userRole === 'PROVIDER') {
+                if (job.scheduledAt) {
+                    const scheduled = new Date(job.scheduledAt);
+                    const windowEnd = new Date(scheduled.getTime() + 30 * 60 * 1000);
+                    if (now < scheduled || now > windowEnd) {
+                        throw new Error(`Arrival window mismatch. Scheduled: ${scheduled.toLocaleTimeString()}. You must arrive between ${scheduled.toLocaleTimeString()} and ${windowEnd.toLocaleTimeString()}.`);
+                    }
+                }
+            }
+
             if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
-                if (!isAccessAvailable && !job.isAccessAvailable) {
+                if (!isAccessAvailable && !job.isAccessAvailable && currentStatus !== 'ON_SITE') {
                     throw new Error('Cannot start timer until access is confirmed available');
                 }
             }
@@ -135,7 +145,8 @@ export async function POST(
                         isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
                         arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
                         arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
-                        timerStartedAt: (status === 'IN_PROGRESS' && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        timerStartedAt: ((status === 'IN_PROGRESS' || status === 'ON_SITE') && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        arrival_confirmed_at: (status === 'ON_SITE' && !job.arrival_confirmed_at) ? now : job.arrival_confirmed_at,
                         scheduledAt: scheduledAt ? new Date(scheduledAt) : job.scheduledAt,
                         // If rescheduling from RESCHEDULE_REQUIRED to BOOKED, clear old offer data
                         ...(status === 'BOOKED' && currentStatus === 'RESCHEDULE_REQUIRED' ? {

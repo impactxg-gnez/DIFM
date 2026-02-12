@@ -117,6 +117,7 @@ model Job {
   // Arrival & Timer (Step 5)
   arrivalWindowStart DateTime?
   arrivalWindowEnd   DateTime?
+  arrival_confirmed_at DateTime?
   timerStartedAt     DateTime?
   timerPausedAt      DateTime?
   isAccessAvailable  Boolean   @default(false)

@@ -53,7 +53,7 @@ export function ProviderView({ user }: { user: any }) {
                 navigator.geolocation.getCurrentPosition(
                     async (position) => {
                         const { latitude, longitude, accuracy } = position.coords;
-                        
+
                         // Only update if accuracy is reasonable (within 100m) and location has changed significantly (>10m)
                         if (accuracy > 100) {
                             console.warn(`Location accuracy is poor: ${accuracy}m, skipping update`);
@@ -103,7 +103,7 @@ export function ProviderView({ user }: { user: any }) {
                             console.warn("Geolocation error:", error.message);
                         }
                     },
-                    { 
+                    {
                         enableHighAccuracy: true,
                         timeout: 10000, // 10 second timeout
                         maximumAge: 5000 // Don't use cached positions older than 5 seconds
@@ -152,7 +152,7 @@ export function ProviderView({ user }: { user: any }) {
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isAccessAvailable: true })
+            body: JSON.stringify({ status: 'ON_SITE' })
         });
         mutate();
     };
@@ -316,7 +316,7 @@ export function ProviderView({ user }: { user: any }) {
                 <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 mb-4 p-4 rounded-lg">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h3 className="font-semibold text-gray-900">Online Status</h3>
+                            <h3 className="font-semibold text-white">Online Status</h3>
                             <p className="text-sm text-gray-400">
                                 {user.isOnline ? 'You are online and receiving job offers' : 'You are offline and will not receive new job offers'}
                             </p>
@@ -353,15 +353,15 @@ export function ProviderView({ user }: { user: any }) {
                     )}
                 </div>
 
-                <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-900">
+                <h2 className="text-xl font-semibold flex items-center gap-2 text-white">
                     Available Jobs
-                    <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-gray-900">{availableJobs.length}</span>
+                    <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-black">{availableJobs.length}</span>
                 </h2>
                 {availableJobs.map((job: any) => (
                     <Card key={job.id} className="p-4 border-l-4 border-l-yellow-500/50 bg-zinc-900/50">
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <h3 className="font-semibold text-gray-900">{job.category} - {job.description}</h3>
+                                <h3 className="font-semibold text-white">{job.category} - {job.description}</h3>
                                 <p className="text-sm text-gray-400">{job.location}</p>
                                 <div className="mt-2 text-lg font-bold text-blue-600">£{job.fixedPrice}</div>
                                 <p className="text-xs text-gray-400 mt-1">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</p>
@@ -375,14 +375,14 @@ export function ProviderView({ user }: { user: any }) {
 
             {/* My Active Jobs Column */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-gray-900">My Schedule</h2>
+                <h2 className="text-xl font-semibold text-white">My Schedule</h2>
                 {myJobs.map((job: any) => (
                     <Card key={job.id} className="p-4 border-l-4 border-blue-500">
                         <div className="flex justify-between items-center mb-2">
                             <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
-                            <span className="text-sm font-mono font-bold text-gray-900">£{job.fixedPrice}</span>
+                            <span className="text-sm font-mono font-bold text-white">£{job.fixedPrice}</span>
                         </div>
-                        <h3 className="font-semibold mb-1 text-gray-900">{job.description}</h3>
+                        <h3 className="font-semibold mb-1 text-white">{job.description}</h3>
                         <p className="text-sm text-gray-400 mb-2 flex items-start gap-1">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
@@ -399,7 +399,7 @@ export function ProviderView({ user }: { user: any }) {
                             </div>
                         )}
 
-                        {job.status === 'IN_PROGRESS' && job.timerStartedAt && (
+                        {(job.status === 'IN_PROGRESS' || job.status === 'ON_SITE') && job.timerStartedAt && (
                             <div className="mb-4 p-3 bg-green-50 rounded border border-green-100 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] font-semibold text-green-700 uppercase">Timer Active</p>
@@ -424,13 +424,11 @@ export function ProviderView({ user }: { user: any }) {
                             )}
 
                             {job.status === 'ARRIVING' && (
-                                <>
-                                    {!job.isAccessAvailable ? (
-                                        <Button onClick={() => confirmAccess(job.id)} className="w-full bg-indigo-600 hover:bg-indigo-700">Confirm Access to Property</Button>
-                                    ) : (
-                                        <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-green-600 hover:bg-green-700">Start Timer</Button>
-                                    )}
-                                </>
+                                <Button onClick={() => confirmAccess(job.id)} className="w-full bg-indigo-600 hover:bg-indigo-700">Confirm Access to Property</Button>
+                            )}
+
+                            {job.status === 'ON_SITE' && (
+                                <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-green-600 hover:bg-green-700">Start Job</Button>
                             )}
 
                             {job.status === 'IN_PROGRESS' && (
@@ -463,7 +461,7 @@ export function ProviderView({ user }: { user: any }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                     <div className="bg-zinc-900/90 border border-white/10 space-y-4">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-gray-900">Complete Job</h3>
+                            <h3 className="text-lg font-semibold text-white">Complete Job</h3>
                             <p className="text-sm text-gray-400">Please provide completion details</p>
                         </div>
 
