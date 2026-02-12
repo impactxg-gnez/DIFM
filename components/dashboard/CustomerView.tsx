@@ -70,6 +70,12 @@ export function CustomerView({ user }: { user: any }) {
     const [rescheduleTime, setRescheduleTime] = useState<string>('');
     const [isRescheduling, setIsRescheduling] = useState(false);
 
+    // Issue Reporting State
+    const [issueDialog, setIssueDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
+    const [issueNotes, setIssueNotes] = useState('');
+    const [issuePhotos, setIssuePhotos] = useState('');
+    const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
+
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
     const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -284,6 +290,42 @@ export function CustomerView({ user }: { user: any }) {
             mutate();
         } catch (e) {
             console.error('Failed to move to booked', e);
+        }
+    };
+
+    const handleReportIssue = async () => {
+        if (!issueDialog.jobId) return;
+        if (!issueNotes.trim()) {
+            alert('Please describe the issue');
+            return;
+        }
+
+        setIsSubmittingIssue(true);
+        try {
+            const res = await fetch(`/api/jobs/${issueDialog.jobId}/issue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    issueNotes,
+                    issuePhotos: issuePhotos || null
+                })
+            });
+
+            if (res.ok) {
+                setIssueDialog({ open: false });
+                setIssueNotes('');
+                setIssuePhotos('');
+                alert('Issue reported. Our team will review and contact you shortly.');
+                mutate();
+            } else {
+                const err = await res.json();
+                alert(`Failed to report issue: ${err.error || 'Server error'}`);
+            }
+        } catch (e) {
+            console.error('Report issue error', e);
+            alert('Failed to report issue');
+        } finally {
+            setIsSubmittingIssue(false);
         }
     };
 
@@ -511,6 +553,20 @@ export function CustomerView({ user }: { user: any }) {
                                             </Button>
                                         </Card>
                                     )}
+
+                                    {job.status === 'COMPLETED' && (
+                                        <Card className="bg-blue-500/10 border-blue-500/20 p-6 text-center space-y-4">
+                                            <p className="text-sm text-blue-400 font-medium">
+                                                Job completed. If you experienced any issues, please let us know.
+                                            </p>
+                                            <Button
+                                                className="bg-blue-600 hover:bg-blue-700 w-full font-bold"
+                                                onClick={() => setIssueDialog({ open: true, jobId: job.id })}
+                                            >
+                                                Report Issue
+                                            </Button>
+                                        </Card>
+                                    )}
                                 </div>
                             )}
 
@@ -725,6 +781,59 @@ export function CustomerView({ user }: { user: any }) {
                     </div>
                 );
             })()}
+
+            {issueDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-zinc-900 border-white/10 text-white p-6 rounded-lg max-w-md w-full mx-4">
+                        <h3 className="text-lg font-semibold text-blue-500 mb-4">Report Issue</h3>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Issue Description *</Label>
+                                <textarea
+                                    className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-blue-500 p-2"
+                                    rows={4}
+                                    placeholder="Please describe the issue you experienced..."
+                                    value={issueNotes}
+                                    onChange={(e) => setIssueNotes(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Photo Evidence (Optional)</Label>
+                                <Input
+                                    type="text"
+                                    className="bg-zinc-800 border-white/10 text-white"
+                                    placeholder="Photo URL (if available)"
+                                    value={issuePhotos}
+                                    onChange={(e) => setIssuePhotos(e.target.value)}
+                                />
+                                <p className="text-xs text-gray-400">You can provide a photo URL to help us understand the issue better.</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4">
+                            <Button
+                                variant="ghost"
+                                className="text-white hover:bg-white/10"
+                                onClick={() => {
+                                    setIssueDialog({ open: false });
+                                    setIssueNotes('');
+                                    setIssuePhotos('');
+                                }}
+                                disabled={isSubmittingIssue}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleReportIssue}
+                                disabled={isSubmittingIssue}
+                                className="bg-blue-600 hover:bg-blue-700"
+                            >
+                                {isSubmittingIssue ? 'Submitting...' : 'Submit Issue'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {disputeDialog.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
