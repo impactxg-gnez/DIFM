@@ -55,7 +55,7 @@ export async function POST(
                     where: { id: jobId },
                     data: {
                         fixedPrice: newPrice, // Assuming 1:1 for V1
-                        status: 'IN_PROGRESS' // Move back from SCOPE_MISMATCH if it was there
+                        status: visit.job.status === 'MISMATCH_PENDING' ? 'IN_PROGRESS' : visit.job.status // Move back from MISMATCH_PENDING
                     }
                 }),
                 // Log state change
@@ -81,20 +81,17 @@ export async function POST(
                     where: { id: visitId },
                     data: { status: 'CANCELLED' } // or 'SCOPE_MISMATCH'
                 }),
-                // Move Job to PRICED so customer can re-book or just BOOKED
-                // Let's move to BOOKED so they can do Scope Lock again if needed?
-                // Spec says: "If large... Rebook New Visit". 
-                // I'll move Job back to BOOKED.
+                // Move Job to REBOOK_REQUIRED
                 (prisma as any).job.update({
                     where: { id: jobId },
-                    data: { status: 'BOOKED' }
+                    data: { status: 'REBOOK_REQUIRED' }
                 }),
                 // Log state change
                 (prisma as any).jobStateChange.create({
                     data: {
                         jobId,
                         fromStatus: visit.job.status,
-                        toStatus: 'BOOKED',
+                        toStatus: 'REBOOK_REQUIRED',
                         reason: `Rebook requested: ${reason}`,
                         changedById: userId,
                         changedByRole: userRole

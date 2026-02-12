@@ -462,7 +462,7 @@ export function ProviderView({ user }: { user: any }) {
                                     <Button
                                         onClick={async () => {
                                             if (confirm('Report a mismatch? This will stop the timer and notify the admin.')) {
-                                                await updateStatus(job.id, 'SCOPE_MISMATCH');
+                                                await updateStatus(job.id, 'MISMATCH_PENDING');
                                             }
                                         }}
                                         variant="outline"

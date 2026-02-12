@@ -34,6 +34,8 @@ function getCustomerStatus(job: any): string {
         'ARRIVING': 'Pro is on the way!',
         'IN_PROGRESS': 'Job in progress',
         'SCOPE_MISMATCH': 'Scope discrepancy found',
+        'MISMATCH_PENDING': 'Action required: Scope mismatch',
+        'REBOOK_REQUIRED': 'Awaiting re-booking',
         'PARTS_REQUIRED': 'Parts required',
         'COMPLETED': 'Job completed',
         'CAPTURED': 'Payment settled',
@@ -217,6 +219,74 @@ export function CustomerView({ user }: { user: any }) {
         }
     };
 
+    const handleUpgrade = async (jobId: string, visitId: string, currentTier: string) => {
+        const tierOrder = ['H1', 'H2', 'H3'];
+        const currentIndex = tierOrder.indexOf(currentTier);
+        const nextTier = tierOrder[currentIndex + 1] || 'H3';
+
+        if (currentIndex === 2) {
+            alert('Already at maximum tier (H3). Please contact support.');
+            return;
+        }
+
+        const confirmUpgrade = window.confirm(`Upgrade this visit to ${nextTier}? This will adjust the price and allow the pro to continue.`);
+        if (!confirmUpgrade) return;
+
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/mismatch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'UPGRADE',
+                    visitId,
+                    newTier: nextTier,
+                    reason: 'Customer approved upgrade'
+                })
+            });
+            if (res.ok) {
+                mutate();
+            }
+        } catch (e) {
+            console.error('Upgrade failed', e);
+        }
+    };
+
+    const handleRebook = async (jobId: string, visitId: string) => {
+        const confirmRebook = window.confirm('This will cancel the current visit and allow you to re-book. Proceed?');
+        if (!confirmRebook) return;
+
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/mismatch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'REBOOK',
+                    visitId,
+                    reason: 'Customer chose to rebook'
+                })
+            });
+            if (res.ok) {
+                mutate();
+            }
+        } catch (e) {
+            console.error('Rebook failed', e);
+        }
+    };
+
+    const handleRebookRequired = async (jobId: string) => {
+        // Move from REBOOK_REQUIRED back to BOOKED
+        try {
+            await fetch(`/api/jobs/${jobId}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'BOOKED' })
+            });
+            mutate();
+        } catch (e) {
+            console.error('Failed to move to booked', e);
+        }
+    };
+
     // Review state
     const [reviewDialog, setReviewDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
     const [reviewRating, setReviewRating] = useState(5);
@@ -396,9 +466,51 @@ export function CustomerView({ user }: { user: any }) {
                                     </div>
                                     <div className="grid gap-4">
                                         {jobVisits.map((v: Visit, idx: number) => (
-                                            <VisitCard key={v.visit_id || `${job.id}-${idx}`} visit={v} index={idx} />
+                                            <div key={v.visit_id || `${job.id}-${idx}`} className="space-y-4">
+                                                <VisitCard visit={v} index={idx} />
+
+                                                {job.status === 'MISMATCH_PENDING' && (
+                                                    <Card className="bg-red-500/10 border-red-500/20 p-4">
+                                                        <div className="space-y-3">
+                                                            <p className="text-sm font-medium text-red-400">
+                                                                The provider reported that the job differs from the confirmed scope.
+                                                                Please choose how you’d like to proceed.
+                                                            </p>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                                <Button
+                                                                    className="bg-green-600 hover:bg-green-700 font-bold"
+                                                                    onClick={() => handleUpgrade(job.id, v.visit_id, v.tier)}
+                                                                >
+                                                                    Upgrade Visit
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 font-bold"
+                                                                    onClick={() => handleRebook(job.id, v.visit_id)}
+                                                                >
+                                                                    Rebook Correct Visit
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </Card>
+                                                )}
+                                            </div>
                                         ))}
                                     </div>
+
+                                    {job.status === 'REBOOK_REQUIRED' && (
+                                        <Card className="bg-amber-500/10 border-amber-500/20 p-6 text-center space-y-4">
+                                            <p className="text-sm text-amber-500 font-medium">
+                                                This job requires re-booking. Click below to return to the booking screen.
+                                            </p>
+                                            <Button
+                                                className="bg-amber-600 hover:bg-amber-700 w-full font-bold"
+                                                onClick={() => handleRebookRequired(job.id)}
+                                            >
+                                                Start Re-booking
+                                            </Button>
+                                        </Card>
+                                    )}
                                 </div>
                             )}
 

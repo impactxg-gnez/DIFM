@@ -22,6 +22,8 @@ export const Badge = ({ className, status, variant, ...props }: BadgeProps) => {
             case 'ON_SITE': colorClass = "bg-blue-600 text-white font-bold"; break;
             case 'IN_PROGRESS': colorClass = "bg-green-100 text-green-800 font-bold"; break;
             case 'SCOPE_MISMATCH': colorClass = "bg-red-100 text-red-800 font-bold"; break;
+            case 'MISMATCH_PENDING': colorClass = "bg-red-600 text-white font-bold animate-pulse"; break;
+            case 'REBOOK_REQUIRED': colorClass = "bg-amber-100 text-amber-800 font-bold"; break;
             case 'PARTS_REQUIRED': colorClass = "bg-purple-100 text-purple-800"; break;
             case 'COMPLETED': colorClass = "bg-green-100 text-green-800"; break;
             case 'CAPTURED': colorClass = "bg-slate-700 text-white"; break;
