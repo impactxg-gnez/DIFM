@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { calculateTier, calculatePrice } from '@/lib/pricing/visitEngine';
 import { getCatalogueItem } from '@/lib/pricing/catalogue';
 import { dispatchJob } from '@/lib/dispatch/matcher';
+import { JobStatus } from '@/lib/jobStateMachine';
 
 /**
  * Visit-first Scope Lock
@@ -17,10 +18,17 @@ export async function POST(
   try {
     const { id: visitId } = await props.params;
     const body = await request.json();
-    const { answers } = body as { answers: Record<string, string> };
+    const { answers, scope_photos } = body as {
+      answers: Record<string, string>,
+      scope_photos: string // Comma-separated or JSON
+    };
 
     if (!answers) {
       return NextResponse.json({ error: 'Missing answers' }, { status: 400 });
+    }
+
+    if (!scope_photos || scope_photos.length === 0) {
+      return NextResponse.json({ error: 'At least one photo is required' }, { status: 400 });
     }
 
     const visit = await (prisma as any).visit.findUnique({
@@ -32,19 +40,44 @@ export async function POST(
       return NextResponse.json({ error: 'Visit not found' }, { status: 404 });
     }
 
+    // 0. Immutability Guard: Cannot edit scope after confirmation
+    if (visit.status !== 'DRAFT') {
+      return NextResponse.json({ error: 'Scope is already locked and cannot be edited.' }, { status: 400 });
+    }
+
     // 1. Process uncertainty & compute final effective minutes
     // Check ALL items in visit (primary + addons) for BUFFER handling
     let extraMinutes = 0;
     let forceH3 = false;
 
+    // Cleaning Scalers: Determination logic
+    if (visit.item_class === 'CLEANING') {
+      const { bedrooms, bathrooms, property_type } = answers;
+
+      if (!bedrooms || !bathrooms || !property_type) {
+        return NextResponse.json({ error: 'Cleaning jobs require bedrooms, bathrooms, and property type selection.' }, { status: 400 });
+      }
+
+      const beds = parseInt(bedrooms);
+      const baths = parseInt(bathrooms);
+
+      // base_clean_1bed = 90 mins (visit.base_minutes)
+      // additional_bed = +30 mins
+      // additional_bath = +20 mins
+      const extraBeds = Math.max(0, beds - 1);
+      const extraBaths = Math.max(0, baths - 1);
+      extraMinutes += (extraBeds * 30) + (extraBaths * 20);
+      console.log(`[ScopeLock] Cleaning scalers: beds=${beds}, baths=${baths}, extraMinutes=${extraMinutes}`);
+    }
+
     // Get primary item
     const primaryItem = await getCatalogueItem(visit.primary_job_item_id);
-    
+
     // Get all addon items
     const addonItems = await Promise.all(
       (visit.addon_job_item_ids || []).map((itemId: string) => getCatalogueItem(itemId))
     );
-    
+
     // All items in this visit (primary + addons)
     const allItems = [primaryItem, ...addonItems].filter(Boolean);
 
@@ -57,7 +90,7 @@ export async function POST(
       // For each item in the visit, check if it needs BUFFER or FORCE_H3
       for (const item of allItems) {
         if (!item) continue;
-        
+
         if (item.uncertainty_prone) {
           if (item.uncertainty_handling === 'BUFFER') {
             // Sum risk_buffer_minutes for each BUFFER item (apply once per item)
@@ -73,16 +106,16 @@ export async function POST(
       }
     }
 
-    // Calculate effective minutes: base_minutes + sum of all BUFFER risk_buffer_minutes
+    // Calculate effective minutes: base_minutes + sum of all BUFFER risk_buffer_minutes + cleaning scalers
     const effectiveMinutes = (visit.base_minutes ?? 0) + extraMinutes;
-    
+
     // Recalculate tier based on effective_minutes (unless FORCE_H3)
     const finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
-    
+
     // Recalculate price based on new tier
     const finalPrice = calculatePrice(finalTier, visit.item_class);
-    
-    console.log(`[ScopeLock] Visit ${visitId}: base=${visit.base_minutes}min, buffer=${extraMinutes}min, effective=${effectiveMinutes}min, tier=${finalTier}, price=£${finalPrice}`);
+
+    console.log(`[ScopeLock] Visit ${visitId}: base=${visit.base_minutes}min, extra=${extraMinutes}min, effective=${effectiveMinutes}min, tier=${finalTier}, price=£${finalPrice}`);
 
     // 2. Immutable ScopeSummary snapshot (minimal contract text for now)
     const includes_text = 'This visit covers the items listed above.';
@@ -102,6 +135,7 @@ export async function POST(
           effective_minutes: effectiveMinutes,
           price: finalPrice,
           status: 'SCHEDULED',
+          scope_photos: scope_photos,
         },
       });
 
@@ -131,26 +165,38 @@ export async function POST(
       const allLocked = allVisits.every((v: any) => v.status === 'SCHEDULED');
 
       const now = new Date();
+      const DISPATCH_BUFFER_MINUTES = 120; // 2 hours
+
+      // Determine target status based on schedule
+      let targetStatus: JobStatus = 'ASSIGNING';
+      if (allLocked && visit.job.scheduledAt) {
+        const scheduled = new Date(visit.job.scheduledAt);
+        const dispatchTime = new Date(scheduled.getTime() - DISPATCH_BUFFER_MINUTES * 60000);
+        if (now < dispatchTime) {
+          targetStatus = 'WAITING_FOR_DISPATCH';
+        }
+      }
+
       const updatedJob = await tx.job.update({
         where: { id: visit.jobId },
         data: {
           fixedPrice: totalPrice,
           ...(allLocked
             ? {
-                status: 'ASSIGNING',
-                statusUpdatedAt: now,
-                priceLockedAt: now,
-              }
+              status: targetStatus,
+              statusUpdatedAt: now,
+              priceLockedAt: now,
+            }
             : {}),
         },
       });
 
-      if (allLocked && visit.job.status !== 'ASSIGNING') {
+      if (allLocked && visit.job.status !== targetStatus) {
         await tx.jobStateChange.create({
           data: {
             jobId: visit.jobId,
             fromStatus: visit.job.status,
-            toStatus: 'ASSIGNING',
+            toStatus: targetStatus,
             reason: 'All visits scope-locked and confirmed',
             changedByRole: 'CUSTOMER',
           },

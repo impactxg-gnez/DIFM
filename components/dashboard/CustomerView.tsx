@@ -585,12 +585,12 @@ export function CustomerView({ user }: { user: any }) {
             return (
                 <ScopeLock
                     visits={visits}
-                    onComplete={async (visitId, answers) => {
+                    onComplete={async (visitId, answers, scopePhotos) => {
                         try {
                             const res = await fetch(`/api/visits/${visitId}/scope-lock`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ answers })
+                                body: JSON.stringify({ answers, scope_photos: scopePhotos })
                             });
                             if (res.ok) {
                                 const result = await res.json();

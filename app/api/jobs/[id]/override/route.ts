@@ -15,32 +15,13 @@ export async function POST(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { fixedPrice, platformFeeOverride, providerId, reason } = await request.json();
-
-    if (fixedPrice !== undefined && typeof fixedPrice !== 'number') {
-        return NextResponse.json({ error: 'fixedPrice must be number' }, { status: 400 });
-    }
-
-    if (platformFeeOverride !== undefined && typeof platformFeeOverride !== 'number') {
-        return NextResponse.json({ error: 'platformFeeOverride must be number' }, { status: 400 });
-    }
-
-    if ((fixedPrice !== undefined || platformFeeOverride !== undefined) && (!reason || reason.trim().length === 0)) {
-        return NextResponse.json({ error: 'Reason required for financial overrides' }, { status: 400 });
-    }
+    const { providerId, reason } = await request.json();
 
     const updates: any = {};
-    if (fixedPrice !== undefined) {
-        updates.fixedPrice = fixedPrice;
-        updates.priceOverride = fixedPrice;
-    }
-    if (platformFeeOverride !== undefined) {
-        updates.platformFeeOverride = platformFeeOverride;
-    }
     if (providerId) updates.providerId = providerId;
 
     if (Object.keys(updates).length === 0) {
-        return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
+        return NextResponse.json({ error: 'Only provider reassignment is allowed via override. Financial overrides are blocked for Anti-Negotiation.' }, { status: 400 });
     }
 
     try {
@@ -53,44 +34,23 @@ export async function POST(
             // Admin can override price at any job status (before or after provider acceptance)
             // No restrictions - admin has full control
 
-            const updated = await tx.job.update({
+            const updatedJob = await tx.job.update({
                 where: { id },
                 data: updates,
             });
 
-            if (fixedPrice !== undefined) {
-                // Only create override record if price actually changed
-                if (job.fixedPrice !== fixedPrice) {
-                    await tx.priceOverride.create({
-                        data: {
-                            jobId: id,
-                            oldPrice: job.fixedPrice,
-                            newPrice: fixedPrice,
-                            reason,
-                            changedById: userId || undefined,
-                            changedByRole: role,
-                        },
-                    });
-                }
-            }
-
-            // Create AuditLog for all override actions
-            const details = [];
-            if (fixedPrice !== undefined) details.push(`Price: £${job.fixedPrice} → £${fixedPrice}`);
-            if (platformFeeOverride !== undefined) details.push(`Platform Fee Override: £${platformFeeOverride}`);
-            if (providerId) details.push(`Provider reassigned to: ${providerId}`);
-
+            // Create AuditLog for override action
             await tx.auditLog.create({
                 data: {
                     action: 'JOB_OVERRIDE',
                     entityId: id,
                     entityType: 'JOB',
-                    details: `${details.join(', ')}. Reason: ${reason || 'No reason provided'}`,
+                    details: `Provider reassigned to: ${providerId}. Reason: ${reason || 'No reason provided'}`,
                     actorId: userId || 'UNKNOWN'
                 }
             });
 
-            return updated;
+            return updatedJob;
         });
 
         return NextResponse.json(result);

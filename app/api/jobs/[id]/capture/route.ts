@@ -32,6 +32,20 @@ export async function POST(
             return NextResponse.json({ error: `Cannot capture from ${job.status}` }, { status: 400 });
         }
 
+        // Rule: Parts must be approved or null
+        const pendingParts = await prisma.visit.findFirst({
+            where: { jobId: jobId, partsStatus: 'PENDING' }
+        });
+        if (pendingParts) {
+            return NextResponse.json({ error: 'Cannot capture payment while parts approval is PENDING.' }, { status: 400 });
+        }
+
+        // Rule: No capture if issue is raised
+        const issueStates = ['ISSUE_RAISED_BY_CUSTOMER', 'ISSUE_RAISED_BY_PROVIDER', 'RESOLUTION_PENDING'];
+        if (issueStates.includes(job.status)) {
+            return NextResponse.json({ error: 'Cannot capture payment while an issue is active.' }, { status: 400 });
+        }
+
         // Simulate successful capture
         // In reality, call Stripe/Payment Gateway here
 

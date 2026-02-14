@@ -36,19 +36,12 @@ export async function calculateJobPrice(
 
   // Fallback to legacy fixed pricing if parsing disabled
   if (!enableParsing) {
-    return {
-      totalPrice: PRICE_MATRIX[effectiveCategory],
-      items: [],
-      needsReview: false,
-      usedFallback: true,
-      confidence: 1.0,
-      primaryCategory: effectiveCategory,
-    };
+    throw new Error('Pricing parsing must be enabled. Legacy fixed pricing is deprecated for Anti-Negotiation.');
   }
 
   try {
     const catalogue = await getCatalogue();
-    
+
     // Load patterns from DB (optional, falls back to hardcoded patterns if DB fails)
     let dbPatterns: any[] | undefined;
     try {
@@ -66,7 +59,7 @@ export async function calculateJobPrice(
       console.warn('[Calculator] Failed to load patterns from DB, using hardcoded patterns:', error);
       // Continue with hardcoded patterns
     }
-    
+
     const parsed = parseJobDescription(description, catalogue, dbPatterns);
 
     const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {

@@ -122,6 +122,26 @@ model Job {
   timerPausedAt      DateTime?
   isAccessAvailable  Boolean   @default(false)
   
+  // Timer pause for parts approval
+  timerPausedForParts Boolean  @default(false)
+  timerPausedForPartsAt DateTime?
+  
+  // Issue Raising Flow
+  issueRaisedBy       String?   // "CUSTOMER", "PROVIDER"
+  issueReasonCode     String?   // Required reason code
+  issueEvidencePhotos String?   // Required evidence upload
+  issueRaisedAt       DateTime?
+  issueResolvedAt     DateTime?
+  issueResolution     String?   // Admin resolution notes
+  payoutFrozen        Boolean   @default(false)
+  timerFrozenForIssue Boolean   @default(false)
+  
+  // Flagging fields (Structured Provider Flag)
+  flagReason          String?   // scope_too_large, wrong_capability, photo_mismatch, safety_issue
+  flagNote            String?
+  flaggedById         String?
+  flaggedAt           DateTime?
+  
   // Relations
   customerId  String
   customer    User      @relation("CustomerJobs", fields: [customerId], references: [id])
@@ -297,6 +317,17 @@ model Visit {
   price           Float
   
   status          String   @default("DRAFT") // "DRAFT", "SCHEDULED", "COMPLETED", etc.
+  
+  // Parts Approval Flow
+  partsStatus         String?  @default("NOT_REQUESTED") // "NOT_REQUESTED", "PENDING", "APPROVED", "REJECTED"
+  partsRequestedAt    DateTime?
+  partsApprovedAt     DateTime?
+  partsRejectedAt     DateTime?
+  partsBreakdown      Json?    // { items: [...], totalCost: number }
+  partsNotes          String?
+  partsPhotos         String?
+  
+  scope_photos        String?  // Mandatory photos at Scope Lock
   
   scopeSummary    ScopeSummary?
   

@@ -4,16 +4,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
+import { CameraUpload } from '@/components/ui/CameraUpload';
 
 interface ScopeLockProps {
     visits: any[];
-    onComplete: (visitId: string, answers: any) => void;
+    onComplete: (visitId: string, answers: any, scopePhotos: string) => void;
     onCancel: () => void;
 }
 
 export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     const [currentVisitIndex, setCurrentVisitIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [scopePhotos, setScopePhotos] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentVisit = visits[currentVisitIndex];
@@ -23,21 +25,41 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     interface Question {
         id: string;
         text: string;
-        type: 'YES_NO_NOTSURE' | 'YES_NO' | 'CHOICE';
+        type: 'YES_NO_NOTSURE' | 'YES_NO' | 'CHOICE' | 'SCALER';
         options?: string[];
     }
 
     // Question patterns from spec
     const getQuestions = (visit: any): Question[] => {
-        // In V1, we derive questions from the primary item's uncertainty profile
-        // This is a simplified mapper
-        const questions: Question[] = [
-            {
-                id: 'visible_accessible',
-                text: 'Is the area fully visible and accessible without removing panels or furniture?',
-                type: 'YES_NO_NOTSURE'
-            }
-        ];
+        const questions: Question[] = [];
+
+        // CLEANING Scalers (only if item_class == CLEANING)
+        if (visit.item_class === 'CLEANING') {
+            questions.push({
+                id: 'bedrooms',
+                text: 'Number of Bedrooms',
+                type: 'CHOICE',
+                options: ['1', '2', '3', '4+']
+            });
+            questions.push({
+                id: 'bathrooms',
+                text: 'Number of Bathrooms',
+                type: 'CHOICE',
+                options: ['1', '2', '3+']
+            });
+            questions.push({
+                id: 'property_type',
+                text: 'Property Type',
+                type: 'CHOICE',
+                options: ['Flat', 'House', 'Duplex']
+            });
+        }
+
+        questions.push({
+            id: 'visible_accessible',
+            text: 'Is the area fully visible and accessible without removing panels or furniture?',
+            type: 'YES_NO_NOTSURE'
+        });
 
         const primaryId: string = visit?.primary_job_item?.job_item_id || '';
 
@@ -73,15 +95,19 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         if (currentVisitIndex === visits.length - 1) {
             setIsSubmitting(true);
             const visitId = currentVisit.visit_id || currentVisit.id;
-            await onComplete(visitId, answers);
+            await onComplete(visitId, answers, scopePhotos);
             setIsSubmitting(false);
         } else {
             setCurrentVisitIndex(prev => prev + 1);
-            // We'd ideally reset answers per visit or keep them grouped
+            // We reset answers/photos per visit generally in the orchestration
+            // but for manual visit-by-visit flow:
+            setAnswers({});
+            setScopePhotos('');
         }
     };
 
     const isAllAnswered = questions.every(q => answers[q.id]);
+    const isPhotoUploaded = scopePhotos.length > 0;
 
     return (
         <div className="fixed inset-0 z-50 bg-black flex flex-col pt-12 pb-6 px-6 overflow-y-auto">
@@ -131,7 +157,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                 )}
 
                                 {q.type === 'CHOICE' && (
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                         {q.options?.map((val: string) => (
                                             <Button
                                                 key={val}
@@ -147,11 +173,22 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                             </div>
                         ))}
 
-                        <div className="pt-4 border-t border-white/10">
-                            <div className="flex items-center gap-3 text-blue-400 mb-4 bg-blue-400/10 p-4 rounded-lg">
+                        <div className="pt-4 border-t border-white/10 space-y-4">
+                            <div className="flex items-center gap-3 text-blue-400 mb-2 bg-blue-400/10 p-4 rounded-lg">
                                 <Camera className="w-6 h-6 shrink-0" />
-                                <p className="text-sm font-medium">Add a photo of the area (Optional but recommended)</p>
+                                <p className="text-sm font-medium">Add a photo of the area (Required)</p>
                             </div>
+
+                            <CameraUpload
+                                onCapture={(photo) => setScopePhotos(photo)}
+                            />
+
+                            {isPhotoUploaded && (
+                                <div className="text-green-500 text-xs flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Photo uploaded successfully
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -159,7 +196,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                 <div className="space-y-3">
                     <Button
                         className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold"
-                        disabled={!isAllAnswered || isSubmitting}
+                        disabled={!isAllAnswered || !isPhotoUploaded || isSubmitting}
                         onClick={handleNext}
                     >
                         {isSubmitting ? 'Finalizing...' : (currentVisitIndex === visits.length - 1 ? 'Confirm & Book' : 'Next Visit')}

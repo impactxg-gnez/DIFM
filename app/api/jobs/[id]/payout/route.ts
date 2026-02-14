@@ -33,6 +33,12 @@ export async function POST(
             return NextResponse.json({ error: `Cannot payout from ${job.status}` }, { status: 400 });
         }
 
+        // Rule: No payout if issue is raised
+        const issueStates = ['ISSUE_RAISED_BY_CUSTOMER', 'ISSUE_RAISED_BY_PROVIDER', 'RESOLUTION_PENDING'];
+        if (issueStates.includes(job.status)) {
+            return NextResponse.json({ error: 'Cannot payout while an issue is active.' }, { status: 400 });
+        }
+
         // Simulate payout processing
 
         const updatedJob = await prisma.$transaction(async (tx) => {

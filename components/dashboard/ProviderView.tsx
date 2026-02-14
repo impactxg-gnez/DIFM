@@ -186,6 +186,10 @@ export function ProviderView({ user }: { user: any }) {
     const [partsNotes, setPartsNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [flagDialog, setFlagDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
+    const [flagReason, setFlagReason] = useState('');
+    const [flagNote, setFlagNote] = useState('');
+
     const updateStatus = async (jobId: string, status: string) => {
         if (status === 'COMPLETED') {
             setCompletionDialog({ open: true, jobId });
@@ -197,6 +201,35 @@ export function ProviderView({ user }: { user: any }) {
             body: JSON.stringify({ status })
         });
         mutate();
+    };
+
+    const submitFlag = async () => {
+        if (!flagDialog.jobId || !flagReason) return;
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`/api/jobs/${flagDialog.jobId}/flag`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reason: flagReason,
+                    note: flagNote,
+                    providerId: user.id
+                })
+            });
+            if (res.ok) {
+                setFlagDialog({ open: false });
+                setFlagReason('');
+                setFlagNote('');
+                mutate();
+            } else {
+                const err = await res.json();
+                alert(`Flagging failed: ${err.error}`);
+            }
+        } catch (e) {
+            console.error('Flag error', e);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const submitCompletion = async () => {
@@ -315,8 +348,8 @@ export function ProviderView({ user }: { user: any }) {
     // V1: Available jobs are those in ASSIGNING status
     // The backend already filters by category/capabilities, so show all ASSIGNING jobs returned
     const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING');
-    // V1: My jobs are those assigned to me or in progress
-    const myJobs = jobs.filter((j: any) => j.providerId === user.id);
+    // V1: My jobs are those assigned to me or in progress or flagged by me
+    const myJobs = jobs.filter((j: any) => j.providerId === user.id || (j.status === 'FLAGGED_REVIEW' && j.flaggedById === user.id));
 
     // Toggle online status
     const toggleOnlineStatus = async (newStatus: boolean) => {
@@ -394,11 +427,30 @@ export function ProviderView({ user }: { user: any }) {
                             <div>
                                 <h3 className="font-semibold text-white">{job.category} - {job.description}</h3>
                                 <p className="text-sm text-gray-400">{job.location}</p>
+
+                                {/* Photo Display for Provider Review */}
+                                {job.visits?.some((v: any) => v.scope_photos) && (
+                                    <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                                        {job.visits.map((v: any) => v.scope_photos?.split(',').map((url: string, i: number) => (
+                                            <img key={`${v.id}-${i}`} src={url} alt="Scope" className="w-20 h-20 object-cover rounded border border-white/10" />
+                                        )))}
+                                    </div>
+                                )}
+
                                 <div className="mt-2 text-lg font-bold text-blue-600">£{job.fixedPrice}</div>
                                 <p className="text-xs text-gray-400 mt-1">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</p>
                             </div>
                         </div>
-                        <Button onClick={() => acceptJob(job.id)} className="w-full">Accept Job</Button>
+                        <div className="flex gap-2">
+                            <Button onClick={() => acceptJob(job.id)} className="flex-1 font-bold">Accept Job</Button>
+                            <Button
+                                variant="outline"
+                                className="border-red-500/30 text-red-500 hover:bg-red-500/10"
+                                onClick={() => setFlagDialog({ open: true, jobId: job.id })}
+                            >
+                                <AlertTriangle className="w-4 h-4 mr-1" /> Flag
+                            </Button>
+                        </div>
                     </Card>
                 ))}
                 {availableJobs.length === 0 && <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>}
@@ -414,6 +466,26 @@ export function ProviderView({ user }: { user: any }) {
                             <span className="text-sm font-mono font-bold text-white">£{job.fixedPrice}</span>
                         </div>
                         <h3 className="font-semibold mb-1 text-white">{job.description}</h3>
+
+                        {job.status === 'FLAGGED_REVIEW' && (
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400">
+                                <p className="text-xs font-bold uppercase mb-1 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Flagged for Review
+                                </p>
+                                <p className="text-sm">Reason: {job.flagReason?.replace('_', ' ')}</p>
+                                {job.flagNote && <p className="text-xs mt-1 text-gray-400 italic">"{job.flagNote}"</p>}
+                            </div>
+                        )}
+
+                        {job.status === 'MISMATCH_PENDING' && (
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400">
+                                <p className="text-xs font-bold uppercase mb-1 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Mismatch Enforcement Lock
+                                </p>
+                                <p className="text-sm">This job is locked awaiting tier recalculation or admin rebook.</p>
+                                <p className="text-xs mt-1 text-gray-400">The customer has been notified to upgrade the visit or rebook. Do not perform further work until resolved.</p>
+                            </div>
+                        )}
                         <p className="text-sm text-gray-400 mb-2 flex items-start gap-1">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             {job.location}
@@ -634,6 +706,75 @@ export function ProviderView({ user }: { user: any }) {
                                 className="bg-green-600 hover:bg-green-700"
                             >
                                 {isSubmitting ? 'Completing...' : 'Complete Job'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Flagging Dialog */}
+            {flagDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-zinc-900 border border-white/10 p-6 rounded-lg max-w-md w-full mx-4 space-y-4">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold text-red-500 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5" />
+                                Flag Job for Review
+                            </h3>
+                            <p className="text-sm text-gray-400">Selecting a reason will pause the job and notify the admin.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Reason for Flagging *</Label>
+                            <div className="grid grid-cols-1 gap-2">
+                                {[
+                                    { id: 'scope_too_large', label: 'Scope too large' },
+                                    { id: 'wrong_capability', label: 'Wrong capability' },
+                                    { id: 'photo_mismatch', label: 'Photo mismatch' },
+                                    { id: 'safety_issue', label: 'Safety issue' }
+                                ].map((reason) => (
+                                    <Button
+                                        key={reason.id}
+                                        type="button"
+                                        variant={flagReason === reason.id ? 'default' : 'outline'}
+                                        onClick={() => setFlagReason(reason.id)}
+                                        className={`justify-start ${flagReason === reason.id ? 'bg-red-600' : 'border-white/10'}`}
+                                    >
+                                        {reason.label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Optional Note</Label>
+                            <textarea
+                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
+                                rows={3}
+                                placeholder="Add any details for the admin..."
+                                value={flagNote}
+                                onChange={(e) => setFlagNote(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setFlagDialog({ open: false });
+                                    setFlagReason('');
+                                    setFlagNote('');
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={submitFlag}
+                                disabled={isSubmitting || !flagReason}
+                                className="bg-red-600 hover:bg-red-700"
+                            >
+                                {isSubmitting ? 'Flagging...' : 'Confirm Flag'}
                             </Button>
                         </div>
                     </div>

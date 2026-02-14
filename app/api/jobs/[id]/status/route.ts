@@ -12,7 +12,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd, scheduledAt } = body as any;
+        let { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd, scheduledAt } = body as any;
 
         const cookieStore = await cookies();
         const userId = cookieStore.get('userId')?.value;
@@ -80,10 +80,22 @@ export async function POST(
                 }
             }
 
-            // Step 5: Completion Evidence Enforcement
+            // Step 5: Completion Evidence & Parts Guard
             if (status?.toUpperCase() === 'COMPLETED') {
                 if (!completionPhotos || completionPhotos.trim() === '') {
                     throw new Error('Photo/Video evidence is required for completion');
+                }
+
+                // Check for PENDING parts in any visit
+                const visitsWithPendingParts = await tx.visit.findFirst({
+                    where: {
+                        jobId: id,
+                        partsStatus: 'PENDING'
+                    }
+                });
+
+                if (visitsWithPendingParts) {
+                    throw new Error('Cannot complete job while parts approval is PENDING. Please approve or reject parts first.');
                 }
             }
 
@@ -101,6 +113,21 @@ export async function POST(
             if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
                 if (!isAccessAvailable && !job.isAccessAvailable && currentStatus !== 'ON_SITE') {
                     throw new Error('Cannot start timer until access is confirmed available');
+                }
+            }
+
+            // WAITING_FOR_DISPATCH logic
+            // If status is BOOKED and there is a future schedule, move to WAITING_FOR_DISPATCH
+            let targetStatus = status;
+            if (status === 'BOOKED') {
+                const finalScheduledAt = scheduledAt ? new Date(scheduledAt) : job.scheduledAt;
+                if (finalScheduledAt) {
+                    const DISPATCH_BUFFER_MINUTES = 120; // Start dispatch 2 hours before
+                    const dispatchTime = new Date(finalScheduledAt.getTime() - DISPATCH_BUFFER_MINUTES * 60000);
+                    if (now < dispatchTime) {
+                        targetStatus = 'WAITING_FOR_DISPATCH';
+                        console.log(`[Lifecycle] Job ${id} entering WAITING_FOR_DISPATCH (scheduled logic).`);
+                    }
                 }
             }
 
@@ -138,25 +165,25 @@ export async function POST(
                 updatedJob = await tx.job.update({
                     where: { id },
                     data: {
-                        status,
+                        status: targetStatus,
                         statusUpdatedAt: now,
-                        providerId: (currentStatus === 'ASSIGNING' && status === 'ASSIGNED') ? userId : job.providerId,
+                        providerId: (currentStatus === 'ASSIGNING' && targetStatus === 'ASSIGNED') ? userId : job.providerId,
                         cancellationReason,
                         isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
                         arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
                         arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
-                        timerStartedAt: ((status === 'IN_PROGRESS' || status === 'ON_SITE') && !job.timerStartedAt) ? now : job.timerStartedAt,
-                        arrival_confirmed_at: (status === 'ON_SITE' && !job.arrival_confirmed_at) ? now : job.arrival_confirmed_at,
+                        timerStartedAt: ((targetStatus === 'IN_PROGRESS' || targetStatus === 'ON_SITE') && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        arrival_confirmed_at: (targetStatus === 'ON_SITE' && !job.arrival_confirmed_at) ? now : job.arrival_confirmed_at,
                         scheduledAt: scheduledAt ? new Date(scheduledAt) : job.scheduledAt,
-                        // If rescheduling from RESCHEDULE_REQUIRED to BOOKED, clear old offer data
-                        ...(status === 'BOOKED' && currentStatus === 'RESCHEDULE_REQUIRED' ? {
+                        // If rescheduling from RESCHEDULE_REQUIRED to BOOKED (or directly to WAITING_FOR_DISPATCH)
+                        ...((targetStatus === 'BOOKED' || targetStatus === 'WAITING_FOR_DISPATCH') && currentStatus === 'RESCHEDULE_REQUIRED' ? {
                             offeredToId: null,
                             offeredAt: null,
                             triedProviderIds: null,
                         } : {}),
 
                         // Update completion evidence
-                        ...(status === 'COMPLETED' ? {
+                        ...(targetStatus === 'COMPLETED' ? {
                             completionNotes: completionNotes || "Job completed",
                             completionPhotos: completionPhotos,
                             partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || 'NO'),
@@ -168,7 +195,7 @@ export async function POST(
                         } : {}),
 
                         // Update dispute data if customer is disputing
-                        ...(status === 'DISPUTED' && userRole === 'CUSTOMER' ? {
+                        ...(targetStatus === 'DISPUTED' && userRole === 'CUSTOMER' ? {
                             disputeReason: reason || 'No reason provided',
                             disputeNotes: disputeNotes || null,
                             disputePhotos: disputePhotos || null,
@@ -176,12 +203,13 @@ export async function POST(
                         } : {}),
 
                         // Update dispute resolution if admin is resolving
-                        ...(status === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
+                        ...(targetStatus === 'CLOSED' && job.status === 'DISPUTED' && userRole === 'ADMIN' ? {
                             disputeResolvedAt: now,
                             disputeResolution: reason || 'Resolved by admin',
                         } : {}),
                     }
                 });
+                status = targetStatus;
             }
 
             await tx.jobStateChange.create({

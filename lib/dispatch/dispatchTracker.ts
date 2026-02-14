@@ -48,12 +48,12 @@ export async function ensureDispatchProgress() {
 }
 
 /**
- * Moves jobs from BOOKED to ASSIGNING if they are ready for dispatch
+ * Moves jobs from BOOKED or WAITING_FOR_DISPATCH to ASSIGNING if they are ready for dispatch
  */
 export async function activateBookedJobs() {
-    const bookedJobs = await prisma.job.findMany({
+    const jobs = await prisma.job.findMany({
         where: {
-            status: 'BOOKED'
+            status: { in: ['BOOKED', 'WAITING_FOR_DISPATCH'] }
         },
         include: {
             visits: true
@@ -62,30 +62,29 @@ export async function activateBookedJobs() {
 
     const results = [];
     const now = new Date();
+    const DISPATCH_BUFFER_MINUTES = 120; // 2 hours before scheduled time
 
-    for (const job of bookedJobs) {
+    for (const job of jobs) {
         // V1: Job is ready for dispatch if it has a SCHEDULED (scope-locked) visit
         const isReady = job.visits.some((v: any) => v.status === 'SCHEDULED');
 
         if (!isReady) continue;
 
-        // Condition for activation: ASAP or scheduled in the next 60 minutes
         let shouldActivate = false;
         if (job.isASAP) {
             shouldActivate = true;
         } else if (job.scheduledAt) {
             const scheduled = new Date(job.scheduledAt);
-            const diffMs = scheduled.getTime() - now.getTime();
-            const diffMins = diffMs / (1000 * 60);
+            const dispatchTime = new Date(scheduled.getTime() - DISPATCH_BUFFER_MINUTES * 60000);
 
-            // Activate if scheduled in the next 60 mins (or if already past)
-            if (diffMins <= 60) {
+            // Activate if we've reached the dispatch window (or if already past)
+            if (now >= dispatchTime) {
                 shouldActivate = true;
             }
         }
 
         if (shouldActivate) {
-            console.log(`[DispatchTracker] Activating booked job ${job.id} (isASAP: ${job.isASAP}). Moving to ASSIGNING.`);
+            console.log(`[DispatchTracker] Activating job ${job.id} (from ${job.status}). Moving to ASSIGNING.`);
             await prisma.job.update({
                 where: { id: job.id },
                 data: {
@@ -97,9 +96,11 @@ export async function activateBookedJobs() {
             await prisma.jobStateChange.create({
                 data: {
                     jobId: job.id,
-                    fromStatus: 'BOOKED',
+                    fromStatus: job.status,
                     toStatus: 'ASSIGNING',
-                    reason: 'Job activated for dispatch',
+                    reason: 'Dispatch window reached',
+                    changedById: 'SYSTEM',
+                    changedByRole: 'SYSTEM'
                 }
             });
 
