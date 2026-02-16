@@ -705,9 +705,13 @@ export function CustomerView({ user }: { user: any }) {
                                 mutate();
                                 // After scope-lock, we can show "waiting" or return to status list.
                                 setStep('WAITING');
+                            } else {
+                                const err = await res.json();
+                                alert(`Failed to lock scope: ${err.error || 'Unknown error'}`);
                             }
                         } catch (e) {
                             console.error('Scope lock submission failed', e);
+                            alert('Scope lock submission failed. Please check your connection and try again.');
                         }
                     }}
                     onCancel={() => {

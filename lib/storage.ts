@@ -51,7 +51,7 @@ export async function ensureBuckets() {
             console.log(`[Storage] Creating bucket: ${bucket}`);
             await supabaseAdmin.storage.createBucket(bucket, {
                 public: false,
-                fileSizeLimit: 5242880, // 5MB
+                fileSizeLimit: 20971520, // 20MB
             });
         }
     }

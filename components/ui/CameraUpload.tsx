@@ -38,19 +38,47 @@ export function CameraUpload({ onCapture, label = "Take Photo" }: CameraUploadPr
             return;
         }
 
+        const resizeImage = (base64Str: string): Promise<string> => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = base64Str;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 1200;
+                    const MAX_HEIGHT = 1200;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.7)); // Moderate compression
+                };
+            });
+        };
+
         navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
                 const { latitude, longitude } = position.coords;
                 setLocationCaptured(true);
                 setIsLocating(false);
-                // In a real app, we'd upload the file to storage here.
-                // For this demo, we pass the data URL.
-                // Re-read file to pass data URL if needed or just use preview logic
-                const reader2 = new FileReader();
-                reader2.onloadend = () => {
-                    onCapture(reader2.result as string, latitude, longitude);
-                };
-                reader2.readAsDataURL(file);
+
+                // Resize and then capture
+                const resized = await resizeImage(reader.result as string);
+                onCapture(resized, latitude, longitude);
             },
             (err) => {
                 console.error("Location error", err);
