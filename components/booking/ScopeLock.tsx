@@ -8,14 +8,14 @@ import { CameraUpload } from '@/components/ui/CameraUpload';
 
 interface ScopeLockProps {
     visits: any[];
-    onComplete: (visitId: string, answers: any, scopePhotos: string) => void;
+    onComplete: (visitId: string, answers: any, scopePhotos: string[]) => void;
     onCancel: () => void;
 }
 
 export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     const [currentVisitIndex, setCurrentVisitIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
-    const [scopePhotos, setScopePhotos] = useState<string>('');
+    const [scopePhotos, setScopePhotos] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentVisit = visits[currentVisitIndex];
@@ -99,11 +99,13 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
             setIsSubmitting(false);
         } else {
             setCurrentVisitIndex(prev => prev + 1);
-            // We reset answers/photos per visit generally in the orchestration
-            // but for manual visit-by-visit flow:
             setAnswers({});
-            setScopePhotos('');
+            setScopePhotos([]);
         }
+    };
+
+    const removePhoto = (index: number) => {
+        setScopePhotos(prev => prev.filter((_, i) => i !== index));
     };
 
     const isAllAnswered = questions.every(q => answers[q.id]);
@@ -176,17 +178,38 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                         <div className="pt-4 border-t border-white/10 space-y-4">
                             <div className="flex items-center gap-3 text-blue-400 mb-2 bg-blue-400/10 p-4 rounded-lg">
                                 <Camera className="w-6 h-6 shrink-0" />
-                                <p className="text-sm font-medium">Add a photo of the area (Required)</p>
+                                <div className="space-y-0.5">
+                                    <p className="text-sm font-medium">Add photos of the area (Required)</p>
+                                    <p className="text-gray-400 text-xs">Capture multiple angles to avoid price mismatches.</p>
+                                </div>
                             </div>
 
+                            {/* Photo Gallery */}
+                            {scopePhotos.length > 0 && (
+                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                    {scopePhotos.map((photo, idx) => (
+                                        <div key={idx} className="relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-white/10">
+                                            <img src={photo} alt={`Capture ${idx}`} className="w-full h-full object-cover" />
+                                            <button
+                                                onClick={() => removePhoto(idx)}
+                                                className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full hover:bg-red-500/80 transition-colors"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             <CameraUpload
-                                onCapture={(photo) => setScopePhotos(photo)}
+                                onCapture={(photo) => setScopePhotos(prev => [...prev, photo])}
+                                label={scopePhotos.length > 0 ? "Add Another Photo" : "Take Photo"}
                             />
 
                             {isPhotoUploaded && (
                                 <div className="text-green-500 text-xs flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3" />
-                                    Photo uploaded successfully
+                                    {scopePhotos.length} photo(s) ready
                                 </div>
                             )}
                         </div>
