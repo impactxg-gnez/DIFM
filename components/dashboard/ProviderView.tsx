@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ProviderMap } from './ProviderMap';
 import { UserLocationMap } from './UserLocationMap';
-import { MapPin, AlertTriangle } from 'lucide-react';
+import { MapPin, AlertTriangle, Timer, Plus, Trash2 } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
+import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -183,12 +184,80 @@ export function ProviderView({ user }: { user: any }) {
     const [completionCoords, setCompletionCoords] = useState<{ lat: number, lng: number } | null>(null);
     const [locationWarning, setLocationWarning] = useState<string | null>(null);
     const [partsRequired, setPartsRequired] = useState<string>('');
-    const [partsNotes, setPartsNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Parts Request State
+    const [partsDialog, setPartsDialog] = useState<{ open: boolean; jobId?: string; visitId?: string }>({ open: false });
+    const [partsItems, setPartsItems] = useState<{ name: string; price: number }[]>([{ name: '', price: 0 }]);
+    const [partsNotes, setPartsNotes] = useState('');
+    const [isSubmittingParts, setIsSubmittingParts] = useState(false);
+
+    const handleAddPart = () => setPartsItems([...partsItems, { name: '', price: 0 }]);
+    const handleRemovePart = (index: number) => setPartsItems(partsItems.filter((_, i) => i !== index));
+    const handlePartChange = (index: number, field: 'name' | 'price', value: string | number) => {
+        const newItems = [...partsItems];
+        newItems[index] = { ...newItems[index], [field]: value };
+        setPartsItems(newItems);
+    };
+
+    const submitPartsRequest = async () => {
+        if (!partsDialog.jobId || !partsDialog.visitId) return;
+        if (partsItems.some(item => !item.name || item.price <= 0)) {
+            alert('Please provide valid name and price for all parts');
+            return;
+        }
+
+        setIsSubmittingParts(true);
+        try {
+            const res = await fetch(`/api/visits/${partsDialog.visitId}/parts-request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    partsBreakdown: {
+                        items: partsItems,
+                        totalCost: partsItems.reduce((sum, item) => sum + item.price, 0)
+                    },
+                    partsNotes
+                })
+            });
+
+            if (res.ok) {
+                setPartsDialog({ open: false });
+                setPartsItems([{ name: '', price: 0 }]);
+                setPartsNotes('');
+                mutate();
+                alert('Parts request submitted and timer paused.');
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error}`);
+            }
+        } catch (e) {
+            console.error('Parts request failed', e);
+        } finally {
+            setIsSubmittingParts(false);
+        }
+    };
+
+    const resumeWork = async (visitId: string) => {
+        try {
+            const res = await fetch(`/api/visits/${visitId}/resume`, {
+                method: 'POST',
+            });
+            if (res.ok) {
+                mutate();
+            } else {
+                const err = await res.json();
+                alert(`Error resuming: ${err.error}`);
+            }
+        } catch (e) {
+            console.error('Resume failed', e);
+        }
+    };
 
     const [flagDialog, setFlagDialog] = useState<{ open: boolean; jobId?: string }>({ open: false });
     const [flagReason, setFlagReason] = useState('');
     const [flagNote, setFlagNote] = useState('');
+    const [flagPhotos, setFlagPhotos] = useState('');
 
     const updateStatus = async (jobId: string, status: string) => {
         if (status === 'COMPLETED') {
@@ -213,6 +282,7 @@ export function ProviderView({ user }: { user: any }) {
                 body: JSON.stringify({
                     reason: flagReason,
                     note: flagNote,
+                    photos: flagPhotos,
                     providerId: user.id
                 })
             });
@@ -220,6 +290,7 @@ export function ProviderView({ user }: { user: any }) {
                 setFlagDialog({ open: false });
                 setFlagReason('');
                 setFlagNote('');
+                setFlagPhotos('');
                 mutate();
             } else {
                 const err = await res.json();
@@ -432,7 +503,7 @@ export function ProviderView({ user }: { user: any }) {
                                 {job.visits?.some((v: any) => v.scope_photos) && (
                                     <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
                                         {job.visits.map((v: any) => v.scope_photos?.split(',').map((url: string, i: number) => (
-                                            <img key={`${v.id}-${i}`} src={url} alt="Scope" className="w-20 h-20 object-cover rounded border border-white/10" />
+                                            <RemoteImage key={`${v.id}-${i}`} path={url} bucket="SCOPE" className="w-20 h-20 object-cover rounded border border-white/10" />
                                         )))}
                                     </div>
                                 )}
@@ -466,6 +537,28 @@ export function ProviderView({ user }: { user: any }) {
                             <span className="text-sm font-mono font-bold text-white">£{job.fixedPrice}</span>
                         </div>
                         <h3 className="font-semibold mb-1 text-white">{job.description}</h3>
+
+                        {/* Photo Display for Provider Schedule */}
+                        {job.visits?.some((v: any) => v.scope_photos || v.partsPhotos) && (
+                            <div className="mt-3 mb-4 flex gap-2 overflow-x-auto pb-2 border-t border-white/5 pt-3">
+                                {job.visits.map((v: any) => (
+                                    <div key={v.id} className="flex gap-2">
+                                        {v.scope_photos?.split(',').map((url: string, i: number) => (
+                                            <div key={`scope-${v.id}-${i}`} className="space-y-1">
+                                                <RemoteImage path={url} bucket="SCOPE" className="w-16 h-16 object-cover rounded border border-white/10" />
+                                                <p className="text-[7px] text-gray-500 text-center uppercase font-bold">Scope</p>
+                                            </div>
+                                        ))}
+                                        {v.partsPhotos?.split(',').map((url: string, i: number) => (
+                                            <div key={`parts-${v.id}-${i}`} className="space-y-1">
+                                                <RemoteImage path={url} bucket="PART" className="w-16 h-16 object-cover rounded border border-white/10" />
+                                                <p className="text-[7px] text-gray-500 text-center uppercase font-bold">Part</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {job.status === 'FLAGGED_REVIEW' && (
                             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400">
@@ -535,19 +628,51 @@ export function ProviderView({ user }: { user: any }) {
                             )}
 
                             {(job.status === 'IN_PROGRESS' || job.status === 'ON_SITE') && (
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="bg-green-600 hover:bg-green-700">Complete Job</Button>
+                                <div className="space-y-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="bg-green-600 hover:bg-green-700">Complete Job</Button>
+                                        <Button
+                                            onClick={async () => {
+                                                if (confirm('Report a mismatch? This will stop the timer and notify the admin.')) {
+                                                    await updateStatus(job.id, 'MISMATCH_PENDING');
+                                                }
+                                            }}
+                                            variant="outline"
+                                            className="border-red-200 text-red-600"
+                                        >
+                                            Mismatch
+                                        </Button>
+                                    </div>
                                     <Button
-                                        onClick={async () => {
-                                            if (confirm('Report a mismatch? This will stop the timer and notify the admin.')) {
-                                                await updateStatus(job.id, 'MISMATCH_PENDING');
-                                            }
+                                        onClick={() => {
+                                            const visit = job.visits?.[0]; // Default to first visit for now
+                                            setPartsDialog({ open: true, jobId: job.id, visitId: visit?.id });
                                         }}
                                         variant="outline"
-                                        className="border-red-200 text-red-600"
+                                        className="w-full bg-amber-600 hover:bg-amber-700 text-white border-none"
                                     >
-                                        Mismatch
+                                        Request Parts
                                     </Button>
+                                </div>
+                            )}
+
+                            {job.status === 'PARTS_PENDING_APPROVAL' && (
+                                <div className="space-y-2">
+                                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded text-amber-500 text-sm">
+                                        <p className="font-bold flex items-center gap-1"><Timer className="w-3 h-3" /> Timer Paused</p>
+                                        <p>Awaiting parts approval.</p>
+                                    </div>
+                                    {job.visits?.some((v: any) => v.partsStatus === 'APPROVED') && (
+                                        <Button
+                                            onClick={() => {
+                                                const visit = job.visits.find((v: any) => v.partsStatus === 'APPROVED');
+                                                if (visit) resumeWork(visit.id);
+                                            }}
+                                            className="w-full bg-green-600 hover:bg-green-700"
+                                        >
+                                            Resume Work
+                                        </Button>
+                                    )}
                                 </div>
                             )}
 
@@ -756,6 +881,18 @@ export function ProviderView({ user }: { user: any }) {
                             />
                         </div>
 
+                        {flagReason === 'photo_mismatch' && (
+                            <div className="space-y-4 pt-2 border-t border-white/10">
+                                <Label className="text-red-400">Add Evidence Photo (Recommended)</Label>
+                                <CameraUpload
+                                    onCapture={(photo) => setFlagPhotos(photo)}
+                                />
+                                {flagPhotos && (
+                                    <p className="text-xs text-green-500">Photo captured successfully</p>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex justify-end gap-3 pt-2">
                             <Button
                                 variant="outline"
@@ -776,6 +913,91 @@ export function ProviderView({ user }: { user: any }) {
                             >
                                 {isSubmitting ? 'Flagging...' : 'Confirm Flag'}
                             </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Parts Request Dialog */}
+            {partsDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-zinc-900 border border-white/10 text-white p-6 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-xl font-bold text-amber-500 mb-4">Request Parts</h3>
+                        <p className="text-sm text-gray-400 mb-6">List the parts required for this job. Total cost will be added to the customer's bill once approved.</p>
+
+                        <div className="space-y-4">
+                            {partsItems.map((item, index) => (
+                                <div key={index} className="flex gap-2 items-end">
+                                    <div className="flex-1 space-y-2">
+                                        <Label>Part Name</Label>
+                                        <Input
+                                            placeholder="e.g. 5m HDMI Cable"
+                                            value={item.name}
+                                            onChange={(e) => handlePartChange(index, 'name', e.target.value)}
+                                            className="bg-zinc-800 border-white/10"
+                                        />
+                                    </div>
+                                    <div className="w-24 space-y-2">
+                                        <Label>Price (£)</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0.00"
+                                            value={item.price}
+                                            onChange={(e) => handlePartChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                            className="bg-zinc-800 border-white/10"
+                                        />
+                                    </div>
+                                    {partsItems.length > 1 && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleRemovePart(index)}
+                                            className="text-red-500 hover:bg-red-500/10 h-10 w-10 p-0"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
+
+                            <Button
+                                variant="outline"
+                                onClick={handleAddPart}
+                                className="w-full border-dashed border-white/20 text-gray-400 hover:text-white"
+                            >
+                                <Plus className="w-4 h-4 mr-2" /> Add Another Part
+                            </Button>
+
+                            <div className="pt-4 border-t border-white/10 space-y-2">
+                                <Label>Notes (Optional)</Label>
+                                <textarea
+                                    className="w-full rounded-md border border-white/10 bg-zinc-800 text-white p-2 min-h-[80px]"
+                                    placeholder="Explain why these parts are needed..."
+                                    value={partsNotes}
+                                    onChange={(e) => setPartsNotes(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2">
+                                <div className="text-lg font-bold">
+                                    Total: £{partsItems.reduce((sum, i) => sum + i.price, 0).toFixed(2)}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => setPartsDialog({ open: false })}
+                                        className="text-white"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={submitPartsRequest}
+                                        disabled={isSubmittingParts}
+                                        className="bg-amber-600 hover:bg-amber-700"
+                                    >
+                                        {isSubmittingParts ? 'Submitting...' : 'Send Request'}
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

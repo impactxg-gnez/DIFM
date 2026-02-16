@@ -46,6 +46,15 @@ export async function POST(
             return NextResponse.json({ error: 'Cannot capture payment while an issue is active.' }, { status: 400 });
         }
 
+        // Calculate total approved parts cost
+        const visitsWithApprovedParts = await prisma.visit.findMany({
+            where: { jobId: jobId, partsStatus: 'APPROVED' }
+        });
+        const totalPartsCost = visitsWithApprovedParts.reduce((sum, v) => {
+            const breakdown = v.partsBreakdown as any;
+            return sum + (breakdown?.totalCost || 0);
+        }, 0);
+
         // Simulate successful capture
         // In reality, call Stripe/Payment Gateway here
 
@@ -56,7 +65,8 @@ export async function POST(
                 data: {
                     customerPaidAt: new Date(),
                     paymentMethod: 'SIMULATED',
-                    paymentReference: `CAP-${Math.random().toString(36).substring(7).toUpperCase()}`
+                    paymentReference: `CAP-${Math.random().toString(36).substring(7).toUpperCase()}`,
+                    partsCost: totalPartsCost // Track parts cost on job
                 }
             });
 

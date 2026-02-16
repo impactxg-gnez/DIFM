@@ -16,7 +16,7 @@ export async function POST(
         const userId = cookieStore.get('userId')?.value;
         const userRole = cookieStore.get('userRole')?.value;
 
-        if (!userId || userRole !== 'CUSTOMER') {
+        if (!userId || (userRole !== 'CUSTOMER' && userRole !== 'ADMIN')) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -32,8 +32,8 @@ export async function POST(
 
             if (!visit) throw new Error('Visit not found');
 
-            // Verify customer owns this job
-            if (visit.job.customerId !== userId) {
+            // Verify authorization: Customer owns job, or Admin role
+            if (userRole === 'CUSTOMER' && visit.job.customerId !== userId) {
                 throw new Error('Not authorized for this visit');
             }
 
@@ -45,21 +45,13 @@ export async function POST(
             const now = new Date();
 
             if (decision === 'APPROVE') {
-                // Approve parts and resume timer
+                // Approve parts - but do NOT resume timer here. 
+                // Provider must "Resume Work" after acquiring parts.
                 const updatedVisit = await tx.visit.update({
                     where: { id: visitId },
                     data: {
                         partsStatus: 'APPROVED',
                         partsApprovedAt: now,
-                    }
-                });
-
-                // Resume job timer
-                await tx.job.update({
-                    where: { id: visit.jobId },
-                    data: {
-                        timerPausedAt: null,
-                        timerPausedForParts: false,
                     }
                 });
 

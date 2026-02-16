@@ -158,6 +158,7 @@ model Job {
   visits      Visit[]
   stateChanges JobStateChange[]
   priceOverrides PriceOverride[]
+  visitPhotos VisitPhoto[]
 }
 
 model Transaction {
@@ -330,6 +331,7 @@ model Visit {
   scope_photos        String?  // Mandatory photos at Scope Lock
   
   scopeSummary    ScopeSummary?
+  visitPhotos     VisitPhoto[]
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -352,6 +354,32 @@ model ScopeSummary {
   scope_lock_answers    Json     // Key/Value
   
   createdAt             DateTime @default(now())
+}
+
+
+model VisitPhoto {
+  id              String   @id @default(uuid())
+  
+  visitId         String?
+  visit           Visit?    @relation(fields: [visitId], references: [id])
+  
+  jobId           String
+  job             Job      @relation(fields: [jobId], references: [id])
+  
+  bucket          String   // "scope-photos", "completion-evidence", etc.
+  path            String   // Storage path
+  uploadedBy      String   // User ID
+  photoType       String   // "SCOPE", "COMPLETION", "PART", "MISMATCH", "ISSUE"
+  
+  deleteAfter     DateTime? // For 7-day auto-cleanup
+  isDeleted       Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([deleteAfter])
+  @@index([jobId])
+  @@index([visitId])
 }
 
 model JobPattern {

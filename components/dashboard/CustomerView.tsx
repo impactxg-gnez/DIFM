@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { DispatchTimer } from './DispatchTimer';
 import { ProviderMap } from './ProviderMap';
-import { Plus, Star, LogOut, ArrowLeft, MapPin } from 'lucide-react';
+import { Plus, Star, LogOut, ArrowLeft, MapPin, Timer } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { LocationPicker } from './LocationPicker';
 import { HomeSearchInterface } from './HomeSearchInterface';
@@ -37,6 +37,7 @@ function getCustomerStatus(job: any): string {
         'MISMATCH_PENDING': 'Action required: Scope mismatch',
         'REBOOK_REQUIRED': 'Awaiting re-booking',
         'PARTS_REQUIRED': 'Parts required',
+        'PARTS_PENDING_APPROVAL': 'Action required: Parts approval',
         'COMPLETED': 'Job completed',
         'CAPTURED': 'Payment settled',
         'PAID_OUT': 'Provider paid',
@@ -75,12 +76,39 @@ export function CustomerView({ user }: { user: any }) {
     const [issueNotes, setIssueNotes] = useState('');
     const [issuePhotos, setIssuePhotos] = useState('');
     const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
+    const [isSubmittingParts, setIsSubmittingParts] = useState(false);
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
     const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isLocating, setIsLocating] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+    const handlePartsDecision = async (visitId: string, decision: 'APPROVE' | 'REJECT') => {
+        setIsSubmittingParts(true);
+        try {
+            const res = await fetch(`/api/visits/${visitId}/parts-decision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision })
+            });
+            if (res.ok) {
+                mutate();
+                if (decision === 'APPROVE') {
+                    alert('Parts approved! The provider will resume once they have the parts.');
+                } else {
+                    alert('Parts rejected. An issue has been raised for admin review.');
+                }
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error}`);
+            }
+        } catch (e) {
+            console.error('Parts decision failed', e);
+        } finally {
+            setIsSubmittingParts(false);
+        }
+    };
 
     // Initial Load & Pending Job Check
     useEffect(() => {
@@ -412,6 +440,11 @@ export function CustomerView({ user }: { user: any }) {
             total_minutes: v.effective_minutes || v.base_minutes || 0,
             tier: v.tier,
             price: v.price || 0,
+            scope_photos: v.scope_photos,
+            parts_photos: v.partsPhotos,
+            parts_status: v.partsStatus,
+            parts_breakdown: v.partsBreakdown,
+            parts_notes: v.partsNotes,
         };
     };
 
@@ -511,6 +544,58 @@ export function CustomerView({ user }: { user: any }) {
                                             <div key={v.visit_id || `${job.id}-${idx}`} className="space-y-4">
                                                 <VisitCard visit={v} index={idx} />
 
+                                                {v.parts_status === 'PENDING' && (
+                                                    <Card className="bg-amber-500/10 border-amber-500/20 p-4 space-y-4">
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="space-y-1">
+                                                                <p className="text-sm font-bold text-amber-500 uppercase flex items-center gap-1">
+                                                                    <Timer className="w-3 h-3" /> Parts Approval Required
+                                                                </p>
+                                                                <p className="text-xs text-gray-400">The pro has requested the following parts to continue.</p>
+                                                            </div>
+                                                            <Badge variant="outline" className="border-amber-500/20 text-amber-400">
+                                                                Pending Approval
+                                                            </Badge>
+                                                        </div>
+
+                                                        <div className="bg-black/20 rounded-lg p-3 space-y-2">
+                                                            {v.parts_breakdown?.items?.map((item: any, i: number) => (
+                                                                <div key={i} className="flex justify-between text-sm">
+                                                                    <span className="text-gray-300">{item.name}</span>
+                                                                    <span className="text-white font-mono">£{item.price.toFixed(2)}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="h-px bg-white/10 my-2" />
+                                                            <div className="flex justify-between items-center font-bold">
+                                                                <span>Total Parts Cost</span>
+                                                                <span className="text-amber-500">£{v.parts_breakdown?.totalCost?.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {v.parts_notes && (
+                                                            <p className="text-xs text-gray-400 italic">"{v.parts_notes}"</p>
+                                                        )}
+
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <Button
+                                                                onClick={() => handlePartsDecision(v.visit_id, 'APPROVE')}
+                                                                disabled={isSubmittingParts}
+                                                                className="bg-green-600 hover:bg-green-700 font-bold"
+                                                            >
+                                                                Approve & Pay
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() => handlePartsDecision(v.visit_id, 'REJECT')}
+                                                                disabled={isSubmittingParts}
+                                                                variant="outline"
+                                                                className="border-red-500/50 text-red-500 hover:bg-red-500/10 font-bold"
+                                                            >
+                                                                Reject
+                                                            </Button>
+                                                        </div>
+                                                    </Card>
+                                                )}
+
                                                 {['MISMATCH_PENDING', 'SCOPE_MISMATCH'].includes(job.status) && (
                                                     <Card className="bg-red-500/10 border-red-500/20 p-4">
                                                         <div className="space-y-3">
@@ -570,8 +655,16 @@ export function CustomerView({ user }: { user: any }) {
                                 </div>
                             )}
 
-                            {/* Deterministic Price for THIS Job only */}
-                            <TotalPrice amount={Number(job.fixedPrice || 0)} />
+                            {/* Deterministic Price for THIS Job only + Approved Parts */}
+                            {(() => {
+                                const partsTotal = jobVisits.reduce((sum: number, v: Visit) => {
+                                    if (v.parts_status === 'APPROVED' || v.parts_status === 'PENDING') {
+                                        return sum + (v.parts_breakdown?.totalCost || 0);
+                                    }
+                                    return sum;
+                                }, 0);
+                                return <TotalPrice amount={Number(job.fixedPrice || 0) + partsTotal} />;
+                            })()}
                             <div className="h-px bg-white/5 mx-4" /> {/* Separator between multiple jobs */}
                         </div>
                     );

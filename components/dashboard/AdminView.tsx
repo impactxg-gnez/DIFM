@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SERVICE_CATEGORIES, PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { getNextStates } from '@/lib/jobStateMachine';
-import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2, Timer } from 'lucide-react';
+import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -209,6 +210,32 @@ export function AdminView({ user }: { user: any }) {
         } catch (e) {
             console.error(e);
             alert('Failed to handle mismatch');
+        }
+    };
+
+    const handlePartsDecision = async (visitId: string, decision: 'APPROVE' | 'REJECT') => {
+        try {
+            const res = await fetch(`/api/visits/${visitId}/parts-decision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision })
+            });
+            if (res.ok) {
+                mutateJobs();
+                // Update local detail state if needed
+                if (jobDetailDialog.job) {
+                    const updatedVisits = jobDetailDialog.job.visits.map((v: any) =>
+                        v.id === visitId ? { ...v, partsStatus: decision === 'APPROVE' ? 'APPROVED' : 'REJECTED' } : v
+                    );
+                    setJobDetailDialog({ ...jobDetailDialog, job: { ...jobDetailDialog.job, visits: updatedVisits } });
+                }
+                alert(`Parts ${decision === 'APPROVE' ? 'approved' : 'rejected'} successfully`);
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error || 'Failed to update parts decision'}`);
+            }
+        } catch (e) {
+            console.error('Parts decision error', e);
         }
     };
 
@@ -797,27 +824,27 @@ export function AdminView({ user }: { user: any }) {
         input.onchange = async (e: any) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             const text = await file.text();
             const lines = text.split('\n').filter((l: string) => l.trim());
             const headers = lines[0].split(',').map((h: string) => h.trim());
-            
+
             let imported = 0;
             let errors = 0;
-            
+
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
                 if (values.length < 4) continue;
-                
+
                 try {
                     const category = values[0];
                     const keywordsStr = values[1].replace(/^"|"$/g, '');
                     const catalogueItemId = values[2];
                     const description = values[3];
                     const examplePhrases = values[4] || '';
-                    
+
                     const keywords = keywordsStr.split(',').map((k: string) => k.trim()).filter(Boolean);
-                    
+
                     const response = await fetch('/api/admin/job-patterns', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -831,7 +858,7 @@ export function AdminView({ user }: { user: any }) {
                             priority: 0
                         }),
                     });
-                    
+
                     if (response.ok) {
                         imported++;
                     } else {
@@ -841,7 +868,7 @@ export function AdminView({ user }: { user: any }) {
                     errors++;
                 }
             }
-            
+
             alert(`Import complete!\nImported: ${imported}\nErrors: ${errors}`);
             mutatePatterns();
         };
@@ -850,7 +877,7 @@ export function AdminView({ user }: { user: any }) {
 
     const patternsContent = useMemo(() => {
         if (!patterns) return <div className="p-6 text-center text-gray-400">Loading patterns...</div>;
-        
+
         return (
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -862,8 +889,8 @@ export function AdminView({ user }: { user: any }) {
                         <Button onClick={handleImportCSV} variant="outline" size="sm">
                             Import CSV
                         </Button>
-                        <Button 
-                            onClick={() => setEditingPattern({ ...newPattern, id: undefined })} 
+                        <Button
+                            onClick={() => setEditingPattern({ ...newPattern, id: undefined })}
                             size="sm"
                         >
                             Add Pattern
@@ -879,8 +906,8 @@ export function AdminView({ user }: { user: any }) {
                                 <h4 className="font-semibold text-gray-900">
                                     {editingPattern.id ? 'Edit Pattern' : 'Add New Pattern'}
                                 </h4>
-                                <Button 
-                                    variant="ghost" 
+                                <Button
+                                    variant="ghost"
                                     size="sm"
                                     onClick={() => setEditingPattern(null)}
                                 >
@@ -971,8 +998,8 @@ export function AdminView({ user }: { user: any }) {
                         </Card>
                     ) : (
                         patterns.map((pattern: any) => {
-                            const keywords = typeof pattern.keywords === 'string' 
-                                ? JSON.parse(pattern.keywords) 
+                            const keywords = typeof pattern.keywords === 'string'
+                                ? JSON.parse(pattern.keywords)
                                 : pattern.keywords;
                             return (
                                 <Card key={pattern.id} className="p-4 bg-white/70 border border-white/10 hover:bg-white/80 transition-colors">
@@ -1001,18 +1028,18 @@ export function AdminView({ user }: { user: any }) {
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Button 
-                                                size="sm" 
+                                            <Button
+                                                size="sm"
                                                 variant="outline"
-                                                onClick={() => setEditingPattern({ 
-                                                    ...pattern, 
+                                                onClick={() => setEditingPattern({
+                                                    ...pattern,
                                                     keywords: Array.isArray(keywords) ? keywords.join(', ') : keywords
                                                 })}
                                             >
                                                 Edit
                                             </Button>
-                                            <Button 
-                                                size="sm" 
+                                            <Button
+                                                size="sm"
                                                 variant="destructive"
                                                 onClick={() => handleDeletePattern(pattern.id)}
                                             >
@@ -1272,6 +1299,73 @@ export function AdminView({ user }: { user: any }) {
                                                             <span className="text-lg font-black text-white">£{visit.price.toFixed(2)}</span>
                                                         </div>
 
+                                                        {/* Visit Photos Display for Admin */}
+                                                        {(visit.scope_photos || visit.partsPhotos) && (
+                                                            <div className="flex gap-3 overflow-x-auto pb-2 border-t border-white/5 pt-3">
+                                                                {visit.scope_photos?.split(',').map((url: string, i: number) => (
+                                                                    <div key={`scope-${visit.id}-${i}`} className="space-y-1">
+                                                                        <RemoteImage path={url} bucket="SCOPE" className="w-20 h-20 object-cover rounded-xl border border-white/10" />
+                                                                        <p className="text-[9px] text-gray-500 text-center uppercase font-bold">Scope</p>
+                                                                    </div>
+                                                                ))}
+                                                                {visit.partsPhotos?.split(',').map((url: string, i: number) => (
+                                                                    <div key={`parts-${visit.id}-${i}`} className="space-y-1">
+                                                                        <RemoteImage path={url} bucket="PART" className="w-20 h-20 object-cover rounded-xl border border-white/10" />
+                                                                        <p className="text-[9px] text-gray-500 text-center uppercase font-bold">Part</p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        {visit.partsStatus === 'PENDING' && (
+                                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 space-y-3">
+                                                                <div className="flex justify-between items-start">
+                                                                    <div className="space-y-1">
+                                                                        <p className="text-xs font-bold text-amber-500 uppercase flex items-center gap-1">
+                                                                            <Timer className="w-3 h-3" /> Parts Approval Required (Admin Review)
+                                                                        </p>
+                                                                        <p className="text-[10px] text-gray-400">Provider requested parts to continue.</p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="bg-black/20 rounded p-2 space-y-1">
+                                                                    {visit.partsBreakdown?.items?.map((item: any, i: number) => (
+                                                                        <div key={i} className="flex justify-between text-[11px]">
+                                                                            <span className="text-gray-400">{item.name}</span>
+                                                                            <span className="text-white font-mono">£{item.price.toFixed(2)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                    <div className="h-px bg-white/5 my-1" />
+                                                                    <div className="flex justify-between items-center text-xs font-bold">
+                                                                        <span>Total Cost</span>
+                                                                        <span className="text-amber-500">£{visit.partsBreakdown?.totalCost?.toFixed(2)}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {visit.partsNotes && (
+                                                                    <p className="text-[10px] text-gray-500 italic">"{visit.partsNotes}"</p>
+                                                                )}
+
+                                                                <div className="flex gap-2">
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs h-8"
+                                                                        onClick={() => handlePartsDecision(visit.id, 'APPROVE')}
+                                                                    >
+                                                                        Approve
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs h-8"
+                                                                        onClick={() => handlePartsDecision(visit.id, 'REJECT')}
+                                                                    >
+                                                                        Reject
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         {visit.scopeSummary && (
                                                             <div className="text-sm bg-black/20 rounded-lg p-3 space-y-2">
                                                                 <p className="text-xs font-bold text-gray-500 uppercase">Scope Summary</p>
@@ -1449,18 +1543,24 @@ export function AdminView({ user }: { user: any }) {
                                                 </div>
                                             )}
                                             {jobDetailDialog.job.completionPhotos && (
-                                                <div className="space-y-2">
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Photo/Video Links</p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {jobDetailDialog.job.completionPhotos.split(',').map((url: string, i: number) => (
-                                                            <a
-                                                                key={i}
-                                                                href={url}
-                                                                target="_blank"
-                                                                className="px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs hover:bg-blue-500/20 transition-colors"
-                                                            >
-                                                                Evidence #{i + 1}
-                                                            </a>
+                                                <div className="space-y-4">
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Evidence Photos</p>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        {jobDetailDialog.job.completionPhotos.split(',').map((path: string, i: number) => (
+                                                            <div key={i} className="space-y-2">
+                                                                <RemoteImage
+                                                                    path={path}
+                                                                    bucket="COMPLETION"
+                                                                    className="w-full h-40 object-cover rounded-xl border border-white/10"
+                                                                />
+                                                                <a
+                                                                    href="#"
+                                                                    onClick={(e) => { e.preventDefault(); /* Could add full-screen modal here */ }}
+                                                                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-wider block text-center"
+                                                                >
+                                                                    View Original
+                                                                </a>
+                                                            </div>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -1479,7 +1579,7 @@ export function AdminView({ user }: { user: any }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md space-y-4">
                         <h3 className="text-lg font-bold text-white">Edit Provider: {providerEditDialog.provider.name}</h3>
-                        
+
                         <div className="space-y-3">
                             <div>
                                 <Label className="text-gray-400">Provider Type</Label>

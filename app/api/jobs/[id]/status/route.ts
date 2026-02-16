@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { canTransition, JobStatus } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
+import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
 
 export async function POST(
     request: Request,
@@ -20,6 +21,49 @@ export async function POST(
 
         if (!userId || !userRole) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const uploadedCompletionPaths: string[] = [];
+        const uploadedPartsPaths: string[] = [];
+
+        // 🟢 Handle Completion Photos (Outside Transaction)
+        if (status?.toUpperCase() === 'COMPLETED' && completionPhotos) {
+            const photosArray = Array.isArray(completionPhotos) ? completionPhotos : completionPhotos.split(',').filter(Boolean);
+            for (let i = 0; i < photosArray.length; i++) {
+                const photoData = photosArray[i];
+                if (!photoData || photoData.length < 100) continue;
+
+                const path = `completion/${id}/${Date.now()}_${i}.jpg`;
+                let body: Buffer;
+                if (photoData.startsWith('data:image')) {
+                    body = Buffer.from(photoData.split(',')[1], 'base64');
+                } else {
+                    body = Buffer.from(photoData, 'base64');
+                }
+
+                await uploadPhoto(BUCKETS.COMPLETION_EVIDENCE, path, body);
+                uploadedCompletionPaths.push(path);
+            }
+        }
+
+        // 🟢 Handle Parts Photos (Outside Transaction)
+        if (partsPhotos) {
+            const photosArray = Array.isArray(partsPhotos) ? partsPhotos : partsPhotos.split(',').filter(Boolean);
+            for (let i = 0; i < photosArray.length; i++) {
+                const photoData = photosArray[i];
+                if (!photoData || photoData.length < 100) continue;
+
+                const path = `parts/${id}/${Date.now()}_${i}.jpg`;
+                let body: Buffer;
+                if (photoData.startsWith('data:image')) {
+                    body = Buffer.from(photoData.split(',')[1], 'base64');
+                } else {
+                    body = Buffer.from(photoData, 'base64');
+                }
+
+                await uploadPhoto(BUCKETS.PARTS_RECEIPTS, path, body);
+                uploadedPartsPaths.push(path);
+            }
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -185,10 +229,10 @@ export async function POST(
                         // Update completion evidence
                         ...(targetStatus === 'COMPLETED' ? {
                             completionNotes: completionNotes || "Job completed",
-                            completionPhotos: completionPhotos,
+                            completionPhotos: uploadedCompletionPaths.join(','),
                             partsRequiredAtCompletion: job.category === 'CLEANING' ? 'N/A' : (partsRequiredAtCompletion || 'NO'),
                             partsNotes: partsNotes || null,
-                            partsPhotos: partsPhotos || null,
+                            partsPhotos: uploadedPartsPaths.join(','),
                             completionLat: completionLat || null,
                             completionLng: completionLng || null,
                             completionLocationVerified: completionLocationVerified || false,
@@ -222,6 +266,33 @@ export async function POST(
                     changedByRole: userRole,
                 },
             });
+
+            // 🟢 Record Metadata for Uploaded Photos (Inside Transaction)
+            for (const path of uploadedCompletionPaths) {
+                await (tx as any).visitPhoto.create({
+                    data: {
+                        jobId: id,
+                        bucket: BUCKETS.COMPLETION_EVIDENCE,
+                        path,
+                        uploadedBy: userId,
+                        photoType: 'COMPLETION',
+                        deleteAfter: null // No expiry for completion evidence
+                    }
+                });
+            }
+
+            for (const path of uploadedPartsPaths) {
+                await (tx as any).visitPhoto.create({
+                    data: {
+                        jobId: id,
+                        bucket: BUCKETS.PARTS_RECEIPTS,
+                        path,
+                        uploadedBy: userId,
+                        photoType: 'PART',
+                        deleteAfter: null
+                    }
+                });
+            }
 
             if (status === 'COMPLETED') {
                 const price = job.priceOverride ?? job.fixedPrice;

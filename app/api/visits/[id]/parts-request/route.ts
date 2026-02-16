@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyStatusChange } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
+import { uploadPhoto, BUCKETS } from '@/lib/storage';
 
 export async function POST(
     request: Request,
@@ -24,6 +26,28 @@ export async function POST(
             return NextResponse.json({ error: 'Parts breakdown is required' }, { status: 400 });
         }
 
+        const uploadedPartsPaths: string[] = [];
+
+        // 🟢 Handle Parts Photos (Outside Transaction)
+        if (partsPhotos) {
+            const photosArray = Array.isArray(partsPhotos) ? partsPhotos : partsPhotos.split(',').filter(Boolean);
+            for (let i = 0; i < photosArray.length; i++) {
+                const photoData = photosArray[i];
+                if (!photoData || photoData.length < 100) continue;
+
+                const path = `parts/${visitId}/${Date.now()}_${i}.jpg`;
+                let body: Buffer;
+                if (photoData.startsWith('data:image')) {
+                    body = Buffer.from(photoData.split(',')[1], 'base64');
+                } else {
+                    body = Buffer.from(photoData, 'base64');
+                }
+
+                await uploadPhoto(BUCKETS.PARTS_RECEIPTS, path, body);
+                uploadedPartsPaths.push(path);
+            }
+        }
+
         const result = await prisma.$transaction(async (tx) => {
             const visit = await tx.visit.findUnique({
                 where: { id: visitId },
@@ -37,8 +61,8 @@ export async function POST(
                 throw new Error('Not authorized for this visit');
             }
 
-            // Verify visit is in progress
-            if (visit.status !== 'IN_PROGRESS' && visit.job.status !== 'IN_PROGRESS') {
+            // Verify visit/job is in progress
+            if (visit.job.status !== 'IN_PROGRESS' && visit.job.status !== 'ON_SITE') {
                 throw new Error('Can only request parts during active work');
             }
 
@@ -52,11 +76,34 @@ export async function POST(
                     partsRequestedAt: now,
                     partsBreakdown,
                     partsNotes: partsNotes || null,
-                    partsPhotos: partsPhotos || null,
+                    partsPhotos: uploadedPartsPaths.join(','),
                 }
             });
 
-            // Freeze job timer
+            // 🟢 Record Metadata for Uploaded Photos (Inside Transaction)
+            for (const path of uploadedPartsPaths) {
+                await (tx as any).visitPhoto.create({
+                    data: {
+                        visitId,
+                        jobId: visit.jobId,
+                        bucket: BUCKETS.PARTS_RECEIPTS,
+                        path,
+                        uploadedBy: userId,
+                        photoType: 'PART',
+                        deleteAfter: null
+                    }
+                });
+            }
+
+            // Transition job state to PARTS_PENDING_APPROVAL (this also pauses timer via status update)
+            await applyStatusChange(visit.jobId, 'PARTS_PENDING_APPROVAL', {
+                tx,
+                reason: 'Provider requested parts',
+                changedById: userId,
+                changedByRole: 'PROVIDER'
+            } as any);
+
+            // Ensure timer fields are set for backward compatibility or UI display
             await tx.job.update({
                 where: { id: visit.jobId },
                 data: {

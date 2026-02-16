@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { RemoteImage } from '@/components/ui/RemoteImage';
 
 export interface Visit {
   visit_id: string;
@@ -19,6 +20,11 @@ export interface Visit {
   total_minutes: number;
   tier: 'H1' | 'H2' | 'H3';
   price: number;
+  scope_photos?: string;
+  parts_photos?: string;
+  parts_status?: string;
+  parts_breakdown?: any;
+  parts_notes?: string;
 }
 
 export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
@@ -50,6 +56,32 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
             <div className="text-xs text-gray-500">{visit.total_minutes} min</div>
           </div>
         </div>
+
+        {/* Photo Gallery */}
+        {(visit.scope_photos || visit.parts_photos) && (
+          <div className="flex gap-2 overflow-x-auto pb-2 border-t border-white/5 pt-4">
+            {visit.scope_photos?.split(',').map((url, i) => (
+              <div key={`scope-${i}`} className="space-y-1">
+                <RemoteImage
+                  path={url}
+                  bucket="SCOPE"
+                  className="w-20 h-20 object-cover rounded border border-white/10"
+                />
+                <p className="text-[8px] text-gray-500 text-center uppercase font-bold">Scope</p>
+              </div>
+            ))}
+            {visit.parts_photos?.split(',').map((url, i) => (
+              <div key={`parts-${i}`} className="space-y-1">
+                <RemoteImage
+                  path={url}
+                  bucket="PART"
+                  className="w-20 h-20 object-cover rounded border border-white/10"
+                />
+                <p className="text-[8px] text-gray-500 text-center uppercase font-bold">Part</p>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

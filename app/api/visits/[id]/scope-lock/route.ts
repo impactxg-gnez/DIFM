@@ -4,6 +4,8 @@ import { calculateTier, calculatePrice } from '@/lib/pricing/visitEngine';
 import { getCatalogueItem } from '@/lib/pricing/catalogue';
 import { dispatchJob } from '@/lib/dispatch/matcher';
 import { JobStatus } from '@/lib/jobStateMachine';
+import { cookies } from 'next/headers';
+import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
 
 /**
  * Visit-first Scope Lock
@@ -20,8 +22,11 @@ export async function POST(
     const body = await request.json();
     const { answers, scope_photos } = body as {
       answers: Record<string, string>,
-      scope_photos: string // Comma-separated or JSON
+      scope_photos: string | string[] // Can be single base64 or array
     };
+
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value || 'ANONYMOUS';
 
     if (!answers) {
       return NextResponse.json({ error: 'Missing answers' }, { status: 400 });
@@ -126,7 +131,42 @@ export async function POST(
     const mismatch_rule =
       'If the job is different on arrival, we’ll upgrade the visit or rebook. No arguments on site.';
 
+    // 3. Handle Photo Uploads to Supabase (Outside Transaction)
+    const photosArray = Array.isArray(scope_photos) ? scope_photos : [scope_photos];
+    const uploadedPaths: string[] = [];
+
+    for (let i = 0; i < photosArray.length; i++) {
+      const photoData = photosArray[i];
+      if (!photoData || photoData.length < 100) continue;
+
+      const path = `${visitId}/${Date.now()}_${i}.jpg`;
+      let body: Buffer;
+      if (photoData.startsWith('data:image')) {
+        body = Buffer.from(photoData.split(',')[1], 'base64');
+      } else {
+        body = Buffer.from(photoData, 'base64');
+      }
+
+      await uploadPhoto(BUCKETS.SCOPE_PHOTOS, path, body);
+      uploadedPaths.push(path);
+    }
+
     const result = await (prisma as any).$transaction(async (tx: any) => {
+      // Record metadata for each photo inside transaction
+      for (const path of uploadedPaths) {
+        await tx.visitPhoto.create({
+          data: {
+            visitId,
+            jobId: visit.jobId,
+            bucket: BUCKETS.SCOPE_PHOTOS,
+            path,
+            uploadedBy: userId,
+            photoType: 'SCOPE',
+            deleteAfter: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+          }
+        });
+      }
+
       // Update visit
       await tx.visit.update({
         where: { id: visitId },
@@ -135,7 +175,7 @@ export async function POST(
           effective_minutes: effectiveMinutes,
           price: finalPrice,
           status: 'SCHEDULED',
-          scope_photos: scope_photos,
+          scope_photos: uploadedPaths.join(','),
         },
       });
 

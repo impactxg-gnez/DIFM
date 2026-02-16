@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { applyStatusChange } from '@/lib/jobStateMachine';
+import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
 
 export async function POST(
     request: Request,
@@ -8,10 +9,32 @@ export async function POST(
 ) {
     try {
         const { id: jobId } = await props.params;
-        const { reason, note, providerId } = await request.json();
+        const { reason, note, providerId, photos } = await request.json();
 
         if (!reason || !providerId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
+        const uploadedFlagPaths: string[] = [];
+
+        // 🟢 Handle Flag Photos (Outside Transaction)
+        if (photos) {
+            const photosArray = Array.isArray(photos) ? photos : photos.split(',').filter(Boolean);
+            for (let i = 0; i < photosArray.length; i++) {
+                const photoData = photosArray[i];
+                if (!photoData || photoData.length < 100) continue;
+
+                const path = `flag/${jobId}/${Date.now()}_${i}.jpg`;
+                let body: Buffer;
+                if (photoData.startsWith('data:image')) {
+                    body = Buffer.from(photoData.split(',')[1], 'base64');
+                } else {
+                    body = Buffer.from(photoData, 'base64');
+                }
+
+                await uploadPhoto(BUCKETS.MISMATCH_EVIDENCE, path, body);
+                uploadedFlagPaths.push(path);
+            }
         }
 
         const updatedJob = await prisma.$transaction(async (tx) => {
@@ -23,8 +46,23 @@ export async function POST(
                     flagNote: note,
                     flaggedById: providerId,
                     flaggedAt: new Date(),
+                    disputePhotos: uploadedFlagPaths.join(','), // Reusing disputePhotos or flagPhotos if it existed (schema has disputePhotos)
                 },
             });
+
+            // 🟢 Record Metadata for Uploaded Photos (Inside Transaction)
+            for (const path of uploadedFlagPaths) {
+                await (tx as any).visitPhoto.create({
+                    data: {
+                        jobId,
+                        bucket: BUCKETS.MISMATCH_EVIDENCE,
+                        path,
+                        uploadedBy: providerId,
+                        photoType: 'MISMATCH',
+                        deleteAfter: null // No expiry normally for mismatch/flag evidence
+                    }
+                });
+            }
 
             // 2. Apply status change using state machine logic via the existing helper if possible,
             // but applyStatusChange is already a transaction. We'll do it manually here to stay in one transaction or use the helper.
