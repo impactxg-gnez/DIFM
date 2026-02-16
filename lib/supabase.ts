@@ -5,12 +5,16 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Public client for client-side / authenticated user operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null as any;
 
 // Admin client for backend operations (e.g., signed URLs, cleanup, bucket management)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-        autoRefreshToken: false,
-        persistSession: false
-    }
-});
+export const supabaseAdmin = supabaseUrl && supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false
+        }
+    })
+    : null as any;

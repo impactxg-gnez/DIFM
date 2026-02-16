@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ensureBuckets } from '@/lib/storage';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Daily Cleanup Job
  * - Deletes expired photos from Supabase Storage
@@ -10,6 +12,9 @@ import { ensureBuckets } from '@/lib/storage';
  */
 export async function GET(request: Request) {
     try {
+        if (!supabaseAdmin) {
+            return NextResponse.json({ error: 'Supabase Admin client not initialized. Check environment variables.' }, { status: 500 });
+        }
         // Optional: Security check for cron secret
         // const authHeader = request.headers.get('authorization');
         // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
