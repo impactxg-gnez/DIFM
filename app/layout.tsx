@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { GoogleMapsLoader } from "@/components/GoogleMapsLoader";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
     title: "DIFM - Do It For Me",
@@ -31,6 +32,7 @@ export default function RootLayout({
             <body className="antialiased">
                 <GoogleMapsLoader />
                 {children}
+                <Analytics />
             </body>
         </html>
     );
