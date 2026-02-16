@@ -46,13 +46,13 @@ function keywordMatches(textLower: string, keywordLower: string): boolean {
   // Normalize both texts
   const normalizedText = normalizeText(textLower);
   const normalizedKeyword = normalizeText(keywordLower);
-  
+
   // If keyword is a phrase, check if all words exist (order-independent)
   if (normalizedKeyword.includes(' ')) {
     const keywordWords = normalizedKeyword.split(/\s+/).filter(w => w.length > 0);
     return patternMatches(normalizedText, keywordWords);
   }
-  
+
   // Single word - check as whole word
   const re = new RegExp(`\\b${escapeRegExp(normalizedKeyword)}\\b`, 'i');
   return re.test(normalizedText);
@@ -93,7 +93,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['drain', 'unclog'], itemId: 'tap_leak_fix', description: 'unclog drain' },
   { keywords: ['shower', 'leak'], itemId: 'tap_leak_fix', description: 'shower leak' },
   { keywords: ['bath', 'leak'], itemId: 'tap_leak_fix', description: 'bath leak' },
-  
+
   // Concealed leak investigation (FORCE_H3) - must come before general leak patterns
   { keywords: ['hidden', 'leak'], itemId: 'concealed_leak_investigation', description: 'hidden leak' },
   { keywords: ['concealed', 'leak'], itemId: 'concealed_leak_investigation', description: 'concealed leak' },
@@ -106,7 +106,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['investigate', 'leak'], itemId: 'concealed_leak_investigation', description: 'investigate leak' },
   { keywords: ['investigate', 'hidden'], itemId: 'concealed_leak_investigation', description: 'investigate hidden leak' },
   { keywords: ['investigate', 'water'], itemId: 'concealed_leak_investigation', description: 'investigate water leak' },
-  
+
   // ========== ELECTRICAL PATTERNS ==========
   { keywords: ['socket', 'replace'], itemId: 'socket_replace', description: 'replace socket' },
   { keywords: ['socket', 'broken'], itemId: 'socket_replace', description: 'broken socket' },
@@ -122,7 +122,11 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['fuse', 'replace'], itemId: 'socket_replace', description: 'replace fuse' },
   { keywords: ['electrical', 'fix'], itemId: 'socket_replace', description: 'electrical fix' },
   { keywords: ['electrical', 'repair'], itemId: 'socket_replace', description: 'electrical repair' },
-  
+  { keywords: ['light', 'fitting'], itemId: 'light_fitting_replace', description: 'light fitting' },
+  { keywords: ['fitting', 'light'], itemId: 'light_fitting_replace', description: 'fitting light' },
+  { keywords: ['pendant', 'light'], itemId: 'light_fitting_replace', description: 'pendant light' },
+  { keywords: ['chandelier'], itemId: 'light_fitting_replace', description: 'chandelier' },
+
   // ========== HANDYMAN PATTERNS ==========
   { keywords: ['door', 'broken'], itemId: 'general_handyman_repair', description: 'broken door' },
   { keywords: ['door', 'fix'], itemId: 'general_handyman_repair', description: 'fix door' },
@@ -148,7 +152,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['tv', 'mount'], itemId: 'tv_mount_standard', description: 'mount tv' },
   { keywords: ['tv', 'hang'], itemId: 'tv_mount_standard', description: 'hang tv' },
   { keywords: ['television', 'mount'], itemId: 'tv_mount_standard', description: 'mount television' },
-  
+
   // ========== PAINTING PATTERNS ==========
   { keywords: ['paint', 'wall'], itemId: 'paint_wall_standard', description: 'paint wall' },
   { keywords: ['wall', 'paint'], itemId: 'paint_wall_standard', description: 'wall paint' },
@@ -162,7 +166,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['paint', 'patch'], itemId: 'paint_touchup', description: 'paint patch' },
   { keywords: ['scuff', 'paint'], itemId: 'paint_touchup', description: 'scuff paint' },
   { keywords: ['scratch', 'paint'], itemId: 'paint_touchup', description: 'scratch paint' },
-  
+
   // ========== CARPENTRY PATTERNS ==========
   { keywords: ['cabinet', 'install'], itemId: 'cabinet_install', description: 'install cabinet' },
   { keywords: ['cabinet', 'fix'], itemId: 'carpentry_repair', description: 'fix cabinet' },
@@ -181,7 +185,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['wardrobe', 'install'], itemId: 'cabinet_install', description: 'install wardrobe' },
   { keywords: ['wardrobe', 'fix'], itemId: 'carpentry_repair', description: 'fix wardrobe' },
   { keywords: ['built', 'in'], itemId: 'cabinet_install', description: 'built in' },
-  
+
   // ========== CLEANING PATTERNS ==========
   { keywords: ['clean', 'apartment'], itemId: 'apartment_cleaning_standard', description: 'clean apartment' },
   { keywords: ['apartment', 'clean'], itemId: 'apartment_cleaning_standard', description: 'apartment clean' },
@@ -197,7 +201,7 @@ const PATTERN_MATCHES: KeywordPattern[] = [
   { keywords: ['move', 'out'], itemId: 'eot_cleaning_1bed', description: 'move out clean' },
   { keywords: ['oven', 'clean'], itemId: 'apartment_cleaning_standard', description: 'oven clean' },
   { keywords: ['tidy', 'up'], itemId: 'apartment_cleaning_standard', description: 'tidy up' },
-  
+
   // ========== GAS PATTERNS ==========
   { keywords: ['gas', 'cert'], itemId: 'gas_cert_cp12', description: 'gas cert' },
   { keywords: ['gas', 'safety'], itemId: 'gas_cert_cp12', description: 'gas safety' },
@@ -208,11 +212,11 @@ const PATTERN_MATCHES: KeywordPattern[] = [
 // Category detection keywords - detect category FIRST, then find best catalogue item
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   PLUMBING: ['pipe', 'plumb', 'tap', 'faucet', 'sink', 'water', 'leak', 'drip', 'fixture', 'drain', 'unclog', 'clog', 'shower', 'bath', 'toilet', 'cistern', 'valve', 'washer', 'hose', 'leaking', 'leaks'],
-  ELECTRICAL: ['electr', 'socket', 'plug', 'switch', 'outlet', 'wiring', 'light', 'bulb', 'fuse', 'circuit', 'breaker', 'rcd', 'consumer unit'],
+  ELECTRICAL: ['electr', 'socket', 'plug', 'switch', 'outlet', 'wiring', 'light', 'bulb', 'fuse', 'circuit', 'breaker', 'rcd', 'consumer unit', 'light fitting'],
   CLEANING: ['clean', 'cleaning', 'tidy', 'deep clean', 'end of tenancy', 'eot clean', 'oven clean', 'apartment clean', 'flat clean'],
   PAINTING: ['paint', 'painting', 'decorate', 'decorating', 'wall paint', 'room paint', 'touch up', 'patch', 'brush', 'roller'],
   CARPENTRY: ['carpenter', 'carpentry', 'wood', 'woodwork', 'cabinet', 'cabinetry', 'furniture', 'table', 'chair', 'shelf', 'shelving', 'cabinet install', 'wardrobe', 'built-in'],
-  HANDYMAN: ['door', 'window', 'hinge', 'handle', 'lock', 'repair', 'fix', 'install', 'mount', 'hang', 'broken', 'general repair', 'handyman']
+  HANDYMAN: ['door', 'window', 'hinge', 'handle', 'lock', 'repair', 'fix', 'install', 'mount', 'hang', 'broken', 'general repair', 'handyman', 'tv', 'television']
 };
 
 // Specific catalogue item keywords (more specific matches take priority)
@@ -220,7 +224,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
   // TV Mounting
   'tv_mount_large': ['55', 'large tv', '65', '75', 'big tv'],
   'tv_mount_standard': ['mount tv', 'tv mount', 'hang tv', 'television'],
-  
+
   // Handyman
   'mirror_hang': [
     'mirror', 'hang mirror', 'mount mirror', 'install mirror',
@@ -247,7 +251,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'door hinge', 'door handle', 'door lock', 'window handle',
     'my door', 'door is', 'door needs', 'my window', 'window is', 'window needs'
   ],
-  
+
   // Plumbing - concealed leak investigation (FORCE_H3) - must come before general leak patterns
   'concealed_leak_investigation': [
     'hidden leak', 'concealed leak', 'leak behind wall', 'leak behind',
@@ -257,7 +261,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'investigate hidden leak', 'investigate concealed leak',
     'hidden water leak', 'concealed water leak', 'behind wall leak'
   ],
-  
+
   // Plumbing - expanded with variations
   'tap_leak_fix': [
     'leak', 'drip', 'tap', 'sink', 'faucet', 'fixture', 'water',
@@ -272,7 +276,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'toilet is', 'toilet needs', 'my toilet',
     'toilet not working', 'toilet broken', 'broken toilet'
   ],
-  
+
   // Electrical
   'socket_replace': [
     'socket', 'plug', 'switch', 'outlet', 'replace socket',
@@ -282,14 +286,19 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'fuse replace', 'electrical fix', 'electrical repair',
     'my socket', 'socket is', 'socket needs', 'my plug', 'plug is'
   ],
-  
+  'light_fitting_replace': [
+    'light fitting', 'fitting light', 'replace light', 'install light',
+    'pendant light', 'ceiling light', 'wall light', 'chandelier',
+    'fitting', 'light fixture'
+  ],
+
   // Gas
   'gas_cert_cp12': [
     'gas cert', 'cp12', 'safety cert', 'landlord', 'gas safety',
     'gas certificate', 'gas safety certificate', 'cp12 certificate',
     'landlord cert', 'safety certificate', 'gas check'
   ],
-  
+
   // Cleaning
   'apartment_cleaning_standard': [
     'clean my apartment', 'apartment clean', 'clean apartment', 'flat clean', 'clean my flat',
@@ -308,7 +317,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'end tenancy 2 bed', 'tenancy clean 2 bed', 'move out 2 bed',
     'checkout clean 2 bed', 'final clean 2 bed'
   ],
-  
+
   // Painting
   'paint_wall_standard': [
     'paint wall', 'paint my wall', 'paint room', 'wall paint',
@@ -321,7 +330,7 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'touch up paint', 'paint touch up', 'patch paint', 'paint patch',
     'scuff paint', 'scratch paint', 'small repair', 'minor paint'
   ],
-  
+
   // Carpentry
   'carpentry_repair': [
     'carpenter', 'carpentry', 'wood repair', 'furniture repair',
@@ -343,7 +352,7 @@ function extractQuantity(segment: string): { quantity: number; cleanedSegment: s
   // Match patterns like "4 shelves", "2 pictures", "three mirrors", etc.
   // Look for numbers at the start or before the main noun
   const lower = segment.toLowerCase().trim();
-  
+
   // Pattern 1: Number at start (e.g., "4 shelves", "2 pictures")
   const startNumberMatch = lower.match(/^(\d+)\s+/);
   if (startNumberMatch) {
@@ -351,16 +360,28 @@ function extractQuantity(segment: string): { quantity: number; cleanedSegment: s
     const cleanedSegment = segment.substring(startNumberMatch[0].length).trim();
     return { quantity: Math.max(1, Math.min(quantity, 100)), cleanedSegment }; // Cap at 100
   }
-  
+
   // Pattern 2: Number before noun (e.g., "install 4 shelves", "hang 2 pictures")
   const beforeNounMatch = lower.match(/\b(\d+)\s+(shelf|shelves|picture|pictures|mirror|mirrors|tv|tvs|door|doors|window|windows|socket|sockets|plug|plugs|light|lights|bulb|bulbs|tap|taps|pipe|pipes|cabinet|cabinets|chair|chairs|table|tables|item|items|thing|things)\b/i);
   if (beforeNounMatch) {
-    const quantity = parseInt(beforeNounMatch[1], 10);
-    // Remove the number from the segment for parsing
-    const cleanedSegment = segment.replace(new RegExp(`\\b${beforeNounMatch[1]}\\s+`, 'i'), '').trim();
-    return { quantity: Math.max(1, Math.min(quantity, 100)), cleanedSegment };
+    const numStr = beforeNounMatch[1];
+
+    // TV size safety: If the number is a common TV size (32, 40, 42, 50, 55, 65, 75, 85) 
+    // AND it's followed by "tv", "inch", "in" or '"', assume it's a size, not quantity.
+    const tvSizeIndicators = ['inch', 'in', '"', 'tv', 'television'];
+    const commonTvSizes = ['32', '40', '42', '43', '48', '50', '55', '60', '65', '70', '75', '80', '85'];
+
+    const isTvSize = commonTvSizes.includes(numStr) &&
+      tvSizeIndicators.some(ind => lower.includes(ind));
+
+    if (!isTvSize) {
+      const quantity = parseInt(numStr, 10);
+      // Remove the number from the segment for parsing
+      const cleanedSegment = segment.replace(new RegExp(`\\b${numStr}\\s+`, 'i'), '').trim();
+      return { quantity: Math.max(1, Math.min(quantity, 100)), cleanedSegment };
+    }
   }
-  
+
   // Pattern 3: Written numbers (e.g., "two shelves", "three pictures")
   const writtenNumbers: Record<string, number> = {
     'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
@@ -373,7 +394,7 @@ function extractQuantity(segment: string): { quantity: number; cleanedSegment: s
       return { quantity: num, cleanedSegment };
     }
   }
-  
+
   // Default: quantity = 1
   return { quantity: 1, cleanedSegment: segment };
 }
@@ -386,12 +407,12 @@ function segmentDescription(text: string): string[] {
     .replace(/\d+[\.\)]\s*/g, ' ') // Remove numbered list markers
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
-  
+
   const segments = normalized
     .split(/\s+and\s+|\s*,\s*|\s*;\s*|\s+plus\s+|\s+also\s+|\s+then\s+/i)
     .map(s => s.trim())
     .filter(s => s.length > 0);
-  
+
   // If no separators found, return the whole text as a single segment
   return segments.length > 0 ? segments : [normalized];
 }
@@ -399,10 +420,10 @@ function segmentDescription(text: string): string[] {
 // Detect category from segment text (enhanced with pattern matching)
 function detectCategory(segmentLower: string): string | null {
   const normalizedSegment = normalizeText(segmentLower);
-  
+
   // Check categories in order of specificity (most specific first)
   const categoryOrder = ['CLEANING', 'PAINTING', 'CARPENTRY', 'PLUMBING', 'ELECTRICAL', 'HANDYMAN'];
-  
+
   for (const category of categoryOrder) {
     // Check for pattern matches first (more specific)
     for (const pattern of PATTERN_MATCHES) {
@@ -416,14 +437,14 @@ function detectCategory(segmentLower: string): string | null {
         if (pattern.itemId.includes('handyman') || pattern.itemId.includes('door') || pattern.itemId.includes('window')) return 'HANDYMAN';
       }
     }
-    
+
     // Fallback to individual keyword matching
     const keywords = CATEGORY_KEYWORDS[category];
     if (keywords && keywords.some(kw => keywordMatches(segmentLower, kw))) {
       return category;
     }
   }
-  
+
   return null;
 }
 
@@ -453,13 +474,13 @@ function findBestCatalogueItem(
   customPatterns?: KeywordPattern[]
 ): string | null {
   const normalizedSegment = normalizeText(segmentLower);
-  
+
   // Merge custom patterns (from DB) with hardcoded patterns
   // Custom patterns take priority (checked first)
-  const allPatterns = customPatterns 
+  const allPatterns = customPatterns
     ? [...customPatterns, ...PATTERN_MATCHES]
     : PATTERN_MATCHES;
-  
+
   // First, try pattern-based matching (handles variations like "pipe is leaking")
   for (const pattern of allPatterns) {
     if (patternMatches(normalizedSegment, pattern.keywords)) {
@@ -473,7 +494,7 @@ function findBestCatalogueItem(
       }
     }
   }
-  
+
   // Then try specific keyword matches
   const sortedEntries = Object.entries(KEYWORD_MAP).sort((a, b) => {
     const aMaxLen = Math.max(...a[1].map(k => k.length));
@@ -520,7 +541,7 @@ function findFallbackItem(category: string, catalogue: CatalogueItem[]): string 
 }
 
 export function parseJobDescription(
-  text: string, 
+  text: string,
   catalogue: CatalogueItem[],
   customPatterns?: KeywordPattern[]
 ): ParseResult {
@@ -529,7 +550,7 @@ export function parseJobDescription(
 
   // Segment the description to detect multiple services
   const segments = segmentDescription(text);
-  
+
   console.log(`[JobParser] Segmented "${text}" into ${segments.length} segments:`, segments);
 
   // Parse each segment independently
@@ -543,13 +564,13 @@ export function parseJobDescription(
 
     // Step 1: Detect category for this segment
     const category = detectCategory(segmentLower);
-    
+
     if (category) {
       console.log(`[JobParser] Segment "${segment}" detected category: ${category}, quantity: ${quantity}`);
-      
+
       // Step 2: Find best catalogue item for this category
       const itemId = findBestCatalogueItem(category, segmentLower, catalogue, customPatterns);
-      
+
       if (itemId) {
         const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
         if (catalogueItem) {
@@ -564,12 +585,12 @@ export function parseJobDescription(
     } else {
       // No category detected - try direct keyword matching as fallback
       console.log(`[JobParser] No category detected for segment: "${segment}", trying direct keyword match`);
-      
+
       // Try TV mounting (special case)
-      if ((segmentLower.includes('tv') || segmentLower.includes('television')) && 
-          (segmentLower.includes('mount') || segmentLower.includes('hang'))) {
-        if (segmentLower.includes('55') || segmentLower.includes('65') || segmentLower.includes('75') || 
-            segmentLower.includes('big') || segmentLower.includes('large')) {
+      if ((segmentLower.includes('tv') || segmentLower.includes('television')) &&
+        (segmentLower.includes('mount') || segmentLower.includes('hang'))) {
+        if (segmentLower.includes('55') || segmentLower.includes('65') || segmentLower.includes('75') ||
+          segmentLower.includes('big') || segmentLower.includes('large')) {
           const item = catalogue.find(c => c.job_item_id === 'tv_mount_large');
           if (item) {
             detectedItemId = 'tv_mount_large';
@@ -585,7 +606,7 @@ export function parseJobDescription(
           }
         }
       }
-      
+
       // Try direct keyword matching
       if (!segmentDetected) {
         const sortedEntries = Object.entries(KEYWORD_MAP).sort((a, b) => {
@@ -596,7 +617,7 @@ export function parseJobDescription(
 
         for (const [itemId, keywords] of sortedEntries) {
           if (itemId.startsWith('tv_mount')) continue; // Already handled
-          
+
           const matchedKeyword = keywords.find(k => keywordMatches(segmentLower, k.toLowerCase()));
           if (matchedKeyword) {
             const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
@@ -614,8 +635,8 @@ export function parseJobDescription(
 
     // If still nothing detected, use generic handyman fallback
     if (!segmentDetected) {
-      const fallbackItem = catalogue.find(c => 
-        c.job_item_id === 'general_handyman_repair' || 
+      const fallbackItem = catalogue.find(c =>
+        c.job_item_id === 'general_handyman_repair' ||
         c.job_item_id === 'shelf_install_single'
       );
       if (fallbackItem) {

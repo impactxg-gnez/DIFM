@@ -122,6 +122,17 @@ const CATALOGUE_ITEMS = [
         uncertainty_handling: 'IGNORE',
         risk_buffer_minutes: 0
     },
+    {
+        job_item_id: 'light_fitting_replace',
+        display_name: 'Replace Light Fitting (Standard)',
+        item_class: 'STANDARD',
+        required_capability_tags: ['ELECTRICAL'],
+        time_weight_minutes: 30,
+        allowed_addon: true,
+        uncertainty_prone: true,
+        uncertainty_handling: 'BUFFER',
+        risk_buffer_minutes: 15
+    },
 
     // --- SPECIALIST (ISOLATED) ---
     {

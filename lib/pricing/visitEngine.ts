@@ -106,20 +106,15 @@ export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
 
     // 1. Cleaning: Isolated, one visit per item
     for (const item of cleaning) {
-        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
-            visits.push(...splitLargeItem(item));
-        } else {
-            visits.push(createSingleItemVisit(item));
-        }
+        // Cleaning items should NOT be split by the standard H3 (150min) rule in V1.
+        // They are priced via C1/C2/C3 logic or per-item catalog price.
+        visits.push(createSingleItemVisit(item));
     }
 
     // 2. Specialist: Isolated, one visit per item
     for (const item of specialist) {
-        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
-            visits.push(...splitLargeItem(item));
-        } else {
-            visits.push(createSingleItemVisit(item));
-        }
+        // Specialist items usually have a fixed price/cert scope; avoid splitting unless strictly requested.
+        visits.push(createSingleItemVisit(item));
     }
 
     // 3. Standard: Bundle
