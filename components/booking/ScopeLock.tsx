@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Camera, Check, X, Minus, Plus } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
+import { Input } from '@/components/ui/input';
 
 interface ScopeLockProps {
     visits: any[];
@@ -25,7 +26,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     interface Question {
         id: string;
         text: string;
-        type: 'YES_NO_NOTSURE' | 'YES_NO' | 'CHOICE' | 'SCALER';
+        type: 'YES_NO_NOTSURE' | 'YES_NO' | 'CHOICE' | 'SCALER' | 'NUMERIC' | 'TEXT';
         options?: string[];
     }
 
@@ -38,20 +39,17 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
             questions.push({
                 id: 'bedrooms',
                 text: 'Number of Bedrooms',
-                type: 'CHOICE',
-                options: ['1', '2', '3', '4+']
+                type: 'NUMERIC'
             });
             questions.push({
                 id: 'bathrooms',
                 text: 'Number of Bathrooms',
-                type: 'CHOICE',
-                options: ['1', '2', '3+']
+                type: 'NUMERIC'
             });
             questions.push({
                 id: 'property_type',
-                text: 'Property Type',
-                type: 'CHOICE',
-                options: ['Flat', 'House', 'Duplex']
+                text: 'Property Type (e.g. Flat, Semi-detached)',
+                type: 'TEXT'
             });
         }
 
@@ -171,6 +169,44 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                             </Button>
                                         ))}
                                     </div>
+                                )}
+                                {q.type === 'NUMERIC' && (
+                                    <div className="flex items-center gap-4 bg-white/5 p-4 rounded-lg w-fit">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-10 w-10 border-white/10 p-0"
+                                            onClick={() => {
+                                                const current = parseInt(answers[q.id] || '1');
+                                                if (current > 0) handleAnswer(q.id, (current - 1).toString());
+                                            }}
+                                        >
+                                            <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="text-2xl font-bold min-w-[2rem] text-center">
+                                            {answers[q.id] || '1'}
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-10 w-10 border-white/10 p-0"
+                                            onClick={() => {
+                                                const current = parseInt(answers[q.id] || '1');
+                                                handleAnswer(q.id, (current + 1).toString());
+                                            }}
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {q.type === 'TEXT' && (
+                                    <Input
+                                        className="bg-white/5 border-white/10 py-6 text-lg"
+                                        placeholder="Enter property type..."
+                                        value={answers[q.id] || ''}
+                                        onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                    />
                                 )}
                             </div>
                         ))}

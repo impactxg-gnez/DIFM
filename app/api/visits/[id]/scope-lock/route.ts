@@ -119,8 +119,21 @@ export async function POST(
     // Calculate effective minutes: base_minutes + sum of all BUFFER risk_buffer_minutes + cleaning scalers
     const effectiveMinutes = (visit.base_minutes ?? 0) + extraMinutes;
 
-    // Recalculate tier based on effective_minutes (unless FORCE_H3)
-    const finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
+    // Recalculate tier based on effective_minutes (unless FORCE_H3 or CLEANING)
+    let finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
+
+    // CLEANING specialized tier mapping
+    if (visit.item_class === 'CLEANING') {
+      const beds = parseInt(answers.bedrooms || '1');
+      const baths = parseInt(answers.bathrooms || '1');
+      const totalRooms = beds + baths;
+
+      if (totalRooms <= 2) finalTier = 'C1';
+      else if (totalRooms <= 4) finalTier = 'C2';
+      else finalTier = 'C3';
+
+      console.log(`[ScopeLock] Cleaning Final: rooms=${totalRooms}, tier=${finalTier}`);
+    }
 
     // Recalculate price based on new tier
     const finalPrice = calculatePrice(finalTier, visit.item_class);

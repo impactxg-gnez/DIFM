@@ -20,12 +20,13 @@ export const TIER_THRESHOLDS = {
 // I'll stick to fixed constants for now matching the existing matrix logic or defaults.
 
 export const TIER_PRICES: Record<string, number> = {
-    H1: 60,  // Example
+    H1: 60,
     H2: 90,
     H3: 130,
-    // Specialist/Cleaning might differ?
-    // Spec says: "Each Visit is priced... separately."
-    // I will use these defaults but ideally we'd look up a PriceRule.
+    // Cleaning Tiers from Matrix
+    C1: 69,
+    C2: 119,
+    C3: 199,
 };
 
 export const TIER_ITEM_CAPS: Record<string, number> = {
@@ -69,6 +70,8 @@ export function calculateTier(minutes: number): string {
 }
 
 export function calculatePrice(tier: string, itemClass: string): number {
+    // If CLEANING and tier is Hx, we might want to map to Cx? 
+    // In V1, we'll explicitly pass the correct tier (H or C) from the scope lock logic.
     return TIER_PRICES[tier] || 0;
 }
 
@@ -228,7 +231,7 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
         console.log(`[VisitEngine] canAdd: REJECTED - visit.item_class is ${visit.item_class}, not STANDARD`);
         return false;
     }
-    
+
     // Rule 2: Item must be allowed as addon
     if (item.allowed_addon === false) {
         console.log(`[VisitEngine] canAdd: REJECTED - ${item.job_item_id} has allowed_addon=false`);
@@ -257,7 +260,7 @@ function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
     // Count: 1 primary item + existing addon items + 1 new addon item
     const currentItemCount = 1 + visit.addon_job_items.length; // primary + existing addons
     const newItemCount = currentItemCount + 1; // add the new item
-    
+
     if (newItemCount > TIER_ITEM_CAPS[newTier]) {
         console.log(`[VisitEngine] canAdd: REJECTED - item count limit exceeded. Current: ${currentItemCount}, New: ${newItemCount}, Tier: ${newTier}, Limit: ${TIER_ITEM_CAPS[newTier]}`);
         return false;
@@ -300,19 +303,19 @@ function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
     // Calculate individual item price based on its own tier
     const itemTier = calculateTier(item.time_weight_minutes);
     const itemPrice = calculatePrice(itemTier, item.item_class);
-    
+
     // Initialize item_prices array if not present
     if (!visit.item_prices) {
         // If visit was created without item_prices, estimate from current price
         visit.item_prices = [visit.price];
     }
-    
+
     // Add the new item's price to the array
     visit.item_prices.push(itemPrice);
-    
+
     // Sum all individual item prices instead of recalculating by tier
     visit.price = visit.item_prices.reduce((sum, p) => sum + p, 0);
-    
+
     // Update tier based on total minutes (for display/logging purposes)
     visit.tier = calculateTier(visit.total_minutes) as any;
 }
