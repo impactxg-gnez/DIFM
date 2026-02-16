@@ -177,7 +177,7 @@ export async function POST(
             path,
             uploadedBy: userId,
             photoType: 'SCOPE',
-            deleteAfter: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+            deleteAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90 days (3 months)
           }
         });
       }
