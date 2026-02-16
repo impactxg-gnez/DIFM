@@ -5,7 +5,7 @@ import { getCatalogueItem } from '@/lib/pricing/catalogue';
 import { dispatchJob } from '@/lib/dispatch/matcher';
 import { JobStatus } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
-import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
+import { uploadPhoto, recordPhotoMetadata, BUCKETS, ensureBuckets } from '@/lib/storage';
 
 /**
  * Visit-first Scope Lock
@@ -19,6 +19,11 @@ export async function POST(
 ) {
   try {
     const { id: visitId } = await props.params;
+    console.log(`[ScopeLock] Starting for visit ${visitId}`);
+
+    // Ensure storage buckets exist
+    await ensureBuckets().catch(e => console.error('ensureBuckets failed', e));
+
     const body = await request.json();
     const { answers, scope_photos } = body as {
       answers: Record<string, string>,
@@ -292,8 +297,7 @@ export async function POST(
     console.error('Visit scope lock error', error);
     return NextResponse.json({
       error: 'Internal Server Error',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: `SCOPELOCK_FAIL: ${error.message || 'Unknown'}`
     }, { status: 500 });
   }
 }
