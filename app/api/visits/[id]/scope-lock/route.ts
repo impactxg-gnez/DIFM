@@ -133,6 +133,7 @@ export async function POST(
 
     // 3. Handle Photo Uploads to Supabase (Outside Transaction)
     const photosArray = Array.isArray(scope_photos) ? scope_photos : [scope_photos];
+    console.log(`[ScopeLock] Starting storage upload for visit ${visitId}. Photos count: ${photosArray.length}`);
     const uploadedPaths: string[] = [];
 
     for (let i = 0; i < photosArray.length; i++) {
@@ -140,6 +141,7 @@ export async function POST(
       if (!photoData || photoData.length < 100) continue;
 
       const path = `${visitId}/${Date.now()}_${i}.jpg`;
+      console.log(`[ScopeLock] Uploading photo ${i} to ${path}`);
       let body: Buffer;
       if (photoData.startsWith('data:image')) {
         body = Buffer.from(photoData.split(',')[1], 'base64');
@@ -147,11 +149,19 @@ export async function POST(
         body = Buffer.from(photoData, 'base64');
       }
 
-      await uploadPhoto(BUCKETS.SCOPE_PHOTOS, path, body);
-      uploadedPaths.push(path);
+      try {
+        await uploadPhoto(BUCKETS.SCOPE_PHOTOS, path, body);
+        uploadedPaths.push(path);
+      } catch (uploadError) {
+        console.error(`[ScopeLock] Photo upload failed for index ${i}:`, uploadError);
+        throw uploadError; // Rethrow to hit main catch
+      }
     }
 
+    console.log(`[ScopeLock] Storage upload complete. Uploaded paths: ${uploadedPaths.join(',')}`);
+
     const result = await (prisma as any).$transaction(async (tx: any) => {
+      console.log(`[ScopeLock] Starting transaction for visit ${visitId}`);
       // Record metadata for each photo inside transaction
       for (const path of uploadedPaths) {
         await tx.visitPhoto.create({
@@ -166,6 +176,8 @@ export async function POST(
           }
         });
       }
+
+      console.log(`[ScopeLock] Updating visit ${visitId}`);
 
       // Update visit
       await tx.visit.update({
@@ -276,9 +288,13 @@ export async function POST(
       job_status: result.jobStatus,
       all_visits_locked: result.allLocked,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Visit scope lock error', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Internal Server Error',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   }
 }
 

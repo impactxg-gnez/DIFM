@@ -37,7 +37,11 @@ export async function POST(request: Request) {
 
         return NextResponse.json(review);
 
-    } catch (error) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Customer review error', error);
+        return NextResponse.json({
+            error: 'Internal Server Error',
+            message: error.message
+        }, { status: 500 });
     }
 }
