@@ -707,7 +707,7 @@ export function CustomerView({ user }: { user: any }) {
                                 setStep('WAITING');
                             } else {
                                 const err = await res.json();
-                                alert(`Failed to lock scope: ${err.error || 'Unknown error'}`);
+                                alert(`Failed to lock scope: ${err.message || err.error || 'Unknown error'}`);
                             }
                         } catch (e) {
                             console.error('Scope lock submission failed', e);
