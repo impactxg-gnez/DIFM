@@ -260,6 +260,31 @@ export function AdminView({ user }: { user: any }) {
         }
     };
 
+    const handleResolveFlag = async (jobId: string, action: 'APPROVE' | 'REROUTE' | 'RESCHEDULE' | 'CANCEL') => {
+        const note = prompt(`Resolution note for ${action}:`);
+        if (note === null) return; // Cancelled prompt
+
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/resolve-flag`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, note })
+            });
+
+            if (res.ok) {
+                alert(`Flag resolved: ${action}`);
+                mutateJobs();
+                setJobDetailDialog({ open: false, job: null });
+            } else {
+                const err = await res.json();
+                alert(`Error resolving flag: ${err.error}`);
+            }
+        } catch (e) {
+            console.error('Flag resolution error', e);
+            alert('Failed to resolve flag');
+        }
+    };
+
     const jobsContent = useMemo(() => {
         if (!jobs) return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
         if (filteredJobs.length === 0) {
@@ -1281,6 +1306,47 @@ export function AdminView({ user }: { user: any }) {
                             <div className="grid lg:grid-cols-3 gap-8">
                                 {/* Column 1: Core Details & Timeline */}
                                 <div className="space-y-8 lg:col-span-2">
+                                    {jobDetailDialog.job.status === 'FLAGGED_REVIEW' && (
+                                        <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl space-y-4 mb-6">
+                                            <div className="flex items-center gap-2 text-red-500 font-bold uppercase tracking-widest text-sm">
+                                                <AlertCircle className="w-5 h-5" /> Flagged for Admin Review
+                                            </div>
+                                            <div className="bg-black/20 p-4 rounded-xl space-y-2">
+                                                <p className="text-sm text-gray-300">
+                                                    <span className="font-bold text-white">Provider:</span> {jobDetailDialog.job.provider?.name || 'Unknown'}
+                                                </p>
+                                                <p className="text-sm text-gray-300">
+                                                    <span className="font-bold text-white">Reason:</span> {jobDetailDialog.job.flagReason?.replace('_', ' ')}
+                                                </p>
+                                                {jobDetailDialog.job.flagNote && (
+                                                    <p className="text-sm text-gray-400 italic">"{jobDetailDialog.job.flagNote}"</p>
+                                                )}
+
+                                                {/* Flag Photos if stored in disputePhotos */}
+                                                {jobDetailDialog.job.disputePhotos && (
+                                                    <div className="mt-4 space-y-2">
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Evidence Photos</p>
+                                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                                            {jobDetailDialog.job.disputePhotos.split(',').map((url: string, i: number) => (
+                                                                <RemoteImage key={i} path={url} bucket="MISMATCH" className="w-32 h-32 object-cover rounded-lg border border-white/10" />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Resolve Flag Action</p>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 h-10" onClick={() => handleResolveFlag(jobDetailDialog.job.id, 'APPROVE')}>Approve</Button>
+                                                    <Button size="sm" variant="outline" className="border-blue-500/30 text-blue-400 h-10" onClick={() => handleResolveFlag(jobDetailDialog.job.id, 'REROUTE')}>Reroute</Button>
+                                                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-400 h-10" onClick={() => handleResolveFlag(jobDetailDialog.job.id, 'RESCHEDULE')}>Reschedule</Button>
+                                                    <Button size="sm" variant="destructive" className="h-10" onClick={() => handleResolveFlag(jobDetailDialog.job.id, 'CANCEL')}>Cancel</Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-4">
                                         <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
                                             <Sparkles className="w-4 h-4" /> V1 Visits & Scope Lock

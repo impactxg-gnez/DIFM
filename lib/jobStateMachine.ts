@@ -59,7 +59,7 @@ const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   CANCELLED_FREE: ['CLOSED'],
   CANCELLED_CHARGED: ['CLOSED'],
   RESCHEDULE_REQUIRED: ['BOOKED', 'WAITING_FOR_DISPATCH', 'CLOSED'],
-  FLAGGED_REVIEW: [], // Admin will move it out of this state
+  FLAGGED_REVIEW: ['ASSIGNING', 'ASSIGNED', 'RESCHEDULE_REQUIRED'], // Admin will move it out of this state
 };
 
 // Add cancellation transitions to all non-terminal states

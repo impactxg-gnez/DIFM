@@ -182,7 +182,8 @@ export async function GET(request: Request) {
             // 1. It is assigned to them (providerId === userId)
             // 2. It is ASSIGNING and matches their category/capabilities (broadcast to all eligible)
             const orConditions: any[] = [
-                { providerId: userId }
+                { providerId: userId },
+                { flaggedById: userId }
             ];
 
             // Sequential mode: Provider only sees ASSIGNING jobs if explicitly offered to them
