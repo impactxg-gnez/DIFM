@@ -1165,6 +1165,7 @@ export function AdminView({ user }: { user: any }) {
                             <option value="ASSIGNED">Assigned</option>
                             <option value="PREAUTHORISED">Pre-authorised</option>
                             <option value="ARRIVING">Arriving</option>
+                            <option value="ARRIVED">Arrived / Access Confirmed</option>
                             <option value="IN_PROGRESS">In Progress</option>
                             <option value="SCOPE_MISMATCH">Mismatch</option>
                             <option value="PARTS_REQUIRED">Parts Required</option>
@@ -1581,7 +1582,7 @@ export function AdminView({ user }: { user: any }) {
                                         <div className="pt-2 space-y-2">
                                             <p className="text-[10px] text-red-900/40 font-bold uppercase text-center">Force State Jump (Dangerous)</p>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {['ASSIGNING', 'IN_PROGRESS', 'CLOSED', 'BOOKED'].map(st => (
+                                                {['ASSIGNING', 'ARRIVED', 'IN_PROGRESS', 'CLOSED', 'BOOKED'].map(st => (
                                                     <Button
                                                         key={st}
                                                         size="sm"
@@ -1597,41 +1598,68 @@ export function AdminView({ user }: { user: any }) {
                                     </div>
 
                                     {/* Evidence Summary */}
-                                    {(jobDetailDialog.job.completionPhotos || jobDetailDialog.job.completionNotes) && (
-                                        <div className="p-6 bg-zinc-800/80 rounded-2xl border border-white/10 space-y-4">
-                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                                                <RefreshCw className="w-4 h-4" /> Completion Evidence
-                                            </h3>
-                                            {jobDetailDialog.job.completionNotes && (
-                                                <div className="space-y-1">
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Provider Notes</p>
-                                                    <p className="text-sm text-gray-300 italic">"{jobDetailDialog.job.completionNotes}"</p>
-                                                </div>
-                                            )}
-                                            {jobDetailDialog.job.completionPhotos && (
-                                                <div className="space-y-4">
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Evidence Photos</p>
+                                    {(jobDetailDialog.job.completionPhotos || jobDetailDialog.job.completionNotes || jobDetailDialog.job.visits?.some((v: any) => v.visitPhotos?.some((p: any) => p.photoType === 'ARRIVAL'))) && (
+                                        <>
+                                            <div className="p-6 bg-zinc-800/80 rounded-2xl border border-white/10 space-y-4">
+                                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <Timer className="w-4 h-4" /> Arrival Evidence
+                                                </h3>
+                                                {/* We check for any photoType='ARRIVAL' in any visit of the job */}
+                                                {jobDetailDialog.job.visits?.some((v: any) => v.visitPhotos?.some((p: any) => p.photoType === 'ARRIVAL')) ? (
                                                     <div className="grid grid-cols-2 gap-4">
-                                                        {jobDetailDialog.job.completionPhotos.split(',').map((path: string, i: number) => (
-                                                            <div key={i} className="space-y-2">
-                                                                <RemoteImage
-                                                                    path={path}
-                                                                    bucket="COMPLETION"
-                                                                    className="w-full h-40 object-cover rounded-xl border border-white/10"
-                                                                />
-                                                                <a
-                                                                    href="#"
-                                                                    onClick={(e) => { e.preventDefault(); /* Could add full-screen modal here */ }}
-                                                                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-wider block text-center"
-                                                                >
-                                                                    View Original
-                                                                </a>
-                                                            </div>
-                                                        ))}
+                                                        {jobDetailDialog.job.visits.flatMap((v: any) =>
+                                                            v.visitPhotos?.filter((p: any) => p.photoType === 'ARRIVAL').map((p: any, i: number) => (
+                                                                <div key={`${v.id}-${i}`} className="space-y-2">
+                                                                    <RemoteImage
+                                                                        path={p.path}
+                                                                        bucket="SCOPE"
+                                                                        className="w-full h-40 object-cover rounded-xl border border-white/10"
+                                                                    />
+                                                                    <p className="text-[10px] text-gray-400 text-center uppercase font-bold">Arrival Photo</p>
+                                                                </div>
+                                                            ))
+                                                        )}
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                                ) : (
+                                                    <p className="text-sm text-gray-500 italic">No arrival photo evidence found.</p>
+                                                )}
+                                            </div>
+
+                                            <div className="p-6 bg-zinc-800/80 rounded-2xl border border-white/10 space-y-4">
+                                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <RefreshCw className="w-4 h-4" /> Completion Evidence
+                                                </h3>
+                                                {jobDetailDialog.job.completionNotes && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Provider Notes</p>
+                                                        <p className="text-sm text-gray-300 italic">"{jobDetailDialog.job.completionNotes}"</p>
+                                                    </div>
+                                                )}
+                                                {jobDetailDialog.job.completionPhotos && (
+                                                    <div className="space-y-4">
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Evidence Photos</p>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            {jobDetailDialog.job.completionPhotos.split(',').map((path: string, i: number) => (
+                                                                <div key={i} className="space-y-2">
+                                                                    <RemoteImage
+                                                                        path={path}
+                                                                        bucket="COMPLETION"
+                                                                        className="w-full h-40 object-cover rounded-xl border border-white/10"
+                                                                    />
+                                                                    <a
+                                                                        href="#"
+                                                                        onClick={(e) => { e.preventDefault(); /* Could add full-screen modal here */ }}
+                                                                        className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-wider block text-center"
+                                                                    >
+                                                                        View Original
+                                                                    </a>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             </div>

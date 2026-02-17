@@ -173,7 +173,7 @@ export function ProviderView({ user }: { user: any }) {
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'ON_SITE' })
+            body: JSON.stringify({ status: 'ARRIVED' })
         });
         mutate();
     };
@@ -185,6 +185,7 @@ export function ProviderView({ user }: { user: any }) {
     const [locationWarning, setLocationWarning] = useState<string | null>(null);
     const [partsRequired, setPartsRequired] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [arrivalPhoto, setArrivalPhoto] = useState<string | null>(null);
 
     // Parts Request State
     const [partsDialog, setPartsDialog] = useState<{ open: boolean; jobId?: string; visitId?: string }>({ open: false });
@@ -264,11 +265,21 @@ export function ProviderView({ user }: { user: any }) {
             setCompletionDialog({ open: true, jobId });
             return;
         }
+
+        const body: any = { status };
+        if (status === 'IN_PROGRESS' && arrivalPhoto) {
+            body.arrivalPhotos = arrivalPhoto;
+        }
+
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status })
+            body: JSON.stringify(body)
         });
+
+        if (status === 'IN_PROGRESS') {
+            setArrivalPhoto(null);
+        }
         mutate();
     };
 
@@ -595,7 +606,7 @@ export function ProviderView({ user }: { user: any }) {
                             </div>
                         )}
 
-                        {(job.status === 'IN_PROGRESS' || job.status === 'ON_SITE') && job.timerStartedAt && (
+                        {(job.status === 'IN_PROGRESS' || job.status === 'ARRIVED') && job.timerStartedAt && (
                             <div className="mb-4 p-3 bg-green-50 rounded border border-green-100 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] font-semibold text-green-700 uppercase">Timer Active</p>
@@ -623,11 +634,30 @@ export function ProviderView({ user }: { user: any }) {
                                 <Button onClick={() => confirmAccess(job.id)} className="w-full bg-indigo-600 hover:bg-indigo-700">Confirm Access to Property</Button>
                             )}
 
-                            {job.status === 'ON_SITE' && (
-                                <Button onClick={() => updateStatus(job.id, 'IN_PROGRESS')} className="w-full bg-blue-600 hover:bg-blue-700 mb-2">Start Work</Button>
+                            {job.status === 'ARRIVED' && (
+                                <div className="space-y-3 p-3 bg-zinc-900/50 rounded border border-blue-500/20">
+                                    <p className="text-xs font-semibold text-blue-500 uppercase">Mandatory Arrival Photo</p>
+                                    <CameraUpload
+                                        label="Take Arrival Photo"
+                                        onCapture={(photo) => setArrivalPhoto(photo)}
+                                    />
+                                    {arrivalPhoto && (
+                                        <Button
+                                            onClick={() => updateStatus(job.id, 'IN_PROGRESS')}
+                                            className="w-full bg-blue-600 hover:bg-blue-700"
+                                        >
+                                            Start Work
+                                        </Button>
+                                    )}
+                                    {!arrivalPhoto && (
+                                        <p className="text-[10px] text-gray-500 italic text-center">
+                                            Please upload a photo of the property access to enable 'Start Work'
+                                        </p>
+                                    )}
+                                </div>
                             )}
 
-                            {(job.status === 'IN_PROGRESS' || job.status === 'ON_SITE') && (
+                            {job.status === 'IN_PROGRESS' && (
                                 <div className="space-y-2">
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button onClick={() => updateStatus(job.id, 'COMPLETED')} className="bg-green-600 hover:bg-green-700">Complete Job</Button>
@@ -685,323 +715,329 @@ export function ProviderView({ user }: { user: any }) {
             </div>
 
             {/* Completion Dialog */}
-            {completionDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-zinc-900/90 border border-white/10 space-y-4">
-                        <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-white">Complete Job</h3>
-                            <p className="text-sm text-gray-400">Please provide completion details</p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Completion Notes *</Label>
-                            <textarea
-                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
-                                rows={4}
-                                placeholder="Describe what was completed..."
-                                value={completionNotes}
-                                onChange={(e) => setCompletionNotes(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Completion Photo *</Label>
-                            <CameraUpload
-                                onCapture={(photo, lat, lng) => {
-                                    setCompletionPhotos(photo); // In real app, this would be a URL after upload
-                                    setCompletionCoords({ lat, lng });
-
-                                    // Verify distance
-                                    const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
-                                    if (job && job.latitude && job.longitude) {
-                                        const R = 6371e3; // metres
-                                        const φ1 = lat * Math.PI / 180; // φ, λ in radians
-                                        const φ2 = job.latitude * Math.PI / 180;
-                                        const Δφ = (job.latitude - lat) * Math.PI / 180;
-                                        const Δλ = (job.longitude - lng) * Math.PI / 180;
-
-                                        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                                            Math.cos(φ1) * Math.cos(φ2) *
-                                            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-                                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                                        const d = R * c; // in metres
-
-                                        if (d > 200) { // 200m radius
-                                            setLocationWarning(`You are ${(d / 1000).toFixed(2)}km from the job site. Please simulate being closer.`);
-                                        } else {
-                                            setLocationWarning(null);
-                                        }
-                                    }
-                                }}
-                            />
-                            {locationWarning && (
-                                <div className="text-amber-600 text-sm flex items-center gap-2 bg-amber-50 p-2 rounded">
-                                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                                    {locationWarning}
-                                </div>
-                            )}
-                        </div>
-
-                        {(() => {
-                            // Find the job to check if it's a cleaning job
-                            const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
-                            const isCleaningJob = job?.category === 'CLEANING';
-
-                            // For cleaning jobs, parts are always N/A (don't show the field)
-                            if (isCleaningJob) {
-                                return (
-                                    <div className="space-y-2">
-                                        <Label className="text-gray-400">Parts Required: N/A (Cleaning jobs)</Label>
-                                    </div>
-                                );
-                            }
-
-                            // For non-cleaning jobs, show parts confirmation
-                            return (
-                                <>
-                                    <div className="space-y-2">
-                                        <Label>Parts Required? *</Label>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                type="button"
-                                                variant={partsRequired === 'YES' ? 'default' : 'outline'}
-                                                onClick={() => setPartsRequired('YES')}
-                                                className="flex-1"
-                                            >
-                                                Yes
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant={partsRequired === 'NO' ? 'default' : 'outline'}
-                                                onClick={() => setPartsRequired('NO')}
-                                                className="flex-1"
-                                            >
-                                                No
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant={partsRequired === 'N/A' ? 'default' : 'outline'}
-                                                onClick={() => setPartsRequired('N/A')}
-                                                className="flex-1"
-                                            >
-                                                N/A
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    {partsRequired === 'YES' && (
-                                        <div className="space-y-2">
-                                            <Label>Parts Notes *</Label>
-                                            <textarea
-                                                className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
-                                                rows={3}
-                                                placeholder="Describe the parts used..."
-                                                value={partsNotes}
-                                                onChange={(e) => setPartsNotes(e.target.value)}
-                                                required
-                                            />
-                                            <p className="text-xs text-gray-400">Photos can be added later (optional)</p>
-                                        </div>
-                                    )}
-                                </>
-                            );
-                        })()}
-
-                        <div className="flex justify-end gap-3 pt-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setCompletionDialog({ open: false });
-                                    setCompletionNotes('');
-                                    setCompletionPhotos('');
-                                    setCompletionCoords(null);
-                                    setLocationWarning(null);
-                                    setPartsRequired('');
-                                    setPartsNotes('');
-                                }}
-                                disabled={isSubmitting}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="default"
-                                onClick={submitCompletion}
-                                disabled={isSubmitting}
-                                className="bg-green-600 hover:bg-green-700"
-                            >
-                                {isSubmitting ? 'Completing...' : 'Complete Job'}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {/* Flagging Dialog */}
-            {flagDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="bg-zinc-900 border border-white/10 p-6 rounded-lg max-w-md w-full mx-4 space-y-4">
-                        <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-red-500 flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5" />
-                                Flag Job for Review
-                            </h3>
-                            <p className="text-sm text-gray-400">Selecting a reason will pause the job and notify the admin.</p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Reason for Flagging *</Label>
-                            <div className="grid grid-cols-1 gap-2">
-                                {[
-                                    { id: 'scope_too_large', label: 'Scope too large' },
-                                    { id: 'wrong_capability', label: 'Wrong capability' },
-                                    { id: 'photo_mismatch', label: 'Photo mismatch' },
-                                    { id: 'safety_issue', label: 'Safety issue' }
-                                ].map((reason) => (
-                                    <Button
-                                        key={reason.id}
-                                        type="button"
-                                        variant={flagReason === reason.id ? 'default' : 'outline'}
-                                        onClick={() => setFlagReason(reason.id)}
-                                        className={`justify-start ${flagReason === reason.id ? 'bg-red-600' : 'border-white/10'}`}
-                                    >
-                                        {reason.label}
-                                    </Button>
-                                ))}
+            {
+                completionDialog.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                        <div className="bg-zinc-900/90 border border-white/10 space-y-4">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-semibold text-white">Complete Job</h3>
+                                <p className="text-sm text-gray-400">Please provide completion details</p>
                             </div>
-                        </div>
 
-                        <div className="space-y-2">
-                            <Label>Optional Note</Label>
-                            <textarea
-                                className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
-                                rows={3}
-                                placeholder="Add any details for the admin..."
-                                value={flagNote}
-                                onChange={(e) => setFlagNote(e.target.value)}
-                            />
-                        </div>
-
-                        {flagReason === 'photo_mismatch' && (
-                            <div className="space-y-4 pt-2 border-t border-white/10">
-                                <Label className="text-red-400">Add Evidence Photo (Recommended)</Label>
-                                <CameraUpload
-                                    onCapture={(photo) => setFlagPhotos(photo)}
+                            <div className="space-y-2">
+                                <Label>Completion Notes *</Label>
+                                <textarea
+                                    className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
+                                    rows={4}
+                                    placeholder="Describe what was completed..."
+                                    value={completionNotes}
+                                    onChange={(e) => setCompletionNotes(e.target.value)}
+                                    required
                                 />
-                                {flagPhotos && (
-                                    <p className="text-xs text-green-500">Photo captured successfully</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Completion Photo *</Label>
+                                <CameraUpload
+                                    onCapture={(photo, lat, lng) => {
+                                        setCompletionPhotos(photo); // In real app, this would be a URL after upload
+                                        setCompletionCoords({ lat, lng });
+
+                                        // Verify distance
+                                        const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
+                                        if (job && job.latitude && job.longitude) {
+                                            const R = 6371e3; // metres
+                                            const φ1 = lat * Math.PI / 180; // φ, λ in radians
+                                            const φ2 = job.latitude * Math.PI / 180;
+                                            const Δφ = (job.latitude - lat) * Math.PI / 180;
+                                            const Δλ = (job.longitude - lng) * Math.PI / 180;
+
+                                            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                                                Math.cos(φ1) * Math.cos(φ2) *
+                                                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                                            const d = R * c; // in metres
+
+                                            if (d > 200) { // 200m radius
+                                                setLocationWarning(`You are ${(d / 1000).toFixed(2)}km from the job site. Please simulate being closer.`);
+                                            } else {
+                                                setLocationWarning(null);
+                                            }
+                                        }
+                                    }}
+                                />
+                                {locationWarning && (
+                                    <div className="text-amber-600 text-sm flex items-center gap-2 bg-amber-50 p-2 rounded">
+                                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                                        {locationWarning}
+                                    </div>
                                 )}
                             </div>
-                        )}
 
-                        <div className="flex justify-end gap-3 pt-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setFlagDialog({ open: false });
-                                    setFlagReason('');
-                                    setFlagNote('');
-                                }}
-                                disabled={isSubmitting}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                onClick={submitFlag}
-                                disabled={isSubmitting || !flagReason}
-                                className="bg-red-600 hover:bg-red-700"
-                            >
-                                {isSubmitting ? 'Flagging...' : 'Confirm Flag'}
-                            </Button>
+                            {(() => {
+                                // Find the job to check if it's a cleaning job
+                                const job = jobs?.find((j: any) => j.id === completionDialog.jobId);
+                                const isCleaningJob = job?.category === 'CLEANING';
+
+                                // For cleaning jobs, parts are always N/A (don't show the field)
+                                if (isCleaningJob) {
+                                    return (
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Parts Required: N/A (Cleaning jobs)</Label>
+                                        </div>
+                                    );
+                                }
+
+                                // For non-cleaning jobs, show parts confirmation
+                                return (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label>Parts Required? *</Label>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant={partsRequired === 'YES' ? 'default' : 'outline'}
+                                                    onClick={() => setPartsRequired('YES')}
+                                                    className="flex-1"
+                                                >
+                                                    Yes
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant={partsRequired === 'NO' ? 'default' : 'outline'}
+                                                    onClick={() => setPartsRequired('NO')}
+                                                    className="flex-1"
+                                                >
+                                                    No
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant={partsRequired === 'N/A' ? 'default' : 'outline'}
+                                                    onClick={() => setPartsRequired('N/A')}
+                                                    className="flex-1"
+                                                >
+                                                    N/A
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        {partsRequired === 'YES' && (
+                                            <div className="space-y-2">
+                                                <Label>Parts Notes *</Label>
+                                                <textarea
+                                                    className="w-full rounded-md border border-white/10 text-white placeholder:text-gray-600 focus:border-blue-500"
+                                                    rows={3}
+                                                    placeholder="Describe the parts used..."
+                                                    value={partsNotes}
+                                                    onChange={(e) => setPartsNotes(e.target.value)}
+                                                    required
+                                                />
+                                                <p className="text-xs text-gray-400">Photos can be added later (optional)</p>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setCompletionDialog({ open: false });
+                                        setCompletionNotes('');
+                                        setCompletionPhotos('');
+                                        setCompletionCoords(null);
+                                        setLocationWarning(null);
+                                        setPartsRequired('');
+                                        setPartsNotes('');
+                                    }}
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="default"
+                                    onClick={submitCompletion}
+                                    disabled={isSubmitting}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    {isSubmitting ? 'Completing...' : 'Complete Job'}
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-            {/* Parts Request Dialog */}
-            {partsDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="bg-zinc-900 border border-white/10 text-white p-6 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-xl font-bold text-amber-500 mb-4">Request Parts</h3>
-                        <p className="text-sm text-gray-400 mb-6">List the parts required for this job. Total cost will be added to the customer's bill once approved.</p>
+                )
+            }
+            {/* Flagging Dialog */}
+            {
+                flagDialog.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                        <div className="bg-zinc-900 border border-white/10 p-6 rounded-lg max-w-md w-full mx-4 space-y-4">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-semibold text-red-500 flex items-center gap-2">
+                                    <AlertTriangle className="w-5 h-5" />
+                                    Flag Job for Review
+                                </h3>
+                                <p className="text-sm text-gray-400">Selecting a reason will pause the job and notify the admin.</p>
+                            </div>
 
-                        <div className="space-y-4">
-                            {partsItems.map((item, index) => (
-                                <div key={index} className="flex gap-2 items-end">
-                                    <div className="flex-1 space-y-2">
-                                        <Label>Part Name</Label>
-                                        <Input
-                                            placeholder="e.g. 5m HDMI Cable"
-                                            value={item.name}
-                                            onChange={(e) => handlePartChange(index, 'name', e.target.value)}
-                                            className="bg-zinc-800 border-white/10"
-                                        />
-                                    </div>
-                                    <div className="w-24 space-y-2">
-                                        <Label>Price (£)</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="0.00"
-                                            value={item.price}
-                                            onChange={(e) => handlePartChange(index, 'price', parseFloat(e.target.value) || 0)}
-                                            className="bg-zinc-800 border-white/10"
-                                        />
-                                    </div>
-                                    {partsItems.length > 1 && (
+                            <div className="space-y-2">
+                                <Label>Reason for Flagging *</Label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {[
+                                        { id: 'scope_too_large', label: 'Scope too large' },
+                                        { id: 'wrong_capability', label: 'Wrong capability' },
+                                        { id: 'photo_mismatch', label: 'Photo mismatch' },
+                                        { id: 'safety_issue', label: 'Safety issue' }
+                                    ].map((reason) => (
                                         <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleRemovePart(index)}
-                                            className="text-red-500 hover:bg-red-500/10 h-10 w-10 p-0"
+                                            key={reason.id}
+                                            type="button"
+                                            variant={flagReason === reason.id ? 'default' : 'outline'}
+                                            onClick={() => setFlagReason(reason.id)}
+                                            className={`justify-start ${flagReason === reason.id ? 'bg-red-600' : 'border-white/10'}`}
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            {reason.label}
                                         </Button>
-                                    )}
+                                    ))}
                                 </div>
-                            ))}
+                            </div>
 
-                            <Button
-                                variant="outline"
-                                onClick={handleAddPart}
-                                className="w-full border-dashed border-white/20 text-gray-400 hover:text-white"
-                            >
-                                <Plus className="w-4 h-4 mr-2" /> Add Another Part
-                            </Button>
-
-                            <div className="pt-4 border-t border-white/10 space-y-2">
-                                <Label>Notes (Optional)</Label>
+                            <div className="space-y-2">
+                                <Label>Optional Note</Label>
                                 <textarea
-                                    className="w-full rounded-md border border-white/10 bg-zinc-800 text-white p-2 min-h-[80px]"
-                                    placeholder="Explain why these parts are needed..."
-                                    value={partsNotes}
-                                    onChange={(e) => setPartsNotes(e.target.value)}
+                                    className="w-full rounded-md border border-white/10 bg-zinc-800 text-white placeholder:text-gray-600 focus:border-red-500 p-2"
+                                    rows={3}
+                                    placeholder="Add any details for the admin..."
+                                    value={flagNote}
+                                    onChange={(e) => setFlagNote(e.target.value)}
                                 />
                             </div>
 
-                            <div className="flex justify-between items-center pt-2">
-                                <div className="text-lg font-bold">
-                                    Total: £{partsItems.reduce((sum, i) => sum + i.price, 0).toFixed(2)}
+                            {flagReason === 'photo_mismatch' && (
+                                <div className="space-y-4 pt-2 border-t border-white/10">
+                                    <Label className="text-red-400">Add Evidence Photo (Recommended)</Label>
+                                    <CameraUpload
+                                        onCapture={(photo) => setFlagPhotos(photo)}
+                                    />
+                                    {flagPhotos && (
+                                        <p className="text-xs text-green-500">Photo captured successfully</p>
+                                    )}
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => setPartsDialog({ open: false })}
-                                        className="text-white"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={submitPartsRequest}
-                                        disabled={isSubmittingParts}
-                                        className="bg-amber-600 hover:bg-amber-700"
-                                    >
-                                        {isSubmittingParts ? 'Submitting...' : 'Send Request'}
-                                    </Button>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setFlagDialog({ open: false });
+                                        setFlagReason('');
+                                        setFlagNote('');
+                                    }}
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    onClick={submitFlag}
+                                    disabled={isSubmitting || !flagReason}
+                                    className="bg-red-600 hover:bg-red-700"
+                                >
+                                    {isSubmitting ? 'Flagging...' : 'Confirm Flag'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Parts Request Dialog */}
+            {
+                partsDialog.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                        <div className="bg-zinc-900 border border-white/10 text-white p-6 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold text-amber-500 mb-4">Request Parts</h3>
+                            <p className="text-sm text-gray-400 mb-6">List the parts required for this job. Total cost will be added to the customer's bill once approved.</p>
+
+                            <div className="space-y-4">
+                                {partsItems.map((item, index) => (
+                                    <div key={index} className="flex gap-2 items-end">
+                                        <div className="flex-1 space-y-2">
+                                            <Label>Part Name</Label>
+                                            <Input
+                                                placeholder="e.g. 5m HDMI Cable"
+                                                value={item.name}
+                                                onChange={(e) => handlePartChange(index, 'name', e.target.value)}
+                                                className="bg-zinc-800 border-white/10"
+                                            />
+                                        </div>
+                                        <div className="w-24 space-y-2">
+                                            <Label>Price (£)</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="0.00"
+                                                value={item.price}
+                                                onChange={(e) => handlePartChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                                className="bg-zinc-800 border-white/10"
+                                            />
+                                        </div>
+                                        {partsItems.length > 1 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleRemovePart(index)}
+                                                className="text-red-500 hover:bg-red-500/10 h-10 w-10 p-0"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+
+                                <Button
+                                    variant="outline"
+                                    onClick={handleAddPart}
+                                    className="w-full border-dashed border-white/20 text-gray-400 hover:text-white"
+                                >
+                                    <Plus className="w-4 h-4 mr-2" /> Add Another Part
+                                </Button>
+
+                                <div className="pt-4 border-t border-white/10 space-y-2">
+                                    <Label>Notes (Optional)</Label>
+                                    <textarea
+                                        className="w-full rounded-md border border-white/10 bg-zinc-800 text-white p-2 min-h-[80px]"
+                                        placeholder="Explain why these parts are needed..."
+                                        value={partsNotes}
+                                        onChange={(e) => setPartsNotes(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex justify-between items-center pt-2">
+                                    <div className="text-lg font-bold">
+                                        Total: £{partsItems.reduce((sum, i) => sum + i.price, 0).toFixed(2)}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="ghost"
+                                            onClick={() => setPartsDialog({ open: false })}
+                                            className="text-white"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={submitPartsRequest}
+                                            disabled={isSubmittingParts}
+                                            className="bg-amber-600 hover:bg-amber-700"
+                                        >
+                                            {isSubmittingParts ? 'Submitting...' : 'Send Request'}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

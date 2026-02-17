@@ -19,7 +19,7 @@ export const Badge = ({ className, status, variant, ...props }: BadgeProps) => {
             case 'ASSIGNED': colorClass = "bg-blue-100 text-blue-800"; break;
             case 'PREAUTHORISED': colorClass = "bg-emerald-100 text-emerald-800"; break;
             case 'ARRIVING': colorClass = "bg-amber-100 text-amber-800"; break;
-            case 'ON_SITE': colorClass = "bg-blue-600 text-white font-bold"; break;
+            case 'ARRIVED': colorClass = "bg-blue-600 text-white font-bold"; break;
             case 'IN_PROGRESS': colorClass = "bg-green-100 text-green-800 font-bold"; break;
             case 'SCOPE_MISMATCH': colorClass = "bg-red-100 text-red-800 font-bold"; break;
             case 'MISMATCH_PENDING': colorClass = "bg-red-600 text-white font-bold animate-pulse"; break;

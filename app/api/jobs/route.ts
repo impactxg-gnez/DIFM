@@ -158,7 +158,12 @@ export async function GET(request: Request) {
                 include: {
                     provider: { select: { name: true, latitude: true, longitude: true, id: true, providerType: true, complianceConfirmed: true } },
                     items: true,
-                    visits: true,
+                    visits: {
+                        include: {
+                            visitPhotos: true,
+                            scopeSummary: true
+                        }
+                    },
                     stateChanges: { orderBy: { createdAt: 'asc' } },
                     priceOverrides: { orderBy: { createdAt: 'desc' } },
                 }
@@ -214,7 +219,11 @@ export async function GET(request: Request) {
             include: {
                 customer: { select: { name: true } },
                 provider: { select: { id: true, name: true, latitude: true, longitude: true, providerType: true, complianceConfirmed: true } },
-                visits: true,
+                visits: {
+                    include: {
+                        visitPhotos: true
+                    }
+                },
                 stateChanges: { orderBy: { createdAt: 'asc' } },
                 priceOverrides: { orderBy: { createdAt: 'desc' } },
             }

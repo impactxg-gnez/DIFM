@@ -13,7 +13,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        let { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd, scheduledAt } = body as any;
+        let { status, reason, completionNotes, partsRequiredAtCompletion, partsNotes, partsPhotos, completionPhotos, arrivalPhotos, disputeNotes, disputePhotos, completionLat, completionLng, completionLocationVerified, isAccessAvailable, arrivalWindowStart, arrivalWindowEnd, scheduledAt } = body as any;
 
         const cookieStore = await cookies();
         const userId = cookieStore.get('userId')?.value;
@@ -25,6 +25,27 @@ export async function POST(
 
         const uploadedCompletionPaths: string[] = [];
         const uploadedPartsPaths: string[] = [];
+        const uploadedArrivalPaths: string[] = [];
+
+        // 🟢 Handle Arrival Photos
+        if (arrivalPhotos) {
+            const photosArray = Array.isArray(arrivalPhotos) ? arrivalPhotos : arrivalPhotos.split(',').filter(Boolean);
+            for (let i = 0; i < photosArray.length; i++) {
+                const photoData = photosArray[i];
+                if (!photoData || photoData.length < 100) continue;
+
+                const path = `arrival/${id}/${Date.now()}_${i}.jpg`;
+                let photoBody: Buffer;
+                if (photoData.startsWith('data:image')) {
+                    photoBody = Buffer.from(photoData.split(',')[1], 'base64');
+                } else {
+                    photoBody = Buffer.from(photoData, 'base64');
+                }
+
+                await uploadPhoto(BUCKETS.SCOPE_PHOTOS, path, photoBody); // Reusing SCOPE_PHOTOS bucket or I should check if a new one is needed
+                uploadedArrivalPaths.push(path);
+            }
+        }
 
         // 🟢 Handle Completion Photos (Outside Transaction)
         if (status?.toUpperCase() === 'COMPLETED' && completionPhotos) {
@@ -143,8 +164,22 @@ export async function POST(
                 }
             }
 
+            // Step 6: Arrival Photo Guard for IN_PROGRESS
+            if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
+                const arrivalPhoto = await tx.visitPhoto.findFirst({
+                    where: {
+                        jobId: id,
+                        photoType: 'ARRIVAL'
+                    }
+                });
+
+                if (!arrivalPhoto && uploadedArrivalPaths.length === 0) {
+                    throw new Error('An arrival photo is mandatory before starting work. Please upload a photo of the property access/entry.');
+                }
+            }
+
             // Step 5: Timer & Access Logic
-            if (status === 'ON_SITE' && userRole === 'PROVIDER') {
+            if (status === 'ARRIVED' && userRole === 'PROVIDER') {
                 if (job.scheduledAt) {
                     const scheduled = new Date(job.scheduledAt);
                     const windowEnd = new Date(scheduled.getTime() + 30 * 60 * 1000);
@@ -155,7 +190,7 @@ export async function POST(
             }
 
             if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
-                if (!isAccessAvailable && !job.isAccessAvailable && currentStatus !== 'ON_SITE') {
+                if (!isAccessAvailable && !job.isAccessAvailable && currentStatus !== 'ARRIVED') {
                     throw new Error('Cannot start timer until access is confirmed available');
                 }
             }
@@ -216,8 +251,8 @@ export async function POST(
                         isAccessAvailable: isAccessAvailable ?? job.isAccessAvailable,
                         arrivalWindowStart: arrivalWindowStart ? new Date(arrivalWindowStart) : job.arrivalWindowStart,
                         arrivalWindowEnd: arrivalWindowEnd ? new Date(arrivalWindowEnd) : job.arrivalWindowEnd,
-                        timerStartedAt: ((targetStatus === 'IN_PROGRESS' || targetStatus === 'ON_SITE') && !job.timerStartedAt) ? now : job.timerStartedAt,
-                        arrival_confirmed_at: (targetStatus === 'ON_SITE' && !job.arrival_confirmed_at) ? now : job.arrival_confirmed_at,
+                        timerStartedAt: ((targetStatus === 'IN_PROGRESS' || targetStatus === 'ARRIVED') && !job.timerStartedAt) ? now : job.timerStartedAt,
+                        arrival_confirmed_at: (targetStatus === 'ARRIVED' && !job.arrival_confirmed_at) ? now : job.arrival_confirmed_at,
                         scheduledAt: scheduledAt ? new Date(scheduledAt) : job.scheduledAt,
                         // If rescheduling from RESCHEDULE_REQUIRED to BOOKED (or directly to WAITING_FOR_DISPATCH)
                         ...((targetStatus === 'BOOKED' || targetStatus === 'WAITING_FOR_DISPATCH') && currentStatus === 'RESCHEDULE_REQUIRED' ? {
@@ -277,6 +312,19 @@ export async function POST(
                         uploadedBy: userId,
                         photoType: 'COMPLETION',
                         deleteAfter: null // No expiry for completion evidence
+                    }
+                });
+            }
+
+            for (const path of uploadedArrivalPaths) {
+                await (tx as any).visitPhoto.create({
+                    data: {
+                        jobId: id,
+                        bucket: BUCKETS.SCOPE_PHOTOS, // Or BUCKETS.ARRIVAL_PHOTOS if exists
+                        path,
+                        uploadedBy: userId,
+                        photoType: 'ARRIVAL',
+                        deleteAfter: null
                     }
                 });
             }
