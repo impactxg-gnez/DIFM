@@ -2,7 +2,10 @@ import { CatalogueItem } from './catalogue';
 
 export interface PhraseMapping {
   phrase: string;
+  positive_keywords: string[];
+  negative_keywords: string[];
   canonical_job_item_id: string;
+  priority: number;
 }
 
 export interface ParseResult {
@@ -547,7 +550,7 @@ function findFallbackItem(category: string, catalogue: CatalogueItem[]): string 
 
 export function parseJobDescription(
   text: string,
-  catalogue: CatalogueItem[],
+  catalogue: any[], // Type matching the Excel Source output
   phraseMappings: PhraseMapping[]
 ): ParseResult {
   const detectedIds: string[] = [];
@@ -561,69 +564,71 @@ export function parseJobDescription(
     const { quantity, cleanedSegment } = extractQuantity(segment);
     const segmentLower = cleanedSegment.toLowerCase().trim();
 
-    // 1. Collision Safeguard: Prefer Exact Match
-    let matchedItemId: string | null = null;
     let confidence = 0;
     const segmentDetectedIds: string[] = [];
 
-    // Try exact phrase match from DB
-    const exactMatch = phraseMappings.find(pm => pm.phrase.toLowerCase() === segmentLower);
-    if (exactMatch) {
-      matchedItemId = exactMatch.canonical_job_item_id;
-      segmentDetectedIds.push(matchedItemId);
-      confidence = 1.0;
-      console.log(`[JobParser] Exact match found: "${segmentLower}" -> ${matchedItemId}`);
-    } else {
-      // 2. Phrase Detection (Fuzzy/Partial)
-      // Sort phrase mappings by length descending to match longest phrases first
-      const sortedMappings = [...phraseMappings].sort((a, b) => b.phrase.length - a.phrase.length);
+    // Sort mappings by priority then length descending
+    const sortedMappings = [...phraseMappings].sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return b.phrase.length - a.phrase.length;
+    });
 
-      let remainingText = segmentLower;
+    let remainingText = segmentLower;
 
-      // Loop to find multiple phrases in the same segment
-      for (const mapping of sortedMappings) {
-        const phraseLower = mapping.phrase.toLowerCase();
-        if (remainingText.includes(phraseLower)) {
-          matchedItemId = mapping.canonical_job_item_id;
-          segmentDetectedIds.push(matchedItemId);
+    // Generic verbs that shouldn't trigger alone unless part of a specific phrase
+    const GENERIC_VERBS = ['hang', 'install', 'mount', 'fix', 'repair', 'replace', 'change', 'swap', 'conceal', 'hide'];
 
-          // Remove the matched phrase from remaining text to avoid double-matching 
-          // (or finding inner phrases of a longer phrase)
+    // Detect ALL phrase matches above threshold
+    for (const mapping of sortedMappings) {
+      const phraseLower = (mapping.phrase || '').toLowerCase();
+      if (!phraseLower && mapping.positive_keywords.length === 0) continue;
+
+      const hasExactPhrase = phraseLower && remainingText.includes(phraseLower);
+      const matchedPositives = mapping.positive_keywords.filter(kw => remainingText.includes(kw));
+
+      // Pilot Safeguard: If we only matched generic verbs, don't trigger the mapping 
+      // unless there are NO other keywords or it's an exact phrase match.
+      const matchedNonGenerics = matchedPositives.filter(kw => !GENERIC_VERBS.includes(kw));
+      const hasSpecificMatch = hasExactPhrase || matchedNonGenerics.length > 0;
+
+      // Also allow generic match if the mapping ONLY contains generic verbs (e.g. for fallback)
+      // but only if NO other specific things matched in the segment so far.
+      const isPurelyGenericMapping = mapping.positive_keywords.length > 0 &&
+        mapping.positive_keywords.every(kw => GENERIC_VERBS.includes(kw));
+
+      const hasAnyNegatives = mapping.negative_keywords.length > 0 &&
+        mapping.negative_keywords.some(kw => segmentLower.includes(kw));
+
+      if ((hasSpecificMatch || (isPurelyGenericMapping && segmentDetectedIds.length === 0)) && !hasAnyNegatives) {
+        segmentDetectedIds.push(mapping.canonical_job_item_id);
+
+        // Remove matched words
+        if (hasExactPhrase) {
           remainingText = remainingText.replace(phraseLower, ' '.repeat(phraseLower.length));
-
-          confidence = Math.max(confidence, 0.9);
-          console.log(`[JobParser] Phrase match found: "${mapping.phrase}" in segment -> ${matchedItemId}`);
         }
-      }
+        matchedPositives.forEach(kw => {
+          remainingText = remainingText.replace(kw, ' '.repeat(kw.length));
+        });
 
-      if (segmentDetectedIds.length > 0) {
-        // Handle all phrases found in the non-exact path
-        matchedItemId = null; // Mark as handled for fallback check
+        confidence = Math.max(confidence, 0.9);
+        console.log(`[JobParser] Match found: "${mapping.phrase || matchedPositives.join(',')}" -> ${mapping.canonical_job_item_id}`);
       }
     }
 
-    // Add all detected IDs for this segment (except for fallback which adds later)
+    // Add all detected IDs for this segment
     if (segmentDetectedIds.length > 0) {
       for (const id of segmentDetectedIds) {
         for (let i = 0; i < quantity; i++) {
           detectedIds.push(id);
         }
       }
-    }
-
-    // 3. Fallback: Existing Keyword Search if DB mapping fails AND no phrases were found
-    if (segmentDetectedIds.length === 0 && !matchedItemId) {
+    } else {
+      // Fallback: If no mapping found via Excel, try legacy category detection? 
+      // The user wants Excel as sole source, but for robustness we detect category.
       const category = detectCategory(segmentLower);
       if (category) {
-        matchedItemId = findFallbackItem(category, catalogue);
-        confidence = 0.5;
-        console.log(`[JobParser] Fallback category match: ${category} -> ${matchedItemId}`);
-
-        if (matchedItemId) {
-          for (let i = 0; i < quantity; i++) {
-            detectedIds.push(matchedItemId);
-          }
-        }
+        confidence = 0.3;
+        console.log(`[JobParser] No Excel match. Category detected: ${category}`);
       }
     }
     segmentConfidences.push(confidence);

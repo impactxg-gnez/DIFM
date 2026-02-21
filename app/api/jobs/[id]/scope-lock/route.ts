@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculateTier, calculatePrice } from '@/lib/pricing/visitEngine';
-import { getCatalogueItem } from '@/lib/pricing/catalogue';
+import { calculateTierAndPrice } from '@/lib/pricing/visitEngine';
+import { excelSource } from '@/lib/pricing/excelLoader';
 
 export async function POST(
     request: Request,
@@ -26,16 +26,14 @@ export async function POST(
         }
 
         // 1. Process Uncertainty & Calculate Final Tier
+        const primaryItem = excelSource.jobItems.get(visit.primary_job_item_id);
+
         let extraMinutes = 0;
         let forceH3 = false;
 
-        const primaryItem = await getCatalogueItem(visit.primary_job_item_id);
-
         // Check answers for uncertainty-sensitive questions
-        // Spec: "IGNORE | BUFFER | FORCE_H3"
         for (const [qId, answer] of Object.entries(answers)) {
             if (answer === 'not_sure' || answer === 'No' || answer === 'No / Not sure') {
-                // Determine if this is an uncertainty trigger
                 if (primaryItem?.uncertainty_prone) {
                     if (primaryItem?.uncertainty_handling === 'BUFFER') {
                         extraMinutes += primaryItem.risk_buffer_minutes || 0;
@@ -47,8 +45,14 @@ export async function POST(
         }
 
         const effectiveMinutes = visit.base_minutes + extraMinutes;
-        let finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
-        const finalPrice = calculatePrice(finalTier, visit.item_class);
+
+        // Get pricing ladder from excelSource
+        const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
+        const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
+
+        const { tier: finalTier, price: finalPrice } = forceH3
+            ? { tier: 'H3', price: calculateTierAndPrice(150, ladder).price } // Force H3 price
+            : calculateTierAndPrice(effectiveMinutes, ladder);
 
         // 2. Create ScopeSummary Contract Snapshot
         const includes_text = "This visit covers the items listed above.";

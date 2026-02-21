@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculatePrice } from '@/lib/pricing/visitEngine';
+import { calculateTierAndPrice } from '@/lib/pricing/visitEngine';
+import { excelSource } from '@/lib/pricing/excelLoader';
 
 export async function POST(
     request: Request,
@@ -26,11 +27,15 @@ export async function POST(
 
         if (action === 'UPGRADE') {
             // Logic: Upgrade to next tier (e.g. H1 -> H2) or use suggestedTier from notes
-            // Simplified: Just bump one tier for demo or use a fixed logic
-            const currentTiers = ['H1', 'H2', 'H3'];
-            const currentIndex = currentTiers.indexOf(visit.visit_tier);
-            const nextTier = currentTiers[Math.min(currentIndex + 1, 2)];
-            const nextPrice = calculatePrice(nextTier, visit.job.category); // Item class logic could be refined
+            // Simplified: Just bump by 60 mins for logic calculation
+            const currentMins = visit.effective_minutes || 60;
+            const nextMins = currentMins + 45; // Arbitrary bump to push into next tier
+
+            // Get ladder from excel
+            const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
+            const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
+
+            const { tier: nextTier, price: nextPrice } = calculateTierAndPrice(nextMins, ladder);
 
             await (prisma as any).visit.update({
                 where: { id: visitId },

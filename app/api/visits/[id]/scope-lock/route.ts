@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculateTier, calculatePrice } from '@/lib/pricing/visitEngine';
-import { getCatalogueItem } from '@/lib/pricing/catalogue';
+import { calculateTierAndPrice } from '@/lib/pricing/visitEngine';
+import { excelSource } from '@/lib/pricing/excelLoader';
 import { dispatchJob } from '@/lib/dispatch/matcher';
 import { JobStatus } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
@@ -81,12 +81,10 @@ export async function POST(
     }
 
     // Get primary item
-    const primaryItem = await getCatalogueItem(visit.primary_job_item_id);
+    const primaryItem = excelSource.jobItems.get(visit.primary_job_item_id);
 
     // Get all addon items
-    const addonItems = await Promise.all(
-      (visit.addon_job_item_ids || []).map((itemId: string) => getCatalogueItem(itemId))
-    );
+    const addonItems = (visit.addon_job_item_ids || []).map((itemId: string) => excelSource.jobItems.get(itemId));
 
     // All items in this visit (primary + addons)
     const allItems = [primaryItem, ...addonItems].filter(Boolean);
@@ -116,13 +114,18 @@ export async function POST(
       }
     }
 
-    // Calculate effective minutes: base_minutes + sum of all BUFFER risk_buffer_minutes + cleaning scalers
+    // Calculate effective minutes
     const effectiveMinutes = (visit.base_minutes ?? 0) + extraMinutes;
 
-    // Recalculate tier based on effective_minutes (unless FORCE_H3 or CLEANING)
-    let finalTier = forceH3 ? 'H3' : calculateTier(effectiveMinutes);
+    // Get ladder from excel
+    const ladder = primaryItem?.pricing_ladder || (visit.item_class === 'CLEANING' ? 'CLEANING' : 'HANDYMAN');
 
-    // CLEANING specialized tier mapping
+    // Recalculate tier based on effective_minutes (unless FORCE_H3 or CLEANING)
+    let { tier: finalTier, price: finalPrice } = forceH3
+      ? { tier: 'H3', price: calculateTierAndPrice(150, ladder).price }
+      : calculateTierAndPrice(effectiveMinutes, ladder);
+
+    // CLEANING specialized tier mapping (Override if cleaning)
     if (visit.item_class === 'CLEANING') {
       const beds = parseInt(answers.bedrooms || '1');
       const baths = parseInt(answers.bathrooms || '1');
@@ -132,11 +135,9 @@ export async function POST(
       else if (totalRooms <= 4) finalTier = 'C2';
       else finalTier = 'C3';
 
+      finalPrice = calculateTierAndPrice(effectiveMinutes, 'CLEANING').price; // Or use strict cleaning tier price
       console.log(`[ScopeLock] Cleaning Final: rooms=${totalRooms}, tier=${finalTier}`);
     }
-
-    // Recalculate price based on new tier
-    const finalPrice = calculatePrice(finalTier, visit.item_class);
 
     console.log(`[ScopeLock] Visit ${visitId}: base=${visit.base_minutes}min, extra=${extraMinutes}min, effective=${effectiveMinutes}min, tier=${finalTier}, price=£${finalPrice}`);
 

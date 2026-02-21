@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculatePrice } from '@/lib/pricing/visitEngine';
+import { getPriceByTier } from '@/lib/pricing/visitEngine';
+import { excelSource } from '@/lib/pricing/excelLoader';
 import { applyStatusChange } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
 
@@ -38,7 +39,11 @@ export async function POST(
         if (action === 'UPGRADE') {
             if (!newTier) return NextResponse.json({ error: 'New tier required for upgrade' }, { status: 400 });
 
-            const newPrice = calculatePrice(newTier, visit.item_class);
+            // Get ladder from excel
+            const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
+            const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
+
+            const newPrice = getPriceByTier(newTier, ladder);
 
             await (prisma as any).$transaction([
                 // Update Visit

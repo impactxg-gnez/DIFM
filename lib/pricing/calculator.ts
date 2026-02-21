@@ -1,7 +1,7 @@
-import { ServiceCategory, PRICE_MATRIX } from '../constants';
+import { ServiceCategory } from '../constants';
 import { parseJobDescription, PhraseMapping } from './jobParser';
-import { getCatalogue, getCatalogueItemSync } from './catalogue';
-import { calculateTier, calculatePrice } from './visitEngine';
+import { excelSource } from './excelLoader';
+import { buildVisits, calculateTierAndPrice } from './visitEngine';
 
 export interface JobItemData {
   itemType: string;
@@ -40,70 +40,52 @@ export async function calculateJobPrice(
   }
 
   try {
-    const catalogue = await getCatalogue();
+    // 1. Data Source (Excel)
+    const catalogue = Array.from(excelSource.jobItems.values());
+    const mappings = excelSource.phraseMappings;
 
-    // Load phrase mappings from DB
-    let mappings: PhraseMapping[] = [];
-    try {
-      const { prisma } = await import('../prisma');
-      mappings = await prisma.phraseMapping.findMany();
-    } catch (error) {
-      console.warn('[Calculator] Failed to load phrase mappings from DB:', error);
-    }
-
+    // 2. Parse (Excel-Driven)
     const parsed = parseJobDescription(description, catalogue, mappings);
 
-    const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {
-      const item = getCatalogueItemSync(id, catalogue);
-      const tier = calculateTier(item?.time_weight_minutes || 0);
-      const unitPrice = calculatePrice(tier, item?.item_class || 'STANDARD');
+    // 3. Visit Gen (Summation by Capability)
+    const visits = buildVisits(parsed.detectedItemIds || []);
 
-      // Map item_class to ServiceCategory proxy
-      let routeCategory = effectiveCategory;
-      if (item?.item_class === 'CLEANING') routeCategory = 'CLEANING';
+    // 4. Transform Visits back to Item list for legacy UI compatibility if needed
+    const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {
+      const item = excelSource.jobItems.get(id);
+
+      // Calculate individual item theoretical price (for breakdown display)
+      const { price } = calculateTierAndPrice(item?.default_time_weight_minutes || 0, item?.pricing_ladder || 'HANDYMAN');
 
       return {
         itemType: id,
         quantity: 1,
-        unitPrice,
-        totalPrice: unitPrice,
+        unitPrice: price,
+        totalPrice: price,
         description: item?.display_name || id,
-        routeCategory,
-        requiresCapability: (item?.required_capability_tags?.length || 0) > 0
+        routeCategory: (item?.capability_tag === 'CLEANING' ? 'CLEANING' : effectiveCategory) as ServiceCategory,
+        requiresCapability: (item?.capability_tag !== 'HANDYMAN')
       };
     });
 
-    // Enforce GENERAL_HOUR guardrail (max 2)
-    const generalHourCount = items.filter((i) => i.itemType === 'GENERAL_HOUR').length;
-    const routingNotes: string[] = [];
-    if (generalHourCount > 2) {
-      routingNotes.push('GENERAL_HOUR exceeded (max 2) - escalate to half day');
-    }
-
-    let totalPrice = items.reduce((sum, item) => sum + item.totalPrice, 0);
-
-    const needsReview =
-      parsed.confidence < 0.7 ||
-      generalHourCount > 2;
+    const totalPrice = visits.reduce((sum, v) => sum + v.price, 0);
 
     return {
       totalPrice,
       items,
-      needsReview,
+      needsReview: parsed.confidence < 0.7,
       usedFallback: parsed.confidence === 0,
       confidence: parsed.confidence,
       primaryCategory: (items[0]?.routeCategory || effectiveCategory) as ServiceCategory,
-      routingNotes,
-      visits: [], // visits generated separately in V1 flow
+      routingNotes: [],
+      visits,
     };
   } catch (error) {
     console.error('Pricing calculation error:', error);
-
-    // Fallback to fixed pricing on error
     return {
-      totalPrice: PRICE_MATRIX[category],
+      totalPrice: 0,
       items: [],
-      needsReview: true, // Flag for admin review due to error
+      needsReview: true,
       usedFallback: true,
       confidence: 0,
       primaryCategory: effectiveCategory,

@@ -1,7 +1,6 @@
-import { getCatalogue } from './catalogue';
+import { excelSource } from './excelLoader';
 import { parseJobDescription } from './jobParser';
 import { buildVisits, GeneratedVisit } from './visitEngine';
-import { prisma } from '../prisma';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -50,21 +49,14 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         };
     }
 
-    // 2. Fetch Data (Catalogue + Phrase Mappings)
-    const [catalogue, phraseMappings] = await Promise.all([
-        getCatalogue(),
-        prisma.phraseMapping.findMany()
-    ]);
+    // 2. Load Data from Excel (Runtime cache)
+    const catalogue = Array.from(excelSource.jobItems.values());
+    const phraseMappings = excelSource.phraseMappings;
 
-    // 3. Parse Description using V1 Baseline Mapping
+    // 3. Parse Description using V1 Baseline Mapping (Excel-Driven)
     const parseResult = parseJobDescription(description, catalogue, phraseMappings);
 
-    // 4. Resolve detected IDs to full items
-    const detectedItems = parseResult.detectedItemIds
-        .map((id: string) => catalogue.find((c: any) => c.job_item_id === id))
-        .filter((item): item is NonNullable<typeof item> => !!item);
-
-    if (detectedItems.length === 0) {
+    if (parseResult.detectedItemIds.length === 0) {
         return {
             visits: [],
             totalPrice: 0,
@@ -76,13 +68,13 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         };
     }
 
-    // 5. Build Visits (Capability-Aware Summation & Split)
-    const visits = buildVisits(detectedItems);
+    // 4. Build Visits (Capability-Aware Summation & Split)
+    const visits = buildVisits(parseResult.detectedItemIds);
 
-    // 6. Final Aggregation
+    // 5. Final Aggregation
     const totalPrice = visits.reduce((sum, v) => sum + v.price, 0);
 
-    // Determination of Primary Category based on largest visit or first visit
+    // Determination of Primary Category
     let primaryCategory = 'HANDYMAN';
     if (visits.length > 0) {
         const first = visits[0];
@@ -92,19 +84,19 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         else if (first.item_class === 'SPECIALIST') primaryCategory = 'SPECIALIST';
     }
 
-    // 7. Clarifier Binding
+    // 6. Clarifier Binding (Excel-Driven)
     const allClarifierIds = new Set<string>();
-    detectedItems.forEach((item: any) => {
-        if (item.clarifier_ids) {
-            item.clarifier_ids.forEach((id: string) => allClarifierIds.add(id));
+    parseResult.detectedItemIds.forEach((id: string) => {
+        const item = excelSource.jobItems.get(id);
+        if (item?.clarifier_ids) {
+            item.clarifier_ids.forEach((cId: string) => allClarifierIds.add(cId));
         }
     });
 
-    const clarifiers = await prisma.clarifierLibrary.findMany({
-        where: {
-            tag: { in: Array.from(allClarifierIds) }
-        }
-    });
+    const clarifiers = Array.from(allClarifierIds).map(id => ({
+        tag: id,
+        question: excelSource.clarifierLibrary.get(id) || `Please provide details for ${id}`
+    }));
 
     return {
         visits,
