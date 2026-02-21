@@ -50,11 +50,11 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     }
 
     // 2. Load Data from Excel (Runtime cache)
-    const catalogue = Array.from(excelSource.jobItems.values());
-    const phraseMappings = excelSource.phraseMappings;
+    // const catalogue = Array.from(excelSource.jobItems.values()); // No longer used
+    // const phraseMappings = excelSource.phraseMappings; // No longer used
 
-    // 3. Parse Description using V1 Baseline Mapping (Excel-Driven)
-    const parseResult = parseJobDescription(description, catalogue, phraseMappings);
+    // 3. Parse Description using V1 Rule-Based Detection (Job_Item_Rules)
+    const parseResult = await parseJobDescription(description, excelSource.jobItemRules);
 
     if (parseResult.detectedItemIds.length === 0) {
         return {

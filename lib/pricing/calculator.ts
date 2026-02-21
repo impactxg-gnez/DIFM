@@ -1,5 +1,5 @@
 import { ServiceCategory } from '../constants';
-import { parseJobDescription, PhraseMapping } from './jobParser';
+import { parseJobDescription } from './jobParser';
 import { excelSource } from './excelLoader';
 import { buildVisits, calculateTierAndPrice } from './visitEngine';
 
@@ -40,12 +40,8 @@ export async function calculateJobPrice(
   }
 
   try {
-    // 1. Data Source (Excel)
-    const catalogue = Array.from(excelSource.jobItems.values());
-    const mappings = excelSource.phraseMappings;
-
-    // 2. Parse (Excel-Driven)
-    const parsed = parseJobDescription(description, catalogue, mappings);
+    // 2. Parse (Rule-Based)
+    const parsed = await parseJobDescription(description, excelSource.jobItemRules);
 
     // 3. Visit Gen (Summation by Capability)
     const visits = buildVisits(parsed.detectedItemIds || []);

@@ -34,6 +34,13 @@ export interface ClarifierExcel {
     question: string;
 }
 
+export interface JobItemRuleExcel {
+    job_item_id: string;
+    include: string[];
+    optional: string[];
+    exclude: string[];
+}
+
 class ExcelSource {
     private static instance: ExcelSource;
     private filePath: string;
@@ -42,6 +49,7 @@ class ExcelSource {
     private _jobItems: Map<string, JobItemExcel> = new Map();
     private _pricingTiers: Map<string, PricingTierExcel[]> = new Map(); // ladder -> tiers
     private _clarifierLibrary: Map<string, string> = new Map(); // id -> question
+    private _jobItemRules: Map<string, JobItemRuleExcel> = new Map();
 
     private loaded = false;
 
@@ -77,6 +85,11 @@ class ExcelSource {
         return this._clarifierLibrary;
     }
 
+    public get jobItemRules() {
+        this.ensureLoaded();
+        return this._jobItemRules;
+    }
+
     public ensureLoaded() {
         if (!this.loaded) {
             this.load();
@@ -100,7 +113,7 @@ class ExcelSource {
         try {
             const workbook = XLSX.readFile(this.filePath);
 
-            // 1. Phrase_Mapping
+            // 1. Phrase_Mapping (Legacy/Keep for now)
             const phraseSheet = workbook.Sheets['Phrase_Mapping'];
             if (phraseSheet) {
                 const data = XLSX.utils.sheet_to_json(phraseSheet);
@@ -165,10 +178,28 @@ class ExcelSource {
                 console.log(`[ExcelSource] Loaded ${this._clarifierLibrary.size} clarifiers`);
             }
 
+            // 5. Job_Item_Rules (New Tab)
+            const rulesSheet = workbook.Sheets['Job_Item_Rules'];
+            if (rulesSheet) {
+                const data = XLSX.utils.sheet_to_json(rulesSheet);
+                this._jobItemRules.clear();
+                data.forEach((row: any) => {
+                    const id = row.canonical_job_item_id || row.job_item_id;
+                    if (id) {
+                        this._jobItemRules.set(id, {
+                            job_item_id: id,
+                            include: (row.include || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean),
+                            optional: (row.optional || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean),
+                            exclude: (row.exclude || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+                        });
+                    }
+                });
+                console.log(`[ExcelSource] Loaded ${this._jobItemRules.size} job item rules`);
+            }
+
             this.loaded = true;
         } catch (error) {
             console.error(`[ExcelSource] Failed to load excel file:`, error);
-            // Don't set loaded=true so it can retry later if it was a lock issue
         }
     }
 }
