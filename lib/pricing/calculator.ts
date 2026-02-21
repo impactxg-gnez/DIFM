@@ -1,5 +1,5 @@
 import { ServiceCategory, PRICE_MATRIX } from '../constants';
-import { parseJobDescription } from './jobParser';
+import { parseJobDescription, PhraseMapping } from './jobParser';
 import { getCatalogue, getCatalogueItemSync } from './catalogue';
 import { calculateTier, calculatePrice } from './visitEngine';
 
@@ -42,25 +42,16 @@ export async function calculateJobPrice(
   try {
     const catalogue = await getCatalogue();
 
-    // Load patterns from DB (optional, falls back to hardcoded patterns if DB fails)
-    let dbPatterns: any[] | undefined;
+    // Load phrase mappings from DB
+    let mappings: PhraseMapping[] = [];
     try {
       const { prisma } = await import('../prisma');
-      const patterns = await prisma.jobPattern.findMany({
-        where: { isActive: true },
-        orderBy: { priority: 'desc' }
-      });
-      dbPatterns = patterns.map(p => ({
-        keywords: typeof p.keywords === 'string' ? JSON.parse(p.keywords) : p.keywords,
-        itemId: p.catalogueItemId,
-        description: p.description
-      }));
+      mappings = await prisma.phraseMapping.findMany();
     } catch (error) {
-      console.warn('[Calculator] Failed to load patterns from DB, using hardcoded patterns:', error);
-      // Continue with hardcoded patterns
+      console.warn('[Calculator] Failed to load phrase mappings from DB:', error);
     }
 
-    const parsed = parseJobDescription(description, catalogue, dbPatterns);
+    const parsed = parseJobDescription(description, catalogue, mappings);
 
     const items: JobItemData[] = (parsed.detectedItemIds || []).map((id) => {
       const item = getCatalogueItemSync(id, catalogue);
