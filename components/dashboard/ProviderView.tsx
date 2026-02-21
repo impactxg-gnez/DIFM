@@ -160,6 +160,25 @@ export function ProviderView({ user }: { user: any }) {
         }
     };
 
+    const declineJob = async (jobId: string) => {
+        if (!window.confirm('Are you sure you want to decline this job? You will not be able to accept it later if you do.')) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/decline`, {
+                method: 'POST'
+            });
+            if (res.ok) {
+                mutate();
+            } else {
+                const err = await res.json();
+                alert(`Failed to decline: ${err.error}`);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     const confirmArrival = async (jobId: string) => {
         await fetch(`/api/jobs/${jobId}/status`, {
             method: 'POST',
@@ -524,7 +543,14 @@ export function ProviderView({ user }: { user: any }) {
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <Button onClick={() => acceptJob(job.id)} className="flex-1 font-bold">Accept Job</Button>
+                            <Button onClick={() => acceptJob(job.id)} className="flex-1 font-bold bg-blue-600 hover:bg-blue-700">Accept</Button>
+                            <Button
+                                variant="outline"
+                                className="flex-1 border-white/10 hover:bg-white/5 bg-zinc-800/50"
+                                onClick={() => declineJob(job.id)}
+                            >
+                                Decline
+                            </Button>
                             <Button
                                 variant="outline"
                                 className="border-red-500/30 text-red-500 hover:bg-red-500/10"

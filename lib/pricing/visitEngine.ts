@@ -92,225 +92,89 @@ function inferVisitTypeLabel(itemClass: GeneratedVisit['item_class'], capability
 }
 
 /**
- * Core Algorithm: Visit Generation
- * 1. Isolate CLEANING -> one visit per item
- * 2. Isolate SPECIALIST -> one visit per item
- * 3. Bundle STANDARD -> Visits (Greedy pack)
+ * Core Algorithm: V1 Baseline Visit Generation
+ * 1. Group items by capability_tag.
+ * 2. For each capability group:
+ *    - Sum default_minutes.
+ *    - Recalculate Tier and Price once for the group.
+ * 3. Return separate visits for each capability.
  */
 export function buildVisits(items: CatalogueItem[]): GeneratedVisit[] {
-    const cleaning = items.filter(i => i.item_class === 'CLEANING');
-    const specialist = items.filter(i => i.item_class === 'SPECIALIST');
-    const standard = items.filter(i => i.item_class === 'STANDARD');
-
     const visits: GeneratedVisit[] = [];
 
-    // 1. Cleaning: Isolated, one visit per item
-    for (const item of cleaning) {
-        // Cleaning items should NOT be split by the standard H3 (150min) rule in V1.
-        // They are priced via C1/C2/C3 logic or per-item catalog price.
-        visits.push(createSingleItemVisit(item));
+    // Group by capability_tag
+    const groups: Record<string, CatalogueItem[]> = {};
+
+    for (const item of items) {
+        const tag = item.capability_tag || 'HANDYMAN';
+        if (!groups[tag]) groups[tag] = [];
+        groups[tag].push(item);
     }
 
-    // 2. Specialist: Isolated, one visit per item
-    for (const item of specialist) {
-        // Specialist items usually have a fixed price/cert scope; avoid splitting unless strictly requested.
-        visits.push(createSingleItemVisit(item));
-    }
+    for (const [tag, groupItems] of Object.entries(groups)) {
+        // Special classes still handled separately within their capability visit if needed,
+        // but spec implies grouping by tag.
 
-    // 3. Standard: Bundle
-    visits.push(...bundleStandard(standard));
+        // If it's CLEANING or SPECIALIST, we might still want isolated visits, 
+        // but the spec says "Capability grouping" + "Minute summation before tiering".
+        // I'll follow the spec strictly: sum per capability.
+
+        const totalMinutes = groupItems.reduce((sum, i) => sum + (i.default_minutes || i.time_weight_minutes), 0);
+
+        // Split if totalMinutes > 150? The spec doesn't explicitly mention splitting large bundles,
+        // but usually we don't want a single visit > 150m.
+        // However, "Tier AFTER Summation" implies one price for the bunch.
+
+        if (totalMinutes > TIER_THRESHOLDS.H3) {
+            // Split into multiple visits of the same capability
+            const numVisits = Math.ceil(totalMinutes / TIER_THRESHOLDS.H3);
+            const minsPerVisit = Math.floor(totalMinutes / numVisits);
+
+            for (let i = 0; i < numVisits; i++) {
+                const currentMins = i === numVisits - 1 ? totalMinutes - (minsPerVisit * i) : minsPerVisit;
+                visits.push(createGroupVisit(tag, groupItems, currentMins, i === 0));
+            }
+        } else {
+            visits.push(createGroupVisit(tag, groupItems, totalMinutes, true));
+        }
+    }
 
     return visits;
 }
 
-function createSingleItemVisit(item: CatalogueItem): GeneratedVisit {
-    const tier = calculateTier(item.time_weight_minutes);
-    const requiredCaps = item.required_capability_tags || [];
-    const visitTypeLabel = inferVisitTypeLabel(item.item_class as any, requiredCaps);
-    const itemPrice = calculatePrice(tier, item.item_class);
+function createGroupVisit(capability: string, items: CatalogueItem[], groupMinutes: number, isFirst: boolean): GeneratedVisit {
+    const primary = items[0];
+    const addons = isFirst ? items.slice(1) : []; // Distribute items logic? 
+    // Usually we just want to show all items in the visit(s) generated.
+
+    // Simplify: Put all items in the first visit if split, or just distribute.
+    // For now, I'll put all items in the first visit's label/metadata, and just the time in others.
+
+    const tier = calculateTier(groupMinutes) as any;
+    const itemClass = primary.item_class as any;
+    const price = calculatePrice(tier, itemClass);
+    const visitTypeLabel = inferVisitTypeLabel(itemClass, [capability]);
+
     return {
         visit_id: '',
-        item_class: item.item_class as any,
+        item_class: itemClass,
         visit_type_label: visitTypeLabel,
         primary_job_item: {
-            job_item_id: item.job_item_id,
-            display_name: item.display_name,
-            time_weight_minutes: item.time_weight_minutes,
+            job_item_id: primary.job_item_id,
+            display_name: primary.display_name,
+            time_weight_minutes: primary.default_minutes || primary.time_weight_minutes,
         },
-        addon_job_items: [],
-        required_capability_tags: requiredCaps,
-        total_minutes: item.time_weight_minutes,
-        tier: tier as any,
-        price: itemPrice,
-        item_prices: [itemPrice], // Track individual item price
+        addon_job_items: (isFirst ? items.slice(1) : []).map(i => ({
+            job_item_id: i.job_item_id,
+            display_name: i.display_name,
+            time_weight_minutes: i.default_minutes || i.time_weight_minutes,
+        })),
+        required_capability_tags: [capability],
+        total_minutes: groupMinutes,
+        tier: tier,
+        price: price,
+        item_prices: [price],
     };
 }
 
-function bundleStandard(items: CatalogueItem[]): GeneratedVisit[] {
-    // Greedy packing algorithm: sort by time descending, pack into existing visits first
-    const sorted = [...items].sort((a, b) => b.time_weight_minutes - a.time_weight_minutes);
-    const visits: GeneratedVisit[] = [];
-
-    console.log(`[VisitEngine] bundleStandard: Processing ${items.length} items`);
-
-    for (const item of sorted) {
-        // Handle items that exceed H3 threshold (>150 minutes) - split them
-        if (item.time_weight_minutes > TIER_THRESHOLDS.H3) {
-            const splitVisits = splitLargeItem(item);
-            visits.push(...splitVisits);
-            console.log(`[VisitEngine] Split large item ${item.job_item_id} (${item.time_weight_minutes}min) into ${splitVisits.length} visits`);
-            continue;
-        }
-
-        // Try to add item to an existing visit (greedy packing)
-        let placed = false;
-        for (const v of visits) {
-            if (canAdd(item, v)) {
-                addToVisit(item, v);
-                placed = true;
-                console.log(`[VisitEngine] Added ${item.job_item_id} (${item.time_weight_minutes}min) to existing visit (total: ${v.total_minutes}min, items: ${1 + v.addon_job_items.length})`);
-                break; // Stop searching once placed
-            }
-        }
-
-        // Only create new visit if item couldn't be added to any existing visit
-        if (!placed) {
-            const newVisit = createSingleItemVisit(item);
-            visits.push(newVisit);
-            console.log(`[VisitEngine] Created new visit for ${item.job_item_id} (${item.time_weight_minutes}min)`);
-        }
-    }
-
-    console.log(`[VisitEngine] bundleStandard: Created ${visits.length} visits from ${items.length} items`);
-    return visits;
-}
-
-function splitLargeItem(item: CatalogueItem): GeneratedVisit[] {
-    // For items >150min, create multiple visits
-    const visits: GeneratedVisit[] = [];
-    const numVisits = Math.ceil(item.time_weight_minutes / TIER_THRESHOLDS.H3);
-    const requiredCaps = item.required_capability_tags || [];
-    const visitTypeLabel = inferVisitTypeLabel(item.item_class as any, requiredCaps);
-
-    for (let i = 0; i < numVisits; i++) {
-        const remainingMinutes = item.time_weight_minutes - (i * TIER_THRESHOLDS.H3);
-        const visitMinutes = Math.min(TIER_THRESHOLDS.H3, remainingMinutes);
-
-        const tier = calculateTier(visitMinutes);
-        const itemPrice = calculatePrice(tier, item.item_class);
-        const visit: GeneratedVisit = {
-            visit_id: '',
-            item_class: item.item_class as any,
-            visit_type_label: visitTypeLabel,
-            primary_job_item: {
-                job_item_id: item.job_item_id,
-                display_name: item.display_name,
-                time_weight_minutes: item.time_weight_minutes,
-            },
-            addon_job_items: [],
-            required_capability_tags: requiredCaps,
-            total_minutes: visitMinutes,
-            tier: tier as any,
-            price: itemPrice,
-            item_prices: [itemPrice], // Track individual item price
-        };
-        visits.push(visit);
-    }
-
-    return visits;
-}
-
-function canAdd(item: CatalogueItem, visit: GeneratedVisit): boolean {
-    // Rule 1: Only STANDARD items can be bundled together
-    if (visit.item_class !== 'STANDARD') {
-        console.log(`[VisitEngine] canAdd: REJECTED - visit.item_class is ${visit.item_class}, not STANDARD`);
-        return false;
-    }
-
-    // Rule 2: Item must be allowed as addon
-    if (item.allowed_addon === false) {
-        console.log(`[VisitEngine] canAdd: REJECTED - ${item.job_item_id} has allowed_addon=false`);
-        return false;
-    }
-
-    // Rule 3: Capability compatibility check - single provider must handle all capabilities
-    const itemCaps = new Set(item.required_capability_tags || []);
-    const visitCaps = new Set(visit.required_capability_tags || []);
-    const allCaps = new Set([...itemCaps, ...visitCaps]);
-
-    if (!canProviderHandleAll(allCaps)) {
-        console.log(`[VisitEngine] canAdd: REJECTED - capability mismatch. Item: [${Array.from(itemCaps).join(', ')}], Visit: [${Array.from(visitCaps).join(', ')}]`);
-        return false;
-    }
-
-    // Rule 4: Total minutes must not exceed 150 (H3 max)
-    const newMinutes = visit.total_minutes + item.time_weight_minutes;
-    if (newMinutes > TIER_THRESHOLDS.H3) {
-        console.log(`[VisitEngine] canAdd: REJECTED - time limit exceeded. Visit: ${visit.total_minutes}min, Item: ${item.time_weight_minutes}min, Total: ${newMinutes}min > ${TIER_THRESHOLDS.H3}min`);
-        return false;
-    }
-
-    // Rule 5: Item count must not exceed tier limit for the new tier
-    const newTier = calculateTier(newMinutes);
-    // Count: 1 primary item + existing addon items + 1 new addon item
-    const currentItemCount = 1 + visit.addon_job_items.length; // primary + existing addons
-    const newItemCount = currentItemCount + 1; // add the new item
-
-    if (newItemCount > TIER_ITEM_CAPS[newTier]) {
-        console.log(`[VisitEngine] canAdd: REJECTED - item count limit exceeded. Current: ${currentItemCount}, New: ${newItemCount}, Tier: ${newTier}, Limit: ${TIER_ITEM_CAPS[newTier]}`);
-        return false;
-    }
-
-    // All rules passed - item can be added
-    console.log(`[VisitEngine] canAdd: ACCEPTED - ${item.job_item_id} can be added to visit (${visit.total_minutes}min + ${item.time_weight_minutes}min = ${newMinutes}min, ${currentItemCount} + 1 = ${newItemCount} items, tier: ${newTier})`);
-    return true;
-}
-
-function canProviderHandleAll(caps: Set<string>): boolean {
-    // Check if a single provider type can handle all capabilities
-    if (caps.size === 0) return true;
-    if (caps.size === 1) return true;
-
-    const capsArray = Array.from(caps);
-
-    // HANDYMAN can do basic tasks but not specialized work
-    if (capsArray.includes('HANDYMAN')) {
-        const specialized = ['PLUMBING', 'ELECTRICAL', 'PAINTER', 'CLEANING'];
-        return !capsArray.some(c => specialized.includes(c));
-    }
-
-    // Specialized capabilities can't mix with each other
-    const specialized = ['PLUMBING', 'ELECTRICAL', 'PAINTER', 'CLEANING'];
-    const specializedCount = capsArray.filter(c => specialized.includes(c)).length;
-    return specializedCount <= 1;
-}
-
-function addToVisit(item: CatalogueItem, visit: GeneratedVisit) {
-    visit.addon_job_items.push({
-        job_item_id: item.job_item_id,
-        display_name: item.display_name,
-        time_weight_minutes: item.time_weight_minutes,
-    });
-    visit.total_minutes += item.time_weight_minutes;
-    visit.required_capability_tags = Array.from(new Set([...visit.required_capability_tags, ...(item.required_capability_tags || [])]));
-    visit.visit_type_label = inferVisitTypeLabel(visit.item_class, visit.required_capability_tags);
-
-    // Calculate individual item price based on its own tier
-    const itemTier = calculateTier(item.time_weight_minutes);
-    const itemPrice = calculatePrice(itemTier, item.item_class);
-
-    // Initialize item_prices array if not present
-    if (!visit.item_prices) {
-        // If visit was created without item_prices, estimate from current price
-        visit.item_prices = [visit.price];
-    }
-
-    // Add the new item's price to the array
-    visit.item_prices.push(itemPrice);
-
-    // Sum all individual item prices instead of recalculating by tier
-    visit.price = visit.item_prices.reduce((sum, p) => sum + p, 0);
-
-    // Update tier based on total minutes (for display/logging purposes)
-    visit.tier = calculateTier(visit.total_minutes) as any;
-}
+// Greedy packing logic removed in favor of capability-aware summation per spec.

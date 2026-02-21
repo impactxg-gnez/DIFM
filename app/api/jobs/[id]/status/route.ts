@@ -237,9 +237,53 @@ export async function POST(
                     throw new Error('This job has already been accepted by another provider.');
                 }
 
+                // 🟢 NEW: Automated Authorization for Unflagged Jobs
+                let finalStatus: JobStatus = 'ASSIGNED';
+                const isUnflagged = job.flaggedById === null;
+
+                if (isUnflagged) {
+                    await tx.job.update({
+                        where: { id },
+                        data: {
+                            status: 'PREAUTHORISED',
+                            statusUpdatedAt: now
+                        }
+                    });
+                    finalStatus = 'PREAUTHORISED';
+                    console.log(`[Auto-Auth] Job ${id} automatically pre-authorized (unflagged stable case)`);
+                }
+
                 // Fetch the updated job
                 updatedJob = await tx.job.findUnique({ where: { id } });
                 if (!updatedJob) throw new Error('Failed to fetch updated job');
+
+                // Create state change for ASSIGNED (mandatory)
+                await tx.jobStateChange.create({
+                    data: {
+                        jobId: id,
+                        fromStatus: currentStatus,
+                        toStatus: 'ASSIGNED',
+                        reason: 'Job accepted by provider',
+                        changedById: userId,
+                        changedByRole: userRole,
+                    },
+                });
+
+                // If auto-authorized, create second state change
+                if (finalStatus === 'PREAUTHORISED') {
+                    await tx.jobStateChange.create({
+                        data: {
+                            jobId: id,
+                            fromStatus: 'ASSIGNED',
+                            toStatus: 'PREAUTHORISED',
+                            reason: 'System: Automated authorization for stable job',
+                            changedById: 'SYSTEM',
+                            changedByRole: 'SYSTEM',
+                        },
+                    });
+                }
+
+                status = finalStatus; // Update local status for the response
             } else {
                 updatedJob = await tx.job.update({
                     where: { id },

@@ -111,8 +111,10 @@ model Job {
   
   // Sequential Assignment (Step 5)
   offeredToId String?
+  offeredToIds String[] @default([])
   offeredAt   DateTime?
   triedProviderIds String? // Comma-separated list of provider IDs who have been offered the job
+  declinedProviderIds String[] @default([])
   
   // Arrival & Timer (Step 5)
   arrivalWindowStart DateTime?
@@ -285,7 +287,15 @@ model CatalogueItem {
   display_name            String
   item_class              String   // "STANDARD", "CLEANING", "SPECIALIST"
   
-  required_capability_tags String[] // Postgres array
+  required_capability_tags String[] // Legacy - delete after migration
+  
+  // Pilot Matrix Baseline Wiring
+  capability_tag          String?
+  default_minutes         Int       @default(0)
+  pricing_ladder          String    @default("STANDARD")
+  clarifier_ids           String[]  @default([])
+  admin_review_flag       Boolean   @default(false)
+
   time_weight_minutes     Int
   
   allowed_addon           Boolean
@@ -397,4 +407,24 @@ model JobPattern {
   
   @@index([category])
   @@index([catalogueItemId])
+}
+
+model PhraseMapping {
+  id                    String   @id @default(uuid())
+  phrase                String   @unique
+  canonical_job_item_id String
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([phrase])
+}
+
+model ClarifierLibrary {
+  id        String   @id @default(uuid())
+  tag       String   @unique
+  question  String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

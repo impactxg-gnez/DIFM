@@ -196,11 +196,17 @@ export async function GET(request: Request) {
                 orConditions.push({
                     AND: [
                         { status: 'ASSIGNING' },
-                        { offeredToId: userId }
+                        {
+                            OR: [
+                                { offeredToId: userId },
+                                { offeredToIds: { has: userId } }
+                            ]
+                        },
+                        { NOT: { declinedProviderIds: { has: userId } } }
                     ]
                 });
 
-                console.log(`[Jobs API] Provider ${userId} - sequential mode, showing ASSIGNING jobs offered to them`);
+                console.log(`[Jobs API] Provider ${userId} - offering logic (exclusive of declines)`);
             }
 
             whereClause.OR = orConditions;

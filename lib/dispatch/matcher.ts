@@ -9,6 +9,18 @@ export interface JobMatchResult {
   providerId: string;
   providerType: 'HANDYMAN' | 'SPECIALIST';
   matchReason: string;
+  distance?: number;
+}
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 /**
@@ -82,10 +94,16 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
       }
 
       if (canHandle) {
+        let distance: number | undefined;
+        if (job.latitude && job.longitude && handyman.latitude && handyman.longitude) {
+          distance = calculateDistance(job.latitude, job.longitude, handyman.latitude, handyman.longitude);
+        }
+
         matches.push({
           providerId: handyman.id,
           providerType: 'HANDYMAN',
-          matchReason
+          matchReason,
+          distance
         });
       }
     }
@@ -99,39 +117,53 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
 
     if (specialistCategories.includes('CLEANING')) {
       if (job.category === 'CLEANING') {
+        let isMatch = false;
+        let matchReason = 'Cleaner - general cleaning job';
+
         if (primaryCapability && primaryCapability.startsWith('C-')) {
           if (specialistCapabilities.includes(primaryCapability)) {
-            matches.push({
-              providerId: specialist.id,
-              providerType: 'SPECIALIST',
-              matchReason: `Cleaner with ${primaryCapability} capability`
-            });
+            isMatch = true;
+            matchReason = `Cleaner with ${primaryCapability} capability`;
           }
         } else {
+          isMatch = true;
+        }
+
+        if (isMatch) {
+          let distance: number | undefined;
+          if (job.latitude && job.longitude && specialist.latitude && specialist.longitude) {
+            distance = calculateDistance(job.latitude, job.longitude, specialist.latitude, specialist.longitude);
+          }
           matches.push({
             providerId: specialist.id,
             providerType: 'SPECIALIST',
-            matchReason: 'Cleaner - general cleaning job'
+            matchReason,
+            distance
           });
         }
       }
     } else {
       if (job.category && specialistCategories.includes(job.category)) {
+        let distance: number | undefined;
+        if (job.latitude && job.longitude && specialist.latitude && specialist.longitude) {
+          distance = calculateDistance(job.latitude, job.longitude, specialist.latitude, specialist.longitude);
+        }
         matches.push({
           providerId: specialist.id,
           providerType: 'SPECIALIST',
-          matchReason: `Specialist - ${job.category}`
+          matchReason: `Specialist - ${job.category}`,
+          distance
         });
       }
     }
   }
 
-  // Deterministic sort: Handymen first (they are already first in our loops, but let's be explicit)
-  // Then by rating (placeholder) or ID for consistency
+  // Rolling Sort: Closest first
   return matches.sort((a, b) => {
-    if (a.providerType === 'HANDYMAN' && b.providerType !== 'HANDYMAN') return -1;
-    if (a.providerType !== 'HANDYMAN' && b.providerType === 'HANDYMAN') return 1;
-    return a.providerId.localeCompare(b.providerId);
+    // If distance is unknown, move to end
+    if (a.distance === undefined) return 1;
+    if (b.distance === undefined) return -1;
+    return a.distance - b.distance;
   });
 }
 
@@ -156,34 +188,38 @@ export async function advanceSequentialDispatch(jobId: string): Promise<string |
       return null;
     }
 
-    const triedIds = job.triedProviderIds ? job.triedProviderIds.split(',').filter(Boolean) : [];
+    const offeredIds = (job as any).offeredToIds || [];
+    const declinedIds = (job as any).declinedProviderIds || [];
+    const flaggedById = job.flaggedById;
 
-    // Find the next provider who hasn't been tried yet
-    const nextMatch = matches.find(m => !triedIds.includes(m.providerId));
+    // Find the next provider who hasn't been offered yet AND hasn't declined AND hasn't flagged
+    const nextMatch = matches.find(m =>
+      !offeredIds.includes(m.providerId) &&
+      !declinedIds.includes(m.providerId) &&
+      m.providerId !== flaggedById
+    );
 
     if (!nextMatch) {
-      console.log(`[Dispatch] All matching providers (${triedIds.length}) have been tried for job ${jobId}.`);
-      await tx.job.update({
-        where: { id: jobId },
-        data: { status: 'RESCHEDULE_REQUIRED', statusUpdatedAt: new Date() }
-      });
+      if (offeredIds.length >= matches.length) {
+        console.log(`[Dispatch] All eligible providers (${matches.length}) have been offered job ${jobId}.`);
+      }
       return null;
     }
 
     const now = new Date();
-    const updatedTriedIds = [...triedIds, nextMatch.providerId].join(',');
+    const updatedOfferedIds = [...offeredIds, nextMatch.providerId];
 
     await tx.job.update({
       where: { id: jobId },
       data: {
         offeredToId: nextMatch.providerId,
+        offeredToIds: updatedOfferedIds,
         offeredAt: now,
-        triedProviderIds: updatedTriedIds,
-        statusUpdatedAt: now // Refresh timestamp for 10s countdown
-      }
+        statusUpdatedAt: now
+      } as any
     });
 
-    console.log(`[Dispatch] Sequential offer sent to ${nextMatch.providerId} for job ${jobId} (Attempt ${triedIds.length + 1})`);
+    console.log(`[Dispatch] Rolling offer expanded to ${nextMatch.providerId} for job ${jobId}. Total recipients: ${updatedOfferedIds.length}`);
     return nextMatch.providerId;
   });
 }
@@ -195,14 +231,14 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job) return null;
 
-  // If already assigning with an active offer, don't restart unless requested
-  if (job.status === 'ASSIGNING' && job.offeredToId && job.offeredAt) {
+  // Rolling mode: If already assigning, check if 10s passed since LAST offer
+  if (job.status === 'ASSIGNING' && job.offeredAt) {
     const offerAge = (Date.now() - new Date(job.offeredAt).getTime()) / 1000;
     if (offerAge < 10) {
-      return job.offeredToId; // Offer still valid
+      return job.offeredToId; // Still within the 10s window of the LAST offer
     }
   }
 
-  // Advance to next or first provider
+  // Expand to next provider
   return advanceSequentialDispatch(jobId);
 }

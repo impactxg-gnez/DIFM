@@ -9,42 +9,24 @@ const CATALOGUE_ITEMS = [
         job_item_id: 'tv_mount_standard',
         display_name: 'Mount TV on wall (up to 55")',
         item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
-        time_weight_minutes: 45,
+        capability_tag: 'HANDYMAN',
+        default_minutes: 45,
+        pricing_ladder: 'STANDARD',
+        time_weight_minutes: 45, // Legacy compatibility
         allowed_addon: true,
         uncertainty_prone: true,
         uncertainty_handling: 'BUFFER',
         risk_buffer_minutes: 30,
-        notes: 'Studs/solid wall unknown'
+        notes: 'Studs/solid wall unknown',
+        clarifier_ids: ['tv_bracket_check']
     },
     {
-        job_item_id: 'tv_mount_large',
-        display_name: 'Mount Large TV (>55")',
+        job_item_id: 'cable_concealment',
+        display_name: 'Hide cables (Trunking/Behind wall)',
         item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
-        time_weight_minutes: 60,
-        allowed_addon: true,
-        uncertainty_prone: true,
-        uncertainty_handling: 'BUFFER',
-        risk_buffer_minutes: 30,
-    },
-    {
-        job_item_id: 'mirror_hang',
-        display_name: 'Hang a mirror',
-        item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
-        time_weight_minutes: 15,
-        allowed_addon: true,
-        uncertainty_prone: false,
-        uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0,
-        notes: 'Simple mirror, standard fixings'
-    },
-    {
-        job_item_id: 'shelf_install_single',
-        display_name: 'Install single shelf',
-        item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
+        capability_tag: 'HANDYMAN',
+        default_minutes: 30,
+        pricing_ladder: 'STANDARD',
         time_weight_minutes: 30,
         allowed_addon: true,
         uncertainty_prone: true,
@@ -52,26 +34,30 @@ const CATALOGUE_ITEMS = [
         risk_buffer_minutes: 15,
     },
     {
-        job_item_id: 'curtain_rail_standard',
-        display_name: 'Install curtain rail (up to 2m)',
+        job_item_id: 'wall_hole_fill',
+        display_name: 'Fill small holes / Plaster patch',
         item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
-        time_weight_minutes: 45,
-        allowed_addon: true,
-        uncertainty_prone: true,
-        uncertainty_handling: 'BUFFER',
-        risk_buffer_minutes: 15
-    },
-    {
-        job_item_id: 'pic_hang',
-        display_name: 'Hang Picture / Frame',
-        item_class: 'STANDARD',
-        required_capability_tags: ['HANDYMAN'],
-        time_weight_minutes: 10,
+        capability_tag: 'HANDYMAN',
+        default_minutes: 15,
+        pricing_ladder: 'STANDARD',
+        time_weight_minutes: 15,
         allowed_addon: true,
         uncertainty_prone: false,
         uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0
+        risk_buffer_minutes: 0,
+    },
+    {
+        job_item_id: 'mirror_hang',
+        display_name: 'Hang a mirror',
+        item_class: 'STANDARD',
+        capability_tag: 'HANDYMAN',
+        default_minutes: 15,
+        pricing_ladder: 'STANDARD',
+        time_weight_minutes: 15,
+        allowed_addon: true,
+        uncertainty_prone: false,
+        uncertainty_handling: 'IGNORE',
+        risk_buffer_minutes: 0,
     },
 
     // --- PLUMBING (STANDARD) ---
@@ -79,35 +65,14 @@ const CATALOGUE_ITEMS = [
         job_item_id: 'tap_leak_fix',
         display_name: 'Fix leaking tap',
         item_class: 'STANDARD',
-        required_capability_tags: ['PLUMBING'],
+        capability_tag: 'PLUMBING',
+        default_minutes: 45,
+        pricing_ladder: 'SPECIALIST',
         time_weight_minutes: 45,
         allowed_addon: true,
         uncertainty_prone: true,
         uncertainty_handling: 'BUFFER',
         risk_buffer_minutes: 15
-    },
-    {
-        job_item_id: 'concealed_leak_investigation',
-        display_name: 'Investigate concealed pipe leak',
-        item_class: 'STANDARD',
-        required_capability_tags: ['PLUMBING'],
-        time_weight_minutes: 60,
-        allowed_addon: false,
-        uncertainty_prone: true,
-        uncertainty_handling: 'FORCE_H3',
-        risk_buffer_minutes: 0,
-        notes: 'Hidden or behind-wall plumbing work'
-    },
-    {
-        job_item_id: 'toilet_repair_simple',
-        display_name: 'Toilet Flush Repair (Internal)',
-        item_class: 'STANDARD',
-        required_capability_tags: ['PLUMBING'],
-        time_weight_minutes: 45,
-        allowed_addon: true,
-        uncertainty_prone: true,
-        uncertainty_handling: 'FORCE_H3', // Invasive potential
-        risk_buffer_minutes: 0
     },
 
     // --- ELECTRICAL (STANDARD) ---
@@ -115,83 +80,63 @@ const CATALOGUE_ITEMS = [
         job_item_id: 'socket_replace',
         display_name: 'Replace Socket Faceplate',
         item_class: 'STANDARD',
-        required_capability_tags: ['ELECTRICAL'],
+        capability_tag: 'ELECTRICAL',
+        default_minutes: 15,
+        pricing_ladder: 'SPECIALIST',
         time_weight_minutes: 15,
         allowed_addon: true,
         uncertainty_prone: false,
         uncertainty_handling: 'IGNORE',
         risk_buffer_minutes: 0
     },
-    {
-        job_item_id: 'light_fitting_replace',
-        display_name: 'Replace Light Fitting (Standard)',
-        item_class: 'STANDARD',
-        required_capability_tags: ['ELECTRICAL'],
-        time_weight_minutes: 30,
-        allowed_addon: true,
-        uncertainty_prone: true,
-        uncertainty_handling: 'BUFFER',
-        risk_buffer_minutes: 15
-    },
+];
 
-    // --- SPECIALIST (ISOLATED) ---
-    {
-        job_item_id: 'gas_cert_cp12',
-        display_name: 'Gas Safety Cert (CP12)',
-        item_class: 'SPECIALIST',
-        required_capability_tags: ['SPECIALIST_GAS'],
-        time_weight_minutes: 45,
-        allowed_addon: false,
-        uncertainty_prone: false,
-        uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0
-    },
+const PHRASE_MAPPINGS = [
+    { phrase: 'tv mount', canonical_job_item_id: 'tv_mount_standard' },
+    { phrase: 'mount tv', canonical_job_item_id: 'tv_mount_standard' },
+    { phrase: 'hang tv', canonical_job_item_id: 'tv_mount_standard' },
+    { phrase: 'hide cables', canonical_job_item_id: 'cable_concealment' },
+    { phrase: 'conceal cables', canonical_job_item_id: 'cable_concealment' },
+    { phrase: 'fill holes', canonical_job_item_id: 'wall_hole_fill' },
+    { phrase: 'fix holes', canonical_job_item_id: 'wall_hole_fill' },
+    { phrase: 'hang mirror', canonical_job_item_id: 'mirror_hang' },
+    { phrase: 'mount mirror', canonical_job_item_id: 'mirror_hang' },
+    { phrase: 'leaking tap', canonical_job_item_id: 'tap_leak_fix' },
+    { phrase: 'fix leak', canonical_job_item_id: 'tap_leak_fix' },
+    { phrase: 'replace socket', canonical_job_item_id: 'socket_replace' },
+    { phrase: 'change light bulb', canonical_job_item_id: 'socket_replace' }, // Simplification for demo
+];
 
-    // --- CLEANING (ISOLATED) ---
-    {
-        job_item_id: 'apartment_cleaning_standard',
-        display_name: 'Apartment Cleaning',
-        item_class: 'CLEANING',
-        required_capability_tags: ['CLEANING'],
-        time_weight_minutes: 120,
-        allowed_addon: false,
-        uncertainty_prone: false,
-        uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0
-    },
-    {
-        job_item_id: 'eot_cleaning_1bed',
-        display_name: 'End of Tenancy Cleaning (1 Bed)',
-        item_class: 'CLEANING',
-        required_capability_tags: ['CLEANING'],
-        time_weight_minutes: 240,
-        allowed_addon: false,
-        uncertainty_prone: false,
-        uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0
-    },
-    {
-        job_item_id: 'eot_cleaning_2bed',
-        display_name: 'End of Tenancy Cleaning (2 Bed)',
-        item_class: 'CLEANING',
-        required_capability_tags: ['CLEANING'],
-        time_weight_minutes: 360,
-        allowed_addon: false,
-        uncertainty_prone: false,
-        uncertainty_handling: 'IGNORE',
-        risk_buffer_minutes: 0
-    }
-]
+const CLARIFIERS = [
+    { id: 'tv_bracket_check', tag: 'bracket_provided', question: 'Do you already have the wall bracket for the TV?' }
+];
 
 async function main() {
-    console.log('Seeding CatalogueItems...')
-    for (const item of CATALOGUE_ITEMS) {
-        const upsert = await prisma.catalogueItem.upsert({
-            where: { job_item_id: item.job_item_id },
+    console.log('Seeding ClarifierLibrary...');
+    for (const item of CLARIFIERS) {
+        await prisma.clarifierLibrary.upsert({
+            where: { tag: item.tag },
             update: item,
             create: item,
-        })
-        console.log(`Upserted: ${upsert.job_item_id}`)
+        });
+    }
+
+    console.log('Seeding CatalogueItems...');
+    for (const item of CATALOGUE_ITEMS) {
+        await prisma.catalogueItem.upsert({
+            where: { job_item_id: item.job_item_id },
+            update: item,
+            create: item as any,
+        });
+    }
+
+    console.log('Seeding PhraseMappings...');
+    for (const mapping of PHRASE_MAPPINGS) {
+        await prisma.phraseMapping.upsert({
+            where: { phrase: mapping.phrase },
+            update: mapping,
+            create: mapping,
+        });
     }
 }
 

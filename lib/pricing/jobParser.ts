@@ -1,5 +1,10 @@
 import { CatalogueItem } from './catalogue';
 
+export interface PhraseMapping {
+  phrase: string;
+  canonical_job_item_id: string;
+}
+
 export interface ParseResult {
   detectedItemIds: string[];
   confidence: number;
@@ -543,129 +548,93 @@ function findFallbackItem(category: string, catalogue: CatalogueItem[]): string 
 export function parseJobDescription(
   text: string,
   catalogue: CatalogueItem[],
-  customPatterns?: KeywordPattern[]
+  phraseMappings: PhraseMapping[]
 ): ParseResult {
-  const detectedIds: string[] = []; // Array (not Set) to allow duplicates for quantities
+  const detectedIds: string[] = [];
   const segmentConfidences: number[] = [];
 
-  // Segment the description to detect multiple services
+  // Segment the description
   const segments = segmentDescription(text);
+  console.log(`[JobParser] Segmented "${text}" into:`, segments);
 
-  console.log(`[JobParser] Segmented "${text}" into ${segments.length} segments:`, segments);
-
-  // Parse each segment independently
   for (const segment of segments) {
-    // Extract quantity from segment (e.g., "install 4 shelves" -> quantity=4, cleaned="install shelves")
     const { quantity, cleanedSegment } = extractQuantity(segment);
-    const segmentLower = cleanedSegment.toLowerCase();
-    let segmentDetected = false;
-    let segmentConfidence = 0;
-    let detectedItemId: string | null = null;
+    const segmentLower = cleanedSegment.toLowerCase().trim();
 
-    // Step 1: Detect category for this segment
-    const category = detectCategory(segmentLower);
+    // 1. Collision Safeguard: Prefer Exact Match
+    let matchedItemId: string | null = null;
+    let confidence = 0;
+    const segmentDetectedIds: string[] = [];
 
-    if (category) {
-      console.log(`[JobParser] Segment "${segment}" detected category: ${category}, quantity: ${quantity}`);
-
-      // Step 2: Find best catalogue item for this category
-      const itemId = findBestCatalogueItem(category, segmentLower, catalogue, customPatterns);
-
-      if (itemId) {
-        const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
-        if (catalogueItem) {
-          detectedItemId = itemId;
-          segmentDetected = true;
-          segmentConfidence = 0.9;
-          console.log(`[JobParser] Segment "${segment}" -> ${itemId} (${catalogueItem.display_name}) x${quantity}`);
-        }
-      } else {
-        console.warn(`[JobParser] Category "${category}" detected but no catalogue item found for segment: "${segment}"`);
-      }
+    // Try exact phrase match from DB
+    const exactMatch = phraseMappings.find(pm => pm.phrase.toLowerCase() === segmentLower);
+    if (exactMatch) {
+      matchedItemId = exactMatch.canonical_job_item_id;
+      segmentDetectedIds.push(matchedItemId);
+      confidence = 1.0;
+      console.log(`[JobParser] Exact match found: "${segmentLower}" -> ${matchedItemId}`);
     } else {
-      // No category detected - try direct keyword matching as fallback
-      console.log(`[JobParser] No category detected for segment: "${segment}", trying direct keyword match`);
+      // 2. Phrase Detection (Fuzzy/Partial)
+      // Sort phrase mappings by length descending to match longest phrases first
+      const sortedMappings = [...phraseMappings].sort((a, b) => b.phrase.length - a.phrase.length);
 
-      // Try TV mounting (special case)
-      if ((segmentLower.includes('tv') || segmentLower.includes('television')) &&
-        (segmentLower.includes('mount') || segmentLower.includes('hang'))) {
-        if (segmentLower.includes('55') || segmentLower.includes('65') || segmentLower.includes('75') ||
-          segmentLower.includes('big') || segmentLower.includes('large')) {
-          const item = catalogue.find(c => c.job_item_id === 'tv_mount_large');
-          if (item) {
-            detectedItemId = 'tv_mount_large';
-            segmentDetected = true;
-            segmentConfidence = 0.9;
-          }
-        } else {
-          const item = catalogue.find(c => c.job_item_id === 'tv_mount_standard');
-          if (item) {
-            detectedItemId = 'tv_mount_standard';
-            segmentDetected = true;
-            segmentConfidence = 0.9;
-          }
+      let remainingText = segmentLower;
+
+      // Loop to find multiple phrases in the same segment
+      for (const mapping of sortedMappings) {
+        const phraseLower = mapping.phrase.toLowerCase();
+        if (remainingText.includes(phraseLower)) {
+          matchedItemId = mapping.canonical_job_item_id;
+          segmentDetectedIds.push(matchedItemId);
+
+          // Remove the matched phrase from remaining text to avoid double-matching 
+          // (or finding inner phrases of a longer phrase)
+          remainingText = remainingText.replace(phraseLower, ' '.repeat(phraseLower.length));
+
+          confidence = Math.max(confidence, 0.9);
+          console.log(`[JobParser] Phrase match found: "${mapping.phrase}" in segment -> ${matchedItemId}`);
         }
       }
 
-      // Try direct keyword matching
-      if (!segmentDetected) {
-        const sortedEntries = Object.entries(KEYWORD_MAP).sort((a, b) => {
-          const aMaxLen = Math.max(...a[1].map(k => k.length));
-          const bMaxLen = Math.max(...b[1].map(k => k.length));
-          return bMaxLen - aMaxLen;
-        });
+      if (segmentDetectedIds.length > 0) {
+        // Handle all phrases found in the non-exact path
+        matchedItemId = null; // Mark as handled for fallback check
+      }
+    }
 
-        for (const [itemId, keywords] of sortedEntries) {
-          if (itemId.startsWith('tv_mount')) continue; // Already handled
-
-          const matchedKeyword = keywords.find(k => keywordMatches(segmentLower, k.toLowerCase()));
-          if (matchedKeyword) {
-            const catalogueItem = catalogue.find(c => c.job_item_id === itemId);
-            if (catalogueItem) {
-              detectedItemId = itemId;
-              segmentDetected = true;
-              segmentConfidence = 0.85;
-              console.log(`[JobParser] Segment "${segment}" matched "${matchedKeyword}" -> ${itemId}`);
-              break;
-            }
-          }
+    // Add all detected IDs for this segment (except for fallback which adds later)
+    if (segmentDetectedIds.length > 0) {
+      for (const id of segmentDetectedIds) {
+        for (let i = 0; i < quantity; i++) {
+          detectedIds.push(id);
         }
       }
     }
 
-    // If still nothing detected, use generic handyman fallback
-    if (!segmentDetected) {
-      const fallbackItem = catalogue.find(c =>
-        c.job_item_id === 'general_handyman_repair' ||
-        c.job_item_id === 'shelf_install_single'
-      );
-      if (fallbackItem) {
-        detectedItemId = fallbackItem.job_item_id;
-        segmentConfidence = 0.5; // Low confidence for fallback
-        console.log(`[JobParser] Segment "${segment}" -> fallback to handyman (${fallbackItem.job_item_id})`);
+    // 3. Fallback: Existing Keyword Search if DB mapping fails AND no phrases were found
+    if (segmentDetectedIds.length === 0 && !matchedItemId) {
+      const category = detectCategory(segmentLower);
+      if (category) {
+        matchedItemId = findFallbackItem(category, catalogue);
+        confidence = 0.5;
+        console.log(`[JobParser] Fallback category match: ${category} -> ${matchedItemId}`);
+
+        if (matchedItemId) {
+          for (let i = 0; i < quantity; i++) {
+            detectedIds.push(matchedItemId);
+          }
+        }
       }
     }
-
-    // Add the item ID multiple times based on quantity
-    if (detectedItemId) {
-      for (let i = 0; i < quantity; i++) {
-        detectedIds.push(detectedItemId);
-      }
-      console.log(`[JobParser] Added ${quantity} instance(s) of ${detectedItemId}`);
-    }
-
-    segmentConfidences.push(segmentConfidence);
+    segmentConfidences.push(confidence);
   }
 
-  // Calculate overall confidence (average of segment confidences)
   const overallConfidence = segmentConfidences.length > 0
     ? segmentConfidences.reduce((sum, c) => sum + c, 0) / segmentConfidences.length
     : 0;
 
-  console.log(`[JobParser] Final detected items (${detectedIds.length} total):`, detectedIds);
-
   return {
-    detectedItemIds: detectedIds, // Array with duplicates for quantities
+    detectedItemIds: detectedIds,
     confidence: overallConfidence
   };
 }

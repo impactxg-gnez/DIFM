@@ -24,9 +24,9 @@ export async function ensureDispatchProgress() {
         const offerAgeSeconds = (now - new Date(job.offeredAt).getTime()) / 1000;
 
         if (offerAgeSeconds >= 10) {
-            console.log(`[DispatchTracker] Offer for job ${job.id} to provider ${job.offeredToId} expired after ${offerAgeSeconds.toFixed(1)}s. Advancing.`);
+            console.log(`[DispatchTracker] Job ${job.id} rolling window reached (${offerAgeSeconds.toFixed(1)}s). Expanding reach.`);
             const nextProviderId = await advanceSequentialDispatch(job.id);
-            results.push({ jobId: job.id, action: 'EXPIRED', nextProviderId });
+            results.push({ jobId: job.id, action: 'ROLLING_EXPAND', nextProviderId });
         }
     }
 
