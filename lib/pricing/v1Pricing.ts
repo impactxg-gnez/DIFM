@@ -62,7 +62,7 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     // 4. Resolve detected IDs to full items
     const detectedItems = parseResult.detectedItemIds
         .map((id: string) => catalogue.find((c: any) => c.job_item_id === id))
-        .filter(Boolean);
+        .filter((item): item is NonNullable<typeof item> => !!item);
 
     if (detectedItems.length === 0) {
         return {
