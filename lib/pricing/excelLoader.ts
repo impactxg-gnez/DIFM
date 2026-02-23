@@ -111,7 +111,9 @@ class ExcelSource {
         }
 
         try {
-            const workbook = XLSX.readFile(this.filePath);
+            console.log(`[ExcelSource] Reading file: ${this.filePath}`);
+            const buffer = fs.readFileSync(this.filePath);
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
 
             // 1. Phrase_Mapping (Legacy/Keep for now)
             const phraseSheet = workbook.Sheets['Phrase_Mapping'];
