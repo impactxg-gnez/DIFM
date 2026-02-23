@@ -16,7 +16,8 @@ export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "") // Remove punctuation
-    .split(/\s+/)
+    .trim()
+    .split(/\s+/) // Split by ONE OR MORE whitespace characters
     .filter(Boolean);
 }
 
