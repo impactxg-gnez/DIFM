@@ -186,15 +186,24 @@ class ExcelSource {
                 data.forEach((row: any) => {
                     const id = row.canonical_job_item_id || row.job_item_id;
                     if (id) {
+                        const rawInclude = (row.include || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+
+                        // Expansion: Support common plurals for inclusion keywords
+                        const include: string[] = [...new Set(rawInclude.flatMap((kw: string) => {
+                            if (kw.endsWith('y')) return [kw, kw.slice(0, -1) + 'ies'];
+                            if (kw.endsWith('s') || kw.endsWith('x') || kw.endsWith('ch') || kw.endsWith('sh')) return [kw, kw + 'es'];
+                            return [kw, kw + 's'];
+                        }) as string[])];
+
                         this._jobItemRules.set(id, {
                             job_item_id: id,
-                            include: (row.include || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean),
+                            include,
                             optional: (row.optional || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean),
                             exclude: (row.exclude || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean)
                         });
                     }
                 });
-                console.log(`[ExcelSource] Loaded ${this._jobItemRules.size} job item rules`);
+                console.log(`[ExcelSource] Loaded ${this._jobItemRules.size} job item rules (with plural expansion)`);
             }
 
             this.loaded = true;
