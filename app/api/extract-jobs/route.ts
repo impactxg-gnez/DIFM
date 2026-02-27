@@ -50,10 +50,22 @@ export async function POST(req: Request) {
         {
           role: "user",
           content: `
+You must extract ALL distinct service tasks mentioned in the request.
+
+If the request includes multiple tasks, return multiple job_item_id values.
+
+Examples:
+
+"Hang a TV and conceal cables"
+→ ["tv_mount_standard","cable_concealment"]
+
+"Mount TV, hide cables and fill holes"
+→ ["tv_mount_standard","cable_concealment","wall_fix_patch"]
+
 User request:
 "${userInput}"
 
-Return matching job_item_id from allowed list.
+Return matching job_item_id from the allowed list.
 `
         }
       ]
