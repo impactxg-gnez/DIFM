@@ -14,7 +14,9 @@ export async function POST(req: Request) {
     const { userInput } = await req.json();
 
     const jobItems = loadJobItems();
-    const jobIds = jobItems.map(j => j.job_item_id);
+    const jobIds = jobItems
+      .filter(j => j.ai_extractable === true)
+      .map(j => j.job_item_id);
 
     console.log("Allowed Job IDs:", jobIds);
 

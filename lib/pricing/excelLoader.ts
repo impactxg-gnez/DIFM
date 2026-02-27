@@ -20,6 +20,7 @@ export interface JobItemExcel {
     uncertainty_prone: boolean;
     uncertainty_handling: 'IGNORE' | 'BUFFER' | 'FORCE_H3';
     risk_buffer_minutes: number;
+    ai_extractable: boolean;
 }
 
 export interface PricingTierExcel {
@@ -54,7 +55,7 @@ class ExcelSource {
     private loaded = false;
 
     private constructor() {
-        this.filePath = path.join(process.cwd(), 'DIFM_Pilot_Matrix_v1_Baseline.xlsx');
+        this.filePath = path.join(process.cwd(), 'DIFM_Pilot_Matrix_v1_Optimized.xlsx');
     }
 
     public static getInstance(): ExcelSource {
@@ -144,7 +145,8 @@ class ExcelSource {
                         clarifier_ids: (row.clarifier_ids || '').split(',').map((id: string) => id.trim()).filter(Boolean),
                         uncertainty_prone: !!row.uncertainty_prone || false,
                         uncertainty_handling: row.uncertainty_handling || 'IGNORE',
-                        risk_buffer_minutes: row.risk_buffer_minutes || 0
+                        risk_buffer_minutes: row.risk_buffer_minutes || 0,
+                        ai_extractable: !!row.ai_extractable || false
                     });
                 });
                 console.log(`[ExcelSource] Loaded ${this._jobItems.size} job items`);
