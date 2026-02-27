@@ -55,7 +55,7 @@ class ExcelSource {
     private loaded = false;
 
     private constructor() {
-        this.filePath = path.join(process.cwd(), 'DIFM_Pilot_Matrix_v1_Optimized.xlsx');
+        this.filePath = path.join(process.cwd(), 'DIFM_Pilot_Matrix_v2_Layered.xlsx');
     }
 
     public static getInstance(): ExcelSource {
