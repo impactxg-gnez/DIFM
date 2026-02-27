@@ -10,41 +10,60 @@ function loadJobItems() {
 }
 
 export async function POST(req: Request) {
-  const { userInput } = await req.json();
+  try {
+    const { userInput } = await req.json();
 
-  const jobItems = loadJobItems(); // from Excel
-  const jobIds = jobItems.map(j => j.job_item_id);
+    const jobItems = loadJobItems();
+    const jobIds = jobItems.map(j => j.job_item_id);
 
-  const prompt = `
-You are a structured job extractor.
-
-Available canonical_job_item_id values:
-${jobIds.join(", ")}
-
-Rules:
-- Return ONLY valid job_item_id from the list.
-- Return multiple if applicable.
-- Do NOT invent new IDs.
-- If unclear, return empty array.
-
-User input:
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "job_extraction",
+          schema: {
+            type: "object",
+            properties: {
+              detected_jobs: {
+                type: "array",
+                items: {
+                  type: "string",
+                  enum: jobIds
+                }
+              }
+            },
+            required: ["detected_jobs"]
+          }
+        }
+      },
+      messages: [
+        {
+          role: "system",
+          content: "Extract valid job IDs only."
+        },
+        {
+          role: "user",
+          content: `
+User request:
 "${userInput}"
 
-Return JSON format:
-{
-  "detected_jobs": ["job_id_1","job_id_2"]
-}
-`;
+Return matching job_item_id from allowed list.
+`
+        }
+      ]
+    });
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,
-    messages: [
-      { role: "system", content: "You extract structured job IDs." },
-      { role: "user", content: prompt }
-    ]
-  });
+    return Response.json(
+      JSON.parse(completion.choices[0].message.content!)
+    );
 
-  const text = completion.choices[0].message.content;
-  return Response.json(JSON.parse(text!));
+  } catch (err: any) {
+    console.error("AI Extraction Error:", err);
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500 }
+    );
+  }
 }
