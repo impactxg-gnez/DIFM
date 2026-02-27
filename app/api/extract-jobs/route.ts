@@ -16,6 +16,8 @@ export async function POST(req: Request) {
     const jobItems = loadJobItems();
     const jobIds = jobItems.map(j => j.job_item_id);
 
+    console.log("Allowed Job IDs:", jobIds);
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
