@@ -208,6 +208,26 @@ class ExcelSource {
                     }
                 });
                 console.log(`[ExcelSource] Loaded ${this._jobItemRules.size} job item rules (with plural expansion)`);
+            } else {
+                // v2 layered matrix removed Job_Item_Rules; build deterministic rules from Phrase_Mapping.
+                this._jobItemRules.clear();
+                this._phraseMappings.forEach((mapping) => {
+                    if (!mapping.canonical_job_item_id) return;
+
+                    const existing = this._jobItemRules.get(mapping.canonical_job_item_id);
+                    const include = [...new Set([...(existing?.include || []), ...mapping.positive_keywords])];
+                    const exclude = [...new Set([...(existing?.exclude || []), ...mapping.negative_keywords])];
+
+                    this._jobItemRules.set(mapping.canonical_job_item_id, {
+                        job_item_id: mapping.canonical_job_item_id,
+                        include,
+                        // Use include keywords as optional as well, so parser can match
+                        // when at least one strong keyword appears in customer text.
+                        optional: include,
+                        exclude,
+                    });
+                });
+                console.log(`[ExcelSource] Job_Item_Rules tab missing. Built ${this._jobItemRules.size} fallback rules from Phrase_Mapping`);
             }
 
             this.loaded = true;

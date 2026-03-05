@@ -4,10 +4,6 @@ import { excelSource } from './excelLoader';
 import { parseJobDescription } from './jobParser';
 import { buildVisits, GeneratedVisit } from './visitEngine';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
-
 export interface ExtractionPipelineResult {
     jobs: string[];
     visits: GeneratedVisit[];
@@ -44,6 +40,10 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
 
     try {
         if (process.env.OPENAI_API_KEY) {
+            const openai = new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY,
+            });
+
             const completion = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 temperature: 0,
