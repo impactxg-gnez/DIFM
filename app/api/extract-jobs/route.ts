@@ -14,11 +14,9 @@ export async function POST(req: Request) {
     const { userInput } = await req.json();
 
     const jobItems = loadJobItems();
-    const jobIds = jobItems
-      .filter(j => j.ai_extractable === true)
-      .map(j => j.job_item_id);
+    const allowedJobIds = jobItems.map(j => j.job_item_id);
 
-    console.log("Allowed Job IDs:", jobIds);
+    console.log("Allowed Job IDs:", allowedJobIds);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
                 type: "array",
                 items: {
                   type: "string",
-                  enum: jobIds
+                  enum: allowedJobIds
                 }
               }
             },
