@@ -17,6 +17,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 const tabs = [
     { id: 'jobs', label: 'Jobs', icon: ShieldAlert },
+    { id: 'extraction', label: 'Extraction Logs', icon: Sparkles },
     { id: 'disputes', label: 'Disputes', icon: ShieldAlert },
     { id: 'providers', label: 'Providers', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -37,6 +38,7 @@ export function AdminView({ user }: { user: any }) {
     const { data: paymentsData, mutate: mutatePayments } = useSWR(activeTab === 'payments' ? '/api/admin/payments' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
     const { data: patterns, mutate: mutatePatterns } = useSWR(activeTab === 'patterns' ? '/api/admin/job-patterns' : null, fetcher);
+    const { data: extractionLogs, mutate: mutateExtractionLogs } = useSWR(activeTab === 'extraction' ? '/api/admin/extraction-logs' : null, fetcher);
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -345,6 +347,42 @@ export function AdminView({ user }: { user: any }) {
             </div>
         );
     }, [jobs, filteredJobs]);
+
+    const extractionContent = useMemo(() => {
+        if (!extractionLogs) return <div className="p-6 text-center text-muted-foreground">Loading extraction logs...</div>;
+        if (extractionLogs.length === 0) {
+            return (
+                <div className="text-center py-16 bg-zinc-900/60 border-white/10">
+                    <p className="text-muted-foreground">No extraction logs yet.</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="grid gap-4">
+                {extractionLogs.map((log: any) => (
+                    <Card key={log.id} className="p-5 border border-white/10 bg-zinc-900/70 backdrop-blur">
+                        <div className="flex flex-col md:flex-row justify-between gap-3">
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="font-mono">{String(log.id).slice(0, 8)}</Badge>
+                                    <Badge variant="secondary">AI_EXTRACTION</Badge>
+                                </div>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Input:</span> {log.userInput || '-'}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">AI:</span> {JSON.stringify(log.ai_result || [])}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Fallback:</span> {JSON.stringify(log.fallback_result || [])}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Final Jobs:</span> {JSON.stringify(log.final_jobs || [])}</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-lg font-black text-foreground">£{Number(log.final_price || 0).toFixed(2)}</div>
+                                <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+        );
+    }, [extractionLogs]);
 
     const disputesContent = useMemo(() => {
         if (!disputes) return <div className="p-6 text-center text-muted-foreground">Loading disputes...</div>;
@@ -1112,6 +1150,7 @@ export function AdminView({ user }: { user: any }) {
 
     const contentMap: Record<string, JSX.Element> = {
         jobs: jobsContent,
+        extraction: extractionContent,
         disputes: disputesContent,
         providers: providersContent,
         payments: paymentsContent,
@@ -1130,7 +1169,7 @@ export function AdminView({ user }: { user: any }) {
                         <p className="text-sm text-gray-400">Premium controls, instant overrides.</p>
                     </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { mutateJobs(); mutateProviders(); mutatePricing(); }} className="gap-2 border-white/20 text-white hover:bg-white/5">
+                <Button variant="outline" size="sm" onClick={() => { mutateJobs(); mutateProviders(); mutatePricing(); mutateExtractionLogs(); }} className="gap-2 border-white/20 text-white hover:bg-white/5">
                     <RefreshCw className="w-4 h-4" /> Refresh
                 </Button>
             </div>

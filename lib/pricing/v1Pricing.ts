@@ -1,6 +1,5 @@
-import { excelSource } from './excelLoader';
-import { parseJobDescription } from './jobParser';
-import { buildVisits, GeneratedVisit } from './visitEngine';
+import { GeneratedVisit } from './visitEngine';
+import { runExtractionPipeline } from './extractionEngine';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -49,14 +48,11 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         };
     }
 
-    // 2. Load Data from Excel (Runtime cache)
-    // const catalogue = Array.from(excelSource.jobItems.values()); // No longer used
-    // const phraseMappings = excelSource.phraseMappings; // No longer used
+    // 2. Extraction Pipeline:
+    // userInput -> GPT-4o extraction -> validated job_item_ids -> fallback deterministic parser
+    const extraction = await runExtractionPipeline(description);
 
-    // 3. Parse Description using V1 Rule-Based Detection (Job_Item_Rules)
-    const parseResult = await parseJobDescription(description, excelSource.jobItemRules);
-
-    if (parseResult.detectedItemIds.length === 0) {
+    if (extraction.jobs.length === 0) {
         return {
             visits: [],
             totalPrice: 0,
@@ -68,10 +64,10 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         };
     }
 
-    // 4. Build Visits (Capability-Aware Summation & Split)
-    const visits = buildVisits(parseResult.detectedItemIds);
+    // 3. Build Visits (Capability-Aware Summation & Split)
+    const visits = extraction.visits;
 
-    // 5. Final Aggregation
+    // 4. Final Aggregation
     const totalPrice = visits.reduce((sum, v) => sum + v.price, 0);
 
     // Determination of Primary Category
@@ -84,26 +80,13 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         else if (first.item_class === 'SPECIALIST') primaryCategory = 'SPECIALIST';
     }
 
-    // 6. Clarifier Binding (Excel-Driven)
-    const allClarifierIds = new Set<string>();
-    parseResult.detectedItemIds.forEach((id: string) => {
-        const item = excelSource.jobItems.get(id);
-        if (item?.clarifier_ids) {
-            item.clarifier_ids.forEach((cId: string) => allClarifierIds.add(cId));
-        }
-    });
-
-    const clarifiers = Array.from(allClarifierIds).map(id => ({
-        tag: id,
-        question: excelSource.clarifierLibrary.get(id) || `Please provide details for ${id}`
-    }));
-
+    // 5. Clarifier Binding (Excel-Driven)
     return {
         visits,
         totalPrice,
-        confidence: parseResult.confidence,
+        confidence: extraction.jobs.length > 0 ? 1 : 0,
         primaryCategory,
         warnings: [],
-        clarifiers
+        clarifiers: extraction.clarifiers
     };
 }
