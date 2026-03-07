@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,63 +26,77 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     interface Question {
         id: string;
         text: string;
-        type: 'YES_NO_NOTSURE' | 'YES_NO' | 'CHOICE' | 'SCALER' | 'NUMERIC' | 'TEXT';
+        type: 'boolean' | 'select' | 'number' | 'text';
+        required?: boolean;
         options?: string[];
     }
 
-    // Question patterns from spec
     const getQuestions = (visit: any): Question[] => {
-        const questions: Question[] = [];
-
-        // CLEANING Scalers (only if item_class == CLEANING)
-        if (visit.item_class === 'CLEANING') {
-            questions.push({
-                id: 'bedrooms',
-                text: 'Number of Bedrooms',
-                type: 'NUMERIC'
-            });
-            questions.push({
-                id: 'bathrooms',
-                text: 'Number of Bathrooms',
-                type: 'NUMERIC'
-            });
-            questions.push({
-                id: 'property_type',
-                text: 'Property Type (e.g. Flat, Semi-detached)',
-                type: 'TEXT'
-            });
+        const matrixQuestions = Array.isArray(visit?.clarifiers) ? visit.clarifiers : [];
+        if (matrixQuestions.length > 0) {
+            return matrixQuestions.map((q: any) => ({
+                id: q.id,
+                text: q.question,
+                type: q.inputType || 'text',
+                required: !!q.required,
+                options: Array.isArray(q.options) ? q.options : []
+            }));
         }
-
-        questions.push({
-            id: 'visible_accessible',
-            text: 'Is the area fully visible and accessible without removing panels or furniture?',
-            type: 'YES_NO_NOTSURE'
-        });
-
-        const primaryId: string = visit?.primary_job_item?.job_item_id || '';
-
-        if (primaryId.includes('tv')) {
-            questions.push({
-                id: 'bracket_provided',
-                text: 'Do you have the correct bracket and fixings for your wall type?',
-                type: 'YES_NO'
-            });
-        }
-
-        if (primaryId.includes('leak') || primaryId.includes('toilet')) {
-            questions.push({
-                id: 'location',
-                text: 'Where is the issue located?',
-                type: 'CHOICE',
-                options: ['Under sink', 'Floor level', 'Concealed/Wall', 'Outside']
-            });
-        }
-
-        return questions;
+        return [];
     };
 
-
     const questions = getQuestions(currentVisit);
+    const [preview, setPreview] = useState({
+        minutesBefore: Number(currentVisit?.total_minutes || 0),
+        minutesAfter: Number(currentVisit?.total_minutes || 0),
+        tierBefore: currentVisit?.tier || 'H1',
+        tierAfter: currentVisit?.tier || 'H1',
+        priceBefore: Number(currentVisit?.price || 0),
+        priceAfter: Number(currentVisit?.price || 0)
+    });
+
+    useEffect(() => {
+        setPreview({
+            minutesBefore: Number(currentVisit?.total_minutes || 0),
+            minutesAfter: Number(currentVisit?.total_minutes || 0),
+            tierBefore: currentVisit?.tier || 'H1',
+            tierAfter: currentVisit?.tier || 'H1',
+            priceBefore: Number(currentVisit?.price || 0),
+            priceAfter: Number(currentVisit?.price || 0)
+        });
+    }, [currentVisitIndex]);
+
+    useEffect(() => {
+        const visitId = currentVisit?.visit_id || currentVisit?.id;
+        if (!visitId) return;
+        if (Object.keys(answers).length === 0) return;
+
+        let mounted = true;
+        const run = async () => {
+            try {
+                const res = await fetch(`/api/visits/${visitId}/scope-lock/preview`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ answers })
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!mounted) return;
+                setPreview({
+                    minutesBefore: Number(data.minutes_before ?? currentVisit.total_minutes ?? 0),
+                    minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
+                    tierBefore: data.tier_before ?? currentVisit.tier,
+                    tierAfter: data.tier_after ?? currentVisit.tier,
+                    priceBefore: Number(data.price_before ?? currentVisit.price ?? 0),
+                    priceAfter: Number(data.price_after ?? currentVisit.price ?? 0)
+                });
+            } catch {
+                // Keep latest known preview on transient errors.
+            }
+        };
+        run();
+        return () => { mounted = false; };
+    }, [answers, currentVisit]);
 
     const handleAnswer = (qId: string, value: string) => {
         setAnswers(prev => ({ ...prev, [qId]: value }));
@@ -106,7 +120,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         setScopePhotos(prev => prev.filter((_, i) => i !== index));
     };
 
-    const isAllAnswered = questions.every(q => answers[q.id]);
+    const requiredQuestions = questions.filter((q) => q.required);
+    const isAllAnswered = requiredQuestions.every(q => answers[q.id] !== undefined && answers[q.id] !== '');
     const isPhotoUploaded = scopePhotos.length > 0;
 
     return (
@@ -118,17 +133,38 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                     <p className="text-gray-400">
                         Visit {currentVisitIndex + 1} of {visits.length}: {currentVisit.primary_job_item?.display_name || currentVisit.primary_job_item?.job_item_id}
                     </p>
+                    <div className="text-xs text-gray-500">
+                        Detected tasks: {[
+                            currentVisit.primary_job_item?.job_item_id,
+                            ...(currentVisit.addon_job_items || []).map((a: any) => a.job_item_id)
+                        ].filter(Boolean).join(', ')}
+                    </div>
                 </div>
 
                 <Card className="bg-zinc-900 border-white/10 text-white">
                     <CardContent className="p-6 space-y-6">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white/5 rounded-lg p-3">
+                                <div className="text-xs text-gray-400">Time Estimate</div>
+                                <div className="text-lg font-bold">{preview.minutesAfter} min</div>
+                                <div className="text-[11px] text-gray-500">was {preview.minutesBefore} min</div>
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-3">
+                                <div className="text-xs text-gray-400">Updated Price</div>
+                                <div className="text-lg font-bold">£{Number(preview.priceAfter || 0).toFixed(2)}</div>
+                                <div className="text-[11px] text-gray-500">Tier {preview.tierAfter}</div>
+                            </div>
+                        </div>
+
                         {questions.map((q) => (
                             <div key={q.id} className="space-y-4">
-                                <Label className="text-lg font-medium leading-tight">{q.text}</Label>
+                                <Label className="text-lg font-medium leading-tight">
+                                    {q.text} {q.required ? <span className="text-red-400">*</span> : null}
+                                </Label>
 
-                                {q.type === 'YES_NO_NOTSURE' && (
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {['yes', 'no', 'not_sure'].map((val) => (
+                                {q.type === 'boolean' && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['yes', 'no'].map((val) => (
                                             <Button
                                                 key={val}
                                                 variant={answers[q.id] === val ? 'default' : 'outline'}
@@ -141,22 +177,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                     </div>
                                 )}
 
-                                {q.type === 'YES_NO' && (
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {['yes', 'no'].map((val) => (
-                                            <Button
-                                                key={val}
-                                                variant={answers[q.id] === val ? 'default' : 'outline'}
-                                                className={`capitalize ${answers[q.id] === val ? 'bg-blue-600' : 'border-white/10 hover:bg-white/5'}`}
-                                                onClick={() => handleAnswer(q.id, val)}
-                                            >
-                                                {val}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {q.type === 'CHOICE' && (
+                                {q.type === 'select' && (
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                         {q.options?.map((val: string) => (
                                             <Button
@@ -170,7 +191,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                         ))}
                                     </div>
                                 )}
-                                {q.type === 'NUMERIC' && (
+                                {q.type === 'number' && (
                                     <div className="flex items-center gap-4 bg-white/5 p-4 rounded-lg w-fit">
                                         <Button
                                             variant="outline"
@@ -200,10 +221,10 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                     </div>
                                 )}
 
-                                {q.type === 'TEXT' && (
+                                {q.type === 'text' && (
                                     <Input
                                         className="bg-white/5 border-white/10 py-6 text-lg"
-                                        placeholder="Enter property type..."
+                                        placeholder="Enter details..."
                                         value={answers[q.id] || ''}
                                         onChange={(e) => handleAnswer(q.id, e.target.value)}
                                     />

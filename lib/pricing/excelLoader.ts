@@ -3,11 +3,16 @@ import path from 'path';
 import fs from 'fs';
 
 export interface PhraseMappingExcel {
+    pattern_id?: number;
     phrase: string;
     positive_keywords: string[];
     negative_keywords: string[];
     canonical_job_item_id: string;
     priority: number;
+    status?: string;
+    auto_match_allowed?: boolean;
+    auto_match_min_tokens?: number;
+    confidence_threshold?: number;
 }
 
 export interface JobItemExcel {
@@ -33,6 +38,15 @@ export interface PricingTierExcel {
 export interface ClarifierExcel {
     clarifier_id: string;
     question: string;
+    input_type?: string;
+    required_YN?: string;
+    trigger_keywords?: string;
+    impacts?: string;
+    notes?: string;
+    show_mode?: string;
+    type?: string;
+    options_json?: string;
+    options?: string[];
 }
 
 export interface JobItemRuleExcel {
@@ -50,6 +64,7 @@ class ExcelSource {
     private _jobItems: Map<string, JobItemExcel> = new Map();
     private _pricingTiers: Map<string, PricingTierExcel[]> = new Map(); // ladder -> tiers
     private _clarifierLibrary: Map<string, string> = new Map(); // id -> question
+    private _clarifierDefinitions: Map<string, ClarifierExcel> = new Map(); // id -> full schema
     private _jobItemRules: Map<string, JobItemRuleExcel> = new Map();
 
     private loaded = false;
@@ -84,6 +99,11 @@ class ExcelSource {
     public get clarifierLibrary() {
         this.ensureLoaded();
         return this._clarifierLibrary;
+    }
+
+    public get clarifierDefinitions() {
+        this.ensureLoaded();
+        return this._clarifierDefinitions;
     }
 
     public get jobItemRules() {
@@ -121,11 +141,16 @@ class ExcelSource {
             if (phraseSheet) {
                 const data = XLSX.utils.sheet_to_json(phraseSheet);
                 this._phraseMappings = data.map((row: any) => ({
-                    phrase: row.phrase || '',
+                    pattern_id: row.pattern_id || undefined,
+                    phrase: row.phrase || row.example_phrases || '',
                     positive_keywords: (row.positive_keywords || '').split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean),
                     negative_keywords: (row.negative_keywords || '').split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean),
-                    canonical_job_item_id: row.canonical_job_item_id || '',
-                    priority: row.priority || 0
+                    canonical_job_item_id: row.canonical_job_item_id || row.normalized_job_item_id || '',
+                    priority: row.priority || 0,
+                    status: row.status || 'active',
+                    auto_match_allowed: String(row.auto_match_allowed || 'Y').toUpperCase() === 'Y',
+                    auto_match_min_tokens: row.auto_match_min_tokens || 1,
+                    confidence_threshold: row.confidence_threshold || 0
                 }));
                 console.log(`[ExcelSource] Loaded ${this._phraseMappings.length} phrase mappings`);
             }
@@ -176,8 +201,31 @@ class ExcelSource {
             if (clarifierSheet) {
                 const data = XLSX.utils.sheet_to_json(clarifierSheet);
                 this._clarifierLibrary.clear();
+                this._clarifierDefinitions.clear();
                 data.forEach((row: any) => {
                     this._clarifierLibrary.set(row.clarifier_id, row.question);
+                    let options: string[] = [];
+                    if (row.options_json) {
+                        try {
+                            const parsed = JSON.parse(row.options_json);
+                            if (Array.isArray(parsed)) options = parsed.map((o: any) => String(o));
+                        } catch {
+                            options = String(row.options_json).split(',').map((s: string) => s.trim()).filter(Boolean);
+                        }
+                    }
+                    this._clarifierDefinitions.set(row.clarifier_id, {
+                        clarifier_id: row.clarifier_id,
+                        question: row.question,
+                        input_type: row.input_type,
+                        required_YN: row.required_YN,
+                        trigger_keywords: row.trigger_keywords,
+                        impacts: row.impacts,
+                        notes: row.notes,
+                        show_mode: row.show_mode,
+                        type: row.type,
+                        options_json: row.options_json,
+                        options
+                    });
                 });
                 console.log(`[ExcelSource] Loaded ${this._clarifierLibrary.size} clarifiers`);
             }
@@ -213,6 +261,9 @@ class ExcelSource {
                 this._jobItemRules.clear();
                 this._phraseMappings.forEach((mapping) => {
                     if (!mapping.canonical_job_item_id) return;
+                    if (!mapping.auto_match_allowed) return;
+                    if (String(mapping.status || 'active').toLowerCase() !== 'active') return;
+                    if ((mapping.positive_keywords || []).length < 2) return;
 
                     const existing = this._jobItemRules.get(mapping.canonical_job_item_id);
                     const include = [...new Set([...(existing?.include || []), ...mapping.positive_keywords])];
@@ -221,9 +272,7 @@ class ExcelSource {
                     this._jobItemRules.set(mapping.canonical_job_item_id, {
                         job_item_id: mapping.canonical_job_item_id,
                         include,
-                        // Use include keywords as optional as well, so parser can match
-                        // when at least one strong keyword appears in customer text.
-                        optional: include,
+                        optional: [],
                         exclude,
                     });
                 });

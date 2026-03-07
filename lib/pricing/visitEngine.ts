@@ -24,6 +24,15 @@ export interface GeneratedVisit {
     price: number;
     // Track individual item prices for accurate summing when bundling
     item_prices?: number[]; // Prices for each item (primary + addons)
+    clarifiers?: Array<{
+        id: string;
+        question: string;
+        inputType: 'number' | 'select' | 'boolean' | 'text';
+        required: boolean;
+        options?: string[];
+        impacts?: string;
+    }>;
+    detected_tasks?: string[];
 }
 
 export function calculateTierAndPrice(minutes: number, ladder: string): { tier: string, price: number } {

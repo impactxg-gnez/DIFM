@@ -372,6 +372,10 @@ export function AdminView({ user }: { user: any }) {
                                 <p className="text-sm text-gray-300"><span className="text-gray-500">AI:</span> {JSON.stringify(log.ai_result || [])}</p>
                                 <p className="text-sm text-gray-300"><span className="text-gray-500">Fallback:</span> {JSON.stringify(log.fallback_result || [])}</p>
                                 <p className="text-sm text-gray-300"><span className="text-gray-500">Final Jobs:</span> {JSON.stringify(log.final_jobs || [])}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Clarifiers:</span> {JSON.stringify(log.clarifiers_loaded || [])}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Answers:</span> {JSON.stringify(log.clarifier_answers || {})}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Minutes:</span> {String(log.minutes_before ?? '-')} → {String(log.minutes_after ?? '-')}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Tier:</span> {String(log.tier_before ?? '-')} → {String(log.tier_after ?? '-')}</p>
                             </div>
                             <div className="text-right">
                                 <div className="text-lg font-black text-foreground">£{Number(log.final_price || 0).toFixed(2)}</div>
