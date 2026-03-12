@@ -25,6 +25,9 @@ function getVisitJobIds(visit: any): string[] {
 
 function getDerivedClarifierIds(jobIds: string[]): string[] {
     const ids = new Set<string>();
+    const hasTvMount = jobIds.some((id) =>
+        id.includes('tv_mount') || id.includes('mount_tv') || id.includes('install_wall_tv_cabling_hide')
+    );
     const hasShelfOrPicture = jobIds.some((id) =>
         id.includes('shelf') || id.includes('pic_hang') || id.includes('mirror_hang')
     );
@@ -33,6 +36,11 @@ function getDerivedClarifierIds(jobIds: string[]): string[] {
     );
     const hasRadiatorBleed = jobIds.some((id) => id.includes('radiator_bleed'));
 
+    if (hasTvMount) {
+        ids.add('TV_SIZE_INCHES');
+        ids.add('WALL_TYPE');
+        ids.add('CABLE_CONCEALMENT');
+    }
     if (hasShelfOrPicture) ids.add('ITEM_COUNT');
     if (hasSocketOrLight) ids.add('ELECTRICAL_POINT_COUNT');
     if (hasRadiatorBleed) ids.add('ITEM_COUNT');

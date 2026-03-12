@@ -30,8 +30,10 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     // Debounce description input
     useEffect(() => {
         const timer = setTimeout(() => {
-            setDebouncedDesc(description);
-        }, 500);
+            const normalized = description.trim();
+            // Stability guard: do not trigger extraction for very short partial input.
+            setDebouncedDesc(normalized.length >= 6 ? normalized : '');
+        }, 400);
         return () => clearTimeout(timer);
     }, [description]);
 

@@ -51,6 +51,7 @@ function phraseMatchJobs(userInput: string, allowedJobIds: string[]) {
     const diagnosticRadiatorTriggers = [
         'radiator not working',
         'radiators not heating',
+        'radiator not heating',
         'radiator cold at top'
     ];
     if (diagnosticRadiatorTriggers.some((t) => lower.includes(t))) {
@@ -106,7 +107,7 @@ function directRuleOverrides(userInput: string, allowedJobIds: string[]): { jobs
 
     const includesAny = (terms: string[]) => terms.some((t) => lower.includes(t));
 
-    if (includesAny(['radiator not working', 'radiators not heating', 'radiator cold at top'])) {
+    if (includesAny(['radiator not working', 'radiators not heating', 'radiator not heating', 'radiator cold at top'])) {
         if (allowed.has('radiator_diagnosis')) return { jobs: ['radiator_diagnosis'], skipFallback: true };
         return { jobs: [], skipFallback: true };
     }
@@ -151,16 +152,19 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     let fallbackResult: string[] = [];
     let aiConfidence = 0;
     let skipFallback = false;
+    let extractionMode: 'AI' | 'FALLBACK' | 'PATTERN_MATCH' = 'FALLBACK';
 
     try {
         if (directOverride) {
             aiResult = validateAllowedJobs(directOverride.jobs, allowedJobIds);
             aiConfidence = aiResult.length > 0 ? 1 : 0;
             skipFallback = directOverride.skipFallback;
+            extractionMode = 'PATTERN_MATCH';
         } else if (phraseResult.length > 0) {
             // Fast path: phrase matching hit skips AI call.
             aiResult = phraseResult;
             aiConfidence = 1;
+            extractionMode = 'PATTERN_MATCH';
         } else if (process.env.OPENAI_API_KEY) {
             const openai = new OpenAI({
                 apiKey: process.env.OPENAI_API_KEY,
@@ -247,6 +251,13 @@ Return matching job_item_ids from allowed_jobs.`,
                 allowedJobIds
             );
             aiConfidence = typeof parsed?.confidence === 'number' ? parsed.confidence : 0;
+            // Guardrail: suspiciously broad extraction should fall back to deterministic parser.
+            if (aiResult.length > 4) {
+                aiResult = [];
+                aiConfidence = 0;
+            } else if (aiResult.length > 0) {
+                extractionMode = 'AI';
+            }
         }
     } catch (err) {
         console.error('[Extraction] GPT-4o extraction failed:', err);
@@ -255,6 +266,7 @@ Return matching job_item_ids from allowed_jobs.`,
     if (!skipFallback && (aiResult.length === 0 || aiConfidence < 0.6)) {
         const parsedFallback = await parseJobDescription(userInput, excelSource.jobItemRules);
         fallbackResult = validateAllowedJobs(parsedFallback.detectedItemIds, allowedJobIds);
+        extractionMode = 'FALLBACK';
     }
 
     const finalJobs = [...new Set(aiResult.length > 0 ? aiResult : fallbackResult)];
@@ -269,6 +281,7 @@ Return matching job_item_ids from allowed_jobs.`,
         userInput,
         direct_override: directOverride?.jobs || [],
         phrase_result: phraseResult,
+        extraction_mode: extractionMode,
         ai_result: aiResult,
         ai_confidence: aiConfidence,
         fallback_result: fallbackResult,

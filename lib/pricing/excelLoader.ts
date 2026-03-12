@@ -174,6 +174,21 @@ class ExcelSource {
                         ai_extractable: !!row.ai_extractable || false
                     });
                 });
+                // Stability fallback: create diagnostic radiator item if matrix does not include it.
+                if (!this._jobItems.has('radiator_diagnosis')) {
+                    this._jobItems.set('radiator_diagnosis', {
+                        job_item_id: 'radiator_diagnosis',
+                        display_name: 'Radiator Diagnosis',
+                        capability_tag: 'PLUMBING',
+                        default_time_weight_minutes: 45,
+                        pricing_ladder: 'PLUMBING',
+                        clarifier_ids: [],
+                        uncertainty_prone: false,
+                        uncertainty_handling: 'IGNORE',
+                        risk_buffer_minutes: 0,
+                        ai_extractable: true
+                    });
+                }
                 console.log(`[ExcelSource] Loaded ${this._jobItems.size} job items`);
             }
 
@@ -227,6 +242,18 @@ class ExcelSource {
                         options
                     });
                 });
+                // Required synthetic clarifier for TV concealment if not present in matrix.
+                if (!this._clarifierDefinitions.has('CABLE_CONCEALMENT')) {
+                    this._clarifierLibrary.set('CABLE_CONCEALMENT', 'Do you want cables concealed?');
+                    this._clarifierDefinitions.set('CABLE_CONCEALMENT', {
+                        clarifier_id: 'CABLE_CONCEALMENT',
+                        question: 'Do you want cables concealed?',
+                        input_type: 'boolean',
+                        required_YN: 'N',
+                        impacts: 'Tier',
+                        options: []
+                    });
+                }
                 console.log(`[ExcelSource] Loaded ${this._clarifierLibrary.size} clarifiers`);
             }
 
