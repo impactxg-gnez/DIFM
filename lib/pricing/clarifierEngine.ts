@@ -60,20 +60,20 @@ export function getClarifierSchemaForVisit(visit: any): ClarifierQuestion[] {
 
     getDerivedClarifierIds(jobIds).forEach((id) => clarifierIds.add(id));
 
-    return [...clarifierIds]
-        .map((id) => {
-            const definition = excelSource.clarifierDefinitions.get(id);
-            if (!definition) return null;
-            return {
-                id,
-                question: definition.question || id,
-                inputType: (definition.input_type || definition.type || 'text') as ClarifierQuestion['inputType'],
-                required: String(definition.required_YN || '').toUpperCase() === 'Y',
-                options: definition.options || [],
-                impacts: definition.impacts || '',
-            } satisfies ClarifierQuestion;
-        })
-        .filter((q): q is ClarifierQuestion => !!q);
+    const questions: ClarifierQuestion[] = [];
+    for (const id of [...clarifierIds]) {
+        const definition = excelSource.clarifierDefinitions.get(id);
+        if (!definition) continue;
+        questions.push({
+            id,
+            question: definition.question || id,
+            inputType: (definition.input_type || definition.type || 'text') as ClarifierQuestion['inputType'],
+            required: String(definition.required_YN || '').toUpperCase() === 'Y',
+            options: definition.options || [],
+            impacts: definition.impacts || '',
+        });
+    }
+    return questions;
 }
 
 function parseNumber(raw: unknown): number | null {
