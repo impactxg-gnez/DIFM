@@ -12,6 +12,7 @@ export interface ExtractionPipelineResult {
     clarifiers: Array<{ tag: string; question: string }>;
     aiResult: string[];
     fallbackResult: string[];
+    message?: string;
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -39,6 +40,21 @@ function validateAllowedJobs(candidateIds: string[], allowedJobIds: string[]) {
     return candidateIds.filter((id) => allowed.has(id));
 }
 
+function hasRadiatorDiagnosticPhrase(userInput: string) {
+    const lower = userInput.toLowerCase();
+    const phrases = [
+        'radiator not working',
+        'radiators not working',
+        'radiator not heating',
+        'radiators not heating',
+        'radiator cold at top',
+        'radiator cold',
+        'radiator warm at bottom',
+        'radiator issue'
+    ];
+    return phrases.some((phrase) => lower.includes(phrase));
+}
+
 function phraseMatchJobs(userInput: string, allowedJobIds: string[]) {
     const lower = userInput.toLowerCase();
     const tokenSet = new Set(tokenize(userInput));
@@ -48,13 +64,7 @@ function phraseMatchJobs(userInput: string, allowedJobIds: string[]) {
         .map((s) => s.trim())
         .filter(Boolean);
 
-    const diagnosticRadiatorTriggers = [
-        'radiator not working',
-        'radiators not heating',
-        'radiator not heating',
-        'radiator cold at top'
-    ];
-    if (diagnosticRadiatorTriggers.some((t) => lower.includes(t))) {
+    if (hasRadiatorDiagnosticPhrase(userInput)) {
         if (allowedSet.has('radiator_diagnosis')) return ['radiator_diagnosis'];
         // Prevent over-assuming bleed when diagnostic intent is explicit.
         return [];
@@ -107,11 +117,6 @@ function directRuleOverrides(userInput: string, allowedJobIds: string[]): { jobs
 
     const includesAny = (terms: string[]) => terms.some((t) => lower.includes(t));
 
-    if (includesAny(['radiator not working', 'radiators not heating', 'radiator not heating', 'radiator cold at top'])) {
-        if (allowed.has('radiator_diagnosis')) return { jobs: ['radiator_diagnosis'], skipFallback: true };
-        return { jobs: [], skipFallback: true };
-    }
-
     const hasMountTv = includesAny(['mount tv', 'tv mount', 'mounting tv']);
     const hasCableHide = includesAny(['conceal cables', 'hide cables', 'cabling hide', 'hide cable']);
     const hasComplexity = includesAny(['above fireplace', 'very large tv', 'brick wall', 'complicated install', 'over 65 inch tv']);
@@ -129,7 +134,7 @@ function directRuleOverrides(userInput: string, allowedJobIds: string[]): { jobs
         if (jobs.length > 0) return { jobs: [...new Set(jobs)], skipFallback: true };
     }
 
-    if (includesAny(['bleed radiator', 'bleeding radiator']) && allowed.has('radiator_bleed')) {
+    if (includesAny(['bleed radiator', 'bleeding radiator', 'bleed 3 radiators']) && allowed.has('radiator_bleed')) {
         return { jobs: ['radiator_bleed'], skipFallback: true };
     }
 
@@ -153,6 +158,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     let aiConfidence = 0;
     let skipFallback = false;
     let extractionMode: 'AI' | 'FALLBACK' | 'PATTERN_MATCH' = 'FALLBACK';
+    let message: string | undefined;
 
     try {
         if (directOverride) {
@@ -246,13 +252,16 @@ Return matching job_item_ids from allowed_jobs.`,
 
             const content = completion.choices[0]?.message?.content || '{"detected_jobs":[],"confidence":0}';
             const parsed = JSON.parse(content);
-            aiResult = validateAllowedJobs(
-                Array.isArray(parsed?.detected_jobs) ? parsed.detected_jobs : [],
-                allowedJobIds
-            );
+            let aiDetectedJobs = Array.isArray(parsed?.detected_jobs) ? parsed.detected_jobs : [];
+            // Override guard: enforce radiator diagnosis for symptom phrases
+            // AFTER AI extraction but BEFORE final validation.
+            if (hasRadiatorDiagnosticPhrase(userInput)) {
+                aiDetectedJobs = ['radiator_diagnosis'];
+            }
+            aiResult = validateAllowedJobs(aiDetectedJobs, allowedJobIds);
             aiConfidence = typeof parsed?.confidence === 'number' ? parsed.confidence : 0;
             // Guardrail: suspiciously broad extraction should fall back to deterministic parser.
-            if (aiResult.length > 4) {
+            if (aiResult.length > 3) {
                 aiResult = [];
                 aiConfidence = 0;
             } else if (aiResult.length > 0) {
@@ -266,6 +275,10 @@ Return matching job_item_ids from allowed_jobs.`,
     if (!skipFallback && (aiResult.length === 0 || aiConfidence < 0.6)) {
         const parsedFallback = await parseJobDescription(userInput, excelSource.jobItemRules);
         fallbackResult = validateAllowedJobs(parsedFallback.detectedItemIds, allowedJobIds);
+        if (fallbackResult.length > 3) {
+            fallbackResult = [];
+            message = 'Please provide a bit more detail about the job.';
+        }
         extractionMode = 'FALLBACK';
     }
 
@@ -321,6 +334,7 @@ Return matching job_item_ids from allowed_jobs.`,
         clarifiers,
         aiResult,
         fallbackResult,
+        message
     };
 
     extractionCache.set(cacheKey, {

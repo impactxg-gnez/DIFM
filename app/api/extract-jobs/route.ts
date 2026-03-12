@@ -13,7 +13,8 @@ export async function POST(req: Request) {
       jobs: extraction.jobs,
       visits: extraction.visits,
       price: extraction.price,
-      clarifiers: extraction.clarifiers
+      clarifiers: extraction.clarifiers,
+      message: extraction.message
     });
 
   } catch (err: any) {

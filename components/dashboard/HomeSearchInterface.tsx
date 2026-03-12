@@ -142,6 +142,9 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         alert(`${type === 'mic' ? 'Voice Note' : 'Camera'} upload coming soon!`);
     };
 
+    const trimmedDescription = description.trim();
+    const isTooShortForExtraction = trimmedDescription.length > 0 && trimmedDescription.length < 6;
+
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
 
@@ -212,6 +215,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             <Camera className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleMediaClick('camera')} />
                         </div>
                     </div>
+                    {isTooShortForExtraction && (
+                        <p className="text-[11px] text-blue-300/80 -mt-3 px-1">
+                            Type a few more words to describe the job
+                        </p>
+                    )}
 
                     {/* Checklist */}
                     <div className="space-y-3.5 pl-1">
@@ -323,8 +331,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 <div className="mt-8">
                     <Button
                         onClick={handleBookClick}
-                        disabled={!description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))}
-                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${!description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))
+                        disabled={isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))}
+                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))
                             ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
                             : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
                             }`}
