@@ -20,6 +20,19 @@ import { TotalPrice } from '@/components/booking/TotalPrice';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+const JOB_LABELS: Record<string, string> = {
+    mirror_hang: 'Mirror Hanging',
+    pic_hang: 'Picture Hanging',
+    shelf_install_single: 'Shelf Installation',
+};
+
+function resolveJobLabel(jobItemId: string): string {
+    const mapped = JOB_LABELS[jobItemId];
+    if (mapped) return mapped;
+    console.error('[VisitRender] JOB_LABEL_MISSING', { jobItemId });
+    return jobItemId;
+}
+
 function getCustomerStatus(job: any): string {
     if (job.status === 'DISPATCHED' && !job.providerId) {
         return 'Looking for provider';
@@ -46,7 +59,8 @@ function getCustomerStatus(job: any): string {
         'CANCELLED_FREE': 'Cancelled',
         'CANCELLED_CHARGED': 'Cancelled (fee applied)',
         'DISPUTED': 'Disputed',
-        'RESCHEDULE_REQUIRED': 'Awaiting Reschedule'
+        'RESCHEDULE_REQUIRED': 'Awaiting Reschedule',
+        'REVIEW_REQUIRED': 'Awaiting custom quote review'
     };
     return statusMap[job.status] || job.status.replace('_', ' ');
 }
@@ -83,6 +97,53 @@ export function CustomerView({ user }: { user: any }) {
     const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isLocating, setIsLocating] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+    const normalizeBackendVisit = (v: any): Visit => {
+        const required = Array.isArray(v.required_capability_tags_union)
+            ? v.required_capability_tags_union
+            : (Array.isArray(v.required_capability_tags) ? v.required_capability_tags : []);
+        const primaryJobItemId = String(v.primary_job_item?.job_item_id || v.primary_job_item_id || '');
+        const primaryLabel = resolveJobLabel(primaryJobItemId);
+        const addonJobItems = (v.addon_job_items || v.addon_job_item_ids || []).map((item: any) => {
+            const addonId = String(item?.job_item_id || item);
+            return {
+                job_item_id: addonId,
+                display_name: resolveJobLabel(addonId),
+                time_weight_minutes: Number(item?.time_weight_minutes || 0),
+            };
+        });
+
+        const uiVisit: Visit = {
+            visit_id: String(v.visit_id || v.id || ''),
+            item_class: v.item_class,
+            visit_type_label: String(v.visit_type_label || v.item_class || 'Visit'),
+            primary_job_item: {
+                job_item_id: primaryJobItemId,
+                display_name: primaryLabel,
+                time_weight_minutes: Number(v.primary_job_item?.time_weight_minutes || v.base_minutes || 0),
+            },
+            addon_job_items: addonJobItems,
+            required_capability_tags: required,
+            total_minutes: Number(v.total_minutes || v.effective_minutes || v.base_minutes || 0),
+            tier: v.tier,
+            price: Number(v.price || 0),
+            scope_photos: v.scope_photos,
+            parts_photos: v.partsPhotos || v.parts_photos,
+            parts_status: v.partsStatus || v.parts_status,
+            parts_breakdown: v.partsBreakdown || v.parts_breakdown,
+            parts_notes: v.partsNotes || v.parts_notes,
+        };
+
+        console.log('[VisitRender]', {
+            jobItemId: primaryJobItemId,
+            backendPrice: uiVisit.price,
+            backendTier: uiVisit.tier,
+            renderedLabel: primaryLabel,
+            source: 'BACKEND'
+        });
+
+        return uiVisit;
+    };
 
     const handlePartsDecision = async (visitId: string, decision: 'APPROVE' | 'REJECT') => {
         setIsSubmittingParts(true);
@@ -176,7 +237,7 @@ export function CustomerView({ user }: { user: any }) {
             });
             if (res.ok) {
                 const quote = await res.json();
-                setVisits(Array.isArray(quote.visits) ? quote.visits : []);
+                setVisits(Array.isArray(quote.visits) ? quote.visits.map(normalizeBackendVisit) : []);
                 // totalPrice is now derived from visits, no need to set it
                 setStep('SCOPE_LOCK');
                 mutate();
@@ -416,36 +477,7 @@ export function CustomerView({ user }: { user: any }) {
     ) : [];
 
     const dbVisitToUiVisit = (v: any): Visit => {
-        const required = Array.isArray(v.required_capability_tags_union) ? v.required_capability_tags_union : [];
-        const visitTypeLabel =
-            v.item_class === 'CLEANING' ? 'Cleaning' :
-                v.item_class === 'SPECIALIST' ? (required.includes('PLUMBING') ? 'Plumbing' : required.includes('ELECTRICAL') ? 'Electrical' : 'Specialist') :
-                    (required.includes('PLUMBING') ? 'Plumbing' : required.includes('ELECTRICAL') ? 'Electrical' : 'Handyman');
-
-        return {
-            visit_id: v.id,
-            item_class: v.item_class,
-            visit_type_label: visitTypeLabel,
-            primary_job_item: {
-                job_item_id: v.primary_job_item_id,
-                display_name: v.primary_job_item_id,
-                time_weight_minutes: v.base_minutes || 0,
-            },
-            addon_job_items: (v.addon_job_item_ids || []).map((id: string) => ({
-                job_item_id: id,
-                display_name: id,
-                time_weight_minutes: 0,
-            })),
-            required_capability_tags: required,
-            total_minutes: v.effective_minutes || v.base_minutes || 0,
-            tier: v.tier,
-            price: v.price || 0,
-            scope_photos: v.scope_photos,
-            parts_photos: v.partsPhotos,
-            parts_status: v.partsStatus,
-            parts_breakdown: v.partsBreakdown,
-            parts_notes: v.partsNotes,
-        };
+        return normalizeBackendVisit(v);
     };
 
     const renderVisitListFromJobs = (jobsList: any[]) => {
@@ -687,6 +719,16 @@ export function CustomerView({ user }: { user: any }) {
                             });
                             if (res.ok) {
                                 const result = await res.json();
+                                if (result.status === 'OVERFLOW') {
+                                    const eta = result.eta || '30-60 minutes';
+                                    const delta = Number(result.overflow_delta || 0);
+                                    alert(`${result.message || 'This job requires review before booking can continue.'}\nETA: ${eta}\nComplexity delta: +${delta} minutes.`);
+                                    setStep('LIST');
+                                    setVisits([]);
+                                    setActiveTab('STATUS');
+                                    mutate();
+                                    return;
+                                }
                                 // Update the visit in local state with new tier/price from API response
                                 setVisits(prevVisits =>
                                     prevVisits.map(v => {

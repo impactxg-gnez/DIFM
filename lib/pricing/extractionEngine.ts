@@ -84,6 +84,64 @@ interface PhraseMatch {
     jobId: string;
     quantity: number;
     clause: string;
+    resolutionSource: 'SPECIFIC' | 'GENERIC';
+}
+
+interface SpecificIntentRule {
+    keywords: string[];
+    jobId: string;
+}
+
+interface ComposedIntentRule {
+    verbs: string[];
+    objects: string[];
+    jobId: string;
+}
+
+const SPECIFIC_INTENT_RULES: SpecificIntentRule[] = [
+    { keywords: ['mirror'], jobId: 'mirror_hang' },
+    { keywords: ['picture', 'frame'], jobId: 'pic_hang' },
+    { keywords: ['shelf', 'shelves'], jobId: 'shelf_install_single' },
+    { keywords: ['curtain', 'curtain rail', 'curtain rod'], jobId: 'curtain_rail_standard' },
+];
+
+const COMPOSED_INTENT_RULES: ComposedIntentRule[] = [
+    { verbs: ['hang', 'mount', 'install'], objects: ['mirror'], jobId: 'mirror_hang' },
+    { verbs: ['hang', 'mount', 'install'], objects: ['picture', 'frame'], jobId: 'pic_hang' },
+    { verbs: ['install', 'mount', 'put up'], objects: ['shelf', 'shelves'], jobId: 'shelf_install_single' },
+    { verbs: ['hang', 'install', 'mount'], objects: ['curtain', 'curtain rail', 'curtain rod'], jobId: 'curtain_rail_standard' },
+];
+
+const GENERIC_FALLBACK_JOB_IDS = ['mount_hang_install_wall'];
+
+function includesAnyPhrase(text: string, phrases: string[]) {
+    return phrases.some((phrase) => text.includes(phrase));
+}
+
+function resolveSpecificIntent(clause: string, allowedSet: Set<string>): string | null {
+    for (const rule of SPECIFIC_INTENT_RULES) {
+        if (!allowedSet.has(rule.jobId)) continue;
+        if (includesAnyPhrase(clause, rule.keywords)) return rule.jobId;
+    }
+    return null;
+}
+
+function resolveComposedIntent(clause: string, allowedSet: Set<string>): string | null {
+    for (const rule of COMPOSED_INTENT_RULES) {
+        if (!allowedSet.has(rule.jobId)) continue;
+        const hasVerb = includesAnyPhrase(clause, rule.verbs);
+        const hasObject = includesAnyPhrase(clause, rule.objects);
+        if (hasVerb && hasObject) return rule.jobId;
+    }
+    return null;
+}
+
+function resolveGenericIntent(scoredJobId: string | null, allowedSet: Set<string>): string | null {
+    if (scoredJobId && allowedSet.has(scoredJobId)) return scoredJobId;
+    for (const genericId of GENERIC_FALLBACK_JOB_IDS) {
+        if (allowedSet.has(genericId)) return genericId;
+    }
+    return null;
 }
 
 function hasRadiatorDiagnosticPhrase(userInput: string) {
@@ -109,7 +167,7 @@ function phraseMatchJobs(userInput: string, allowedJobIds: string[]): PhraseMatc
 
     if (hasRadiatorDiagnosticPhrase(userInput)) {
         if (allowedSet.has('radiator_diagnosis')) {
-            return [{ jobId: 'radiator_diagnosis', quantity: 1, clause: lower }];
+            return [{ jobId: 'radiator_diagnosis', quantity: 1, clause: lower, resolutionSource: 'SPECIFIC' }];
         }
         // Prevent over-assuming bleed when diagnostic intent is explicit.
         return [];
@@ -153,12 +211,27 @@ function phraseMatchJobs(userInput: string, allowedJobIds: string[]): PhraseMatc
 
     const perClause = clauses
         .map((clause) => {
-            const matchedJobId = scoreClause(clause);
-            if (!matchedJobId) return null;
+            const matchedSpecificIntent = resolveSpecificIntent(clause, allowedSet);
+            const matchedComposedIntent = matchedSpecificIntent ? null : resolveComposedIntent(clause, allowedSet);
+            const matchedGenericIntent = resolveGenericIntent(scoreClause(clause), allowedSet);
+            const finalSelectedIntent = matchedSpecificIntent || matchedComposedIntent || matchedGenericIntent;
+            const resolutionSource: 'SPECIFIC' | 'GENERIC' =
+                matchedSpecificIntent || matchedComposedIntent ? 'SPECIFIC' : 'GENERIC';
+
+            console.log('[IntentResolution]', {
+                input: clause,
+                matchedSpecificIntent: matchedSpecificIntent || matchedComposedIntent || null,
+                matchedGenericIntent,
+                finalSelectedIntent,
+                resolutionSource
+            });
+
+            if (!finalSelectedIntent) return null;
             return {
-                jobId: matchedJobId,
+                jobId: finalSelectedIntent,
                 quantity: extractQuantityFromClause(clause),
-                clause
+                clause,
+                resolutionSource
             };
         })
         .filter((v): v is PhraseMatch => !!v);
