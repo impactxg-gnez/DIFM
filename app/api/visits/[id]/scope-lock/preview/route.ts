@@ -29,7 +29,26 @@ export async function POST(
     };
     const after = computeScopePricing(visit, answers);
 
+    if (after.status !== 'OK') {
+      return NextResponse.json({
+        status: 'OVERFLOW',
+        bookingAllowed: false,
+        nextStep: 'REVIEW',
+        message: after.message,
+        eta: after.eta,
+        reason: after.reason,
+        action: after.action,
+        minutes_before: before.minutes,
+        minutes_after: after.effectiveMinutes,
+        ladder_max_time: after.ladderMaxTime,
+        overflow_delta: after.overflowDelta,
+        capability: after.capability,
+        max_ladder: after.maxLadder
+      });
+    }
+
     return NextResponse.json({
+      status: 'OK',
       minutes_before: before.minutes,
       minutes_after: after.effectiveMinutes,
       tier_before: before.tier,
