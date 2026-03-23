@@ -1,7 +1,11 @@
 import { calculateTierAndPrice, getPriceByTier } from './visitEngine';
 import { excelSource } from './excelLoader';
 import { computeClarifierAdjustmentMinutes } from './clarifierEngine';
-import { OVERFLOW_REVIEW_ETA, OVERFLOW_REVIEW_MESSAGE } from '../review/reviewWorkflow';
+
+// Keep overflow copy local to avoid hard dependency on review modules in builds
+// where review workflow files are not deployed yet.
+const OVERFLOW_REVIEW_ETA = '30-60 minutes' as const;
+const OVERFLOW_REVIEW_MESSAGE = "This job looks more complex than a standard booking. We'll review it and share a custom quote shortly.";
 
 export interface ScopePricingSuccessResult {
     status: 'OK';
