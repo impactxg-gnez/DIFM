@@ -35,6 +35,13 @@ export interface PricingTierExcel {
     price_gbp: number;
 }
 
+export interface CapabilityGuardrailExcel {
+    capability: string;
+    max_ladder: string;
+    ladder_max_time: number;
+    overflow_action: 'REVIEW';
+}
+
 export interface ClarifierExcel {
     clarifier_id: string;
     question: string;
@@ -63,14 +70,33 @@ class ExcelSource {
     private _phraseMappings: PhraseMappingExcel[] = [];
     private _jobItems: Map<string, JobItemExcel> = new Map();
     private _pricingTiers: Map<string, PricingTierExcel[]> = new Map(); // ladder -> tiers
+    private _capabilityGuardrails: Map<string, CapabilityGuardrailExcel> = new Map(); // capability -> guardrail
     private _clarifierLibrary: Map<string, string> = new Map(); // id -> question
     private _clarifierDefinitions: Map<string, ClarifierExcel> = new Map(); // id -> full schema
     private _jobItemRules: Map<string, JobItemRuleExcel> = new Map();
 
     private loaded = false;
 
+    private resolveMatrixFilePath(): string {
+        const candidates = [
+            'DIFM_COMPLETE_FIXED_MATRIX.xlsx',
+            'DIFM_Pilot_Matrix_v2_Layered.xlsx',
+            'DIFM_Pilot_Matrix_v1_Baseline.xlsx'
+        ];
+
+        for (const filename of candidates) {
+            const absolutePath = path.join(process.cwd(), filename);
+            if (fs.existsSync(absolutePath)) {
+                return absolutePath;
+            }
+        }
+
+        // Keep first candidate as default path for error reporting.
+        return path.join(process.cwd(), candidates[0]);
+    }
+
     private constructor() {
-        this.filePath = path.join(process.cwd(), 'DIFM_Pilot_Matrix_v2_Layered.xlsx');
+        this.filePath = this.resolveMatrixFilePath();
     }
 
     public static getInstance(): ExcelSource {
@@ -101,6 +127,11 @@ class ExcelSource {
         return this._clarifierLibrary;
     }
 
+    public get capabilityGuardrails() {
+        this.ensureLoaded();
+        return this._capabilityGuardrails;
+    }
+
     public get clarifierDefinitions() {
         this.ensureLoaded();
         return this._clarifierDefinitions;
@@ -109,6 +140,31 @@ class ExcelSource {
     public get jobItemRules() {
         this.ensureLoaded();
         return this._jobItemRules;
+    }
+
+    public getCapabilityGuardrail(capability: string, ladderHint?: string): CapabilityGuardrailExcel | null {
+        this.ensureLoaded();
+        const normalizedCapability = String(capability || '').trim().toUpperCase();
+        const explicit = this._capabilityGuardrails.get(normalizedCapability);
+        if (explicit) return explicit;
+
+        const ladder = String(ladderHint || normalizedCapability || 'HANDYMAN').trim().toUpperCase();
+        const tiers = this._pricingTiers.get(ladder) || [];
+        if (tiers.length === 0) {
+            return null;
+        }
+
+        const highest = tiers.reduce((acc, tier) => {
+            if (!acc) return tier;
+            return tier.max_minutes >= acc.max_minutes ? tier : acc;
+        }, tiers[0]);
+
+        return {
+            capability: normalizedCapability || ladder,
+            max_ladder: highest.tier,
+            ladder_max_time: highest.max_minutes,
+            overflow_action: 'REVIEW',
+        };
     }
 
     public ensureLoaded() {
@@ -209,6 +265,31 @@ class ExcelSource {
                 });
                 this._pricingTiers.forEach(tiers => tiers.sort((a, b) => a.max_minutes - b.max_minutes));
                 console.log(`[ExcelSource] Loaded pricing ladders: ${Array.from(this._pricingTiers.keys()).join(', ')}`);
+            }
+
+            // 3b. Capability_Guardrails
+            const guardrailSheet = workbook.Sheets['Capability_Guardrails'];
+            this._capabilityGuardrails.clear();
+            if (guardrailSheet) {
+                const data = XLSX.utils.sheet_to_json(guardrailSheet);
+                data.forEach((row: any) => {
+                    const capability = String(row.capability || '').trim().toUpperCase();
+                    if (!capability) return;
+                    const maxLadder = String(row.max_ladder || '').trim().toUpperCase();
+                    const ladderMaxTime = Number(row.ladder_max_time || 0);
+                    const overflowAction = String(row.overflow_action || 'REVIEW').trim().toUpperCase();
+                    if (!maxLadder || !Number.isFinite(ladderMaxTime) || ladderMaxTime <= 0) return;
+
+                    this._capabilityGuardrails.set(capability, {
+                        capability,
+                        max_ladder: maxLadder,
+                        ladder_max_time: ladderMaxTime,
+                        overflow_action: overflowAction === 'REVIEW' ? 'REVIEW' : 'REVIEW',
+                    });
+                });
+                console.log(`[ExcelSource] Loaded ${this._capabilityGuardrails.size} capability guardrails`);
+            } else {
+                console.log('[ExcelSource] Capability_Guardrails tab missing. Using pricing-tier-derived overflow limits.');
             }
 
             // 4. Clarifier_Library
