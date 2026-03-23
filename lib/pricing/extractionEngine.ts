@@ -4,6 +4,7 @@ import { excelSource } from './excelLoader';
 import { parseJobDescription, tokenize } from './jobParser';
 import { buildVisitsWithQuantities, GeneratedVisit } from './visitEngine';
 import { attachClarifiersToVisits } from './clarifierEngine';
+import { enforceMappingOutputGuardrails, mapToJobs } from './intentMapper';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -279,8 +280,33 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const jobItems = Array.from(excelSource.jobItems.values());
     const allowedJobIds = jobItems.map((j) => j.job_item_id);
     const directOverride = directRuleOverrides(userInput, allowedJobIds);
+    const mappedIntentResult = mapToJobs(userInput, allowedJobIds);
+    if (mappedIntentResult.type === 'CLARIFY') {
+        const clarifyResult: ExtractionPipelineResult = {
+            jobs: [],
+            capabilities: [],
+            quantities: {},
+            visits: [],
+            price: 0,
+            clarifiers: [],
+            aiResult: [],
+            fallbackResult: [],
+            message: 'Please clarify the exact tasks so we can price accurately.',
+        };
+        extractionCache.set(cacheKey, {
+            expiresAt: Date.now() + CACHE_TTL_MS,
+            result: clarifyResult,
+        });
+        return clarifyResult;
+    }
 
-    const phraseMatches = phraseMatchJobs(userInput, allowedJobIds);
+    enforceMappingOutputGuardrails(mappedIntentResult.matches);
+    const phraseMatches: PhraseMatch[] = mappedIntentResult.matches.map((match) => ({
+        jobId: match.jobId,
+        quantity: match.quantity,
+        clause: match.clause,
+        resolutionSource: match.resolutionSource
+    }));
     const phraseResult = validateAllowedJobs(phraseMatches.map((m) => m.jobId), allowedJobIds);
     let aiResult: string[] = [];
     let fallbackResult: string[] = [];
@@ -290,15 +316,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     let message: string | undefined;
 
     try {
-        if (directOverride) {
+        if (phraseResult.length > 0) {
+            aiResult = phraseResult;
+            aiConfidence = 1;
+            extractionMode = 'PATTERN_MATCH';
+        } else if (directOverride) {
             aiResult = validateAllowedJobs(directOverride.jobs, allowedJobIds);
             aiConfidence = aiResult.length > 0 ? 1 : 0;
             skipFallback = directOverride.skipFallback;
-            extractionMode = 'PATTERN_MATCH';
-        } else if (phraseResult.length > 0) {
-            // Fast path: phrase matching hit skips AI call.
-            aiResult = phraseResult;
-            aiConfidence = 1;
             extractionMode = 'PATTERN_MATCH';
         } else if (process.env.OPENAI_API_KEY) {
             const openai = new OpenAI({
