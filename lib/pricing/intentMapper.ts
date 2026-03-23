@@ -160,7 +160,7 @@ function extractQuantity(clause: string): number {
     const quantity = quantityPattern
         ? Number(quantityPattern[1])
         : (wordPattern ? NUMBER_WORDS[wordPattern[1]] : 1);
-    return Math.max(1, Math.min(10, quantity));
+    return Math.max(1, quantity);
 }
 
 function contains(text: string, token: string): boolean {
@@ -343,7 +343,7 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
             merged.set(match.jobId, { ...match });
             continue;
         }
-        const quantity = Math.min(10, existing.quantity + match.quantity);
+        const quantity = existing.quantity + match.quantity;
         merged.set(match.jobId, {
             ...existing,
             quantity,
@@ -357,9 +357,6 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
 
 export function enforceMappingOutputGuardrails(matches: MappedIntentJob[]) {
     for (const match of matches) {
-        if (match.quantity > 10) {
-            throw new Error(`ERROR_QUANTITY_CAP_EXCEEDED:${match.jobId}:${match.quantity}`);
-        }
         if (match.intent === 'ELECTRICAL' && match.jobId === 'mount_hang_install_wall') {
             throw new Error('ERROR_DOMAIN_PROTECTION_ELECTRICAL_MAPPED_TO_MOUNTING');
         }

@@ -24,6 +24,9 @@ const JOB_LABELS: Record<string, string> = {
     mirror_hang: 'Mirror Hanging',
     pic_hang: 'Picture Hanging',
     shelf_install_single: 'Shelf Installation',
+    install_shelves_set: 'Shelf Installation',
+    tv_mount_standard: 'TV Mounting',
+    handyman_small_repair: 'Minor Repair',
 };
 
 function resolveJobLabel(jobItemId: string): string {
@@ -31,6 +34,21 @@ function resolveJobLabel(jobItemId: string): string {
     if (mapped) return mapped;
     console.error('[VisitRender] JOB_LABEL_MISSING', { jobItemId });
     return jobItemId;
+}
+
+function getBackendTaskCount(rawVisit: any): number {
+    if (Array.isArray(rawVisit?.detected_tasks) && rawVisit.detected_tasks.length > 0) {
+        return rawVisit.detected_tasks.length;
+    }
+    const addonCount = Array.isArray(rawVisit?.addon_job_items)
+        ? rawVisit.addon_job_items.length
+        : (Array.isArray(rawVisit?.addon_job_item_ids) ? rawVisit.addon_job_item_ids.length : 0);
+    const hasPrimary = !!(rawVisit?.primary_job_item?.job_item_id || rawVisit?.primary_job_item_id);
+    return (hasPrimary ? 1 : 0) + addonCount;
+}
+
+function getUiTaskCount(uiVisit: Visit): number {
+    return (uiVisit.primary_job_item?.job_item_id ? 1 : 0) + (uiVisit.addon_job_items?.length || 0);
 }
 
 function getCustomerStatus(job: any): string {
@@ -77,6 +95,10 @@ export function CustomerView({ user }: { user: any }) {
     // Total price is derived from visits - always recalculates when visits change
     const totalPrice = useMemo(
         () => visits.reduce((sum, v) => sum + (v.price || 0), 0),
+        [visits]
+    );
+    const totalMinutes = useMemo(
+        () => visits.reduce((sum, v) => sum + Number(v.total_minutes || 0), 0),
         [visits]
     );
 
@@ -141,6 +163,12 @@ export function CustomerView({ user }: { user: any }) {
             renderedLabel: primaryLabel,
             source: 'BACKEND'
         });
+
+        const backendTaskCount = getBackendTaskCount(v);
+        const uiTaskCount = getUiTaskCount(uiVisit);
+        if (backendTaskCount !== uiTaskCount) {
+            throw new Error(`VISIT_TASK_COUNT_MISMATCH:${uiVisit.visit_id}:${backendTaskCount}:${uiTaskCount}`);
+        }
 
         return uiVisit;
     };
@@ -775,6 +803,7 @@ export function CustomerView({ user }: { user: any }) {
                         ))}
                     </div>
                     <TotalPrice amount={totalPrice} />
+                    <div className="text-sm text-gray-300">Total time: {totalMinutes} min</div>
                     <p className="text-sm text-gray-400">
                         Scope locked. We’re now finding the right pro(s) for each visit.
                     </p>

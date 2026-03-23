@@ -28,6 +28,14 @@ export interface Visit {
 }
 
 export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
+  const allJobNames = [
+    visit.primary_job_item.display_name,
+    ...visit.addon_job_items.map((a) => a.display_name),
+  ].filter(Boolean);
+  const jobSummary = allJobNames.length <= 2
+    ? allJobNames.join(' + ')
+    : `${allJobNames.length} Tasks`;
+
   return (
     <Card className="bg-[#1E1E20] border-white/10 text-white">
       <CardContent className="p-5 space-y-4">
@@ -44,6 +52,7 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
                 Tier: {visit.tier}
               </Badge>
             </div>
+            <div className="text-sm font-semibold text-white">{jobSummary}</div>
             <div className="text-sm text-gray-300">
               <div>• {visit.primary_job_item.display_name}</div>
               {visit.addon_job_items.map((a) => (

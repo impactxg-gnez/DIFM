@@ -67,6 +67,14 @@ interface MatrixTimedItem {
     finalBaseTimeUsed: number;
 }
 
+const FIXED_BASE_MINUTES: Record<string, number> = {
+    pic_hang: 25,
+    mirror_hang: 20,
+    shelf_install_single: 25,
+    tv_mount_standard: 120,
+    handyman_small_repair: 45,
+};
+
 const REQUIRED_HANDYMAN_MATRIX_KEYS = [
     'pic_hang',
     'mirror_hang',
@@ -94,7 +102,10 @@ export function getMatrixTime(jobItemId: string): number {
     const normalizedKey = inputJobItemId.trim();
     const matrixRow = excelSource.jobItems.get(normalizedKey);
     const matrixRowFound = !!matrixRow;
-    const time = matrixRow ? Number(matrixRow.default_time_weight_minutes) : null;
+    const overrideTime = FIXED_BASE_MINUTES[normalizedKey];
+    const time = typeof overrideTime === 'number'
+        ? overrideTime
+        : (matrixRow ? Number(matrixRow.default_time_weight_minutes) : null);
 
     console.log('[GetMatrixTimeTrace]', {
         inputJobItemId,
