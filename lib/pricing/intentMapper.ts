@@ -23,6 +23,7 @@ interface JobMappingRule {
     intent: IntentType;
     keywords: string[];
     exclude?: string[];
+    priority: number;
     lowPriorityFallback?: boolean;
 }
 
@@ -49,75 +50,86 @@ export const JOB_MAPPING: JobMappingRule[] = [
         candidates: ['cabinet_hinge_fix', 'handyman_small_repair', 'general_handyman_repair'],
         intent: 'FIX_MINOR',
         keywords: ['cabinet', 'hinge'],
-        exclude: ['tv', 'socket', 'electrical']
+        exclude: ['tv', 'socket', 'electrical'],
+        priority: 100
     },
     {
         job: 'replace_socket',
         candidates: ['replace_socket', 'replace_socket_faceplate', 'socket_replace'],
         intent: 'ELECTRICAL',
         keywords: ['replace', 'socket'],
-        exclude: ['tv', 'wall mount', 'mirror']
+        exclude: ['tv', 'wall mount', 'mirror'],
+        priority: 95
     },
     {
         job: 'install_socket',
         candidates: ['install_socket', 'socket_replace', 'replace_socket_faceplate'],
         intent: 'ELECTRICAL',
         keywords: ['install', 'socket'],
-        exclude: ['tv', 'wall mount', 'mirror']
+        exclude: ['tv', 'wall mount', 'mirror'],
+        priority: 95
     },
     {
         job: 'light_install',
         candidates: ['light_install', 'install_light_fitting', 'install_light_fitting_standard'],
         intent: 'ELECTRICAL',
         keywords: ['light', 'install'],
-        exclude: ['tv', 'mirror']
+        exclude: ['tv', 'mirror'],
+        priority: 90
     },
     {
         job: 'tv_mount_standard',
         candidates: ['tv_mount_standard'],
         intent: 'TV',
         keywords: ['tv'],
+        priority: 80
     },
     {
         job: 'mirror_hang',
         candidates: ['mirror_hang'],
         intent: 'MOUNTING',
         keywords: ['mirror'],
-        exclude: ['tv']
+        exclude: ['tv'],
+        priority: 85
     },
     {
         job: 'pic_hang',
         candidates: ['pic_hang'],
         intent: 'MOUNTING',
         keywords: ['picture'],
-        exclude: ['tv']
+        exclude: ['tv'],
+        priority: 85
     },
     {
         job: 'pic_hang',
         candidates: ['pic_hang'],
         intent: 'MOUNTING',
         keywords: ['frame'],
-        exclude: ['tv']
+        exclude: ['tv'],
+        priority: 85
     },
     {
         job: 'install_shelves_set',
         candidates: ['install_shelves_set', 'shelf_install_single'],
         intent: 'MOUNTING',
         keywords: ['shelves', 'set'],
-        exclude: ['tv', 'electrical']
+        exclude: ['tv', 'electrical'],
+        priority: 85
     },
     {
         job: 'shelf_install_single',
         candidates: ['shelf_install_single', 'install_shelves_set'],
         intent: 'MOUNTING',
         keywords: ['shelf'],
-        exclude: ['tv', 'electrical']
+        exclude: ['tv', 'electrical'],
+        priority: 85
     },
     {
         job: 'mount_hang_install_wall',
         candidates: ['mount_hang_install_wall'],
         intent: 'MOUNTING',
         keywords: ['mount', 'install', 'hang'],
+        priority: 1,
         lowPriorityFallback: true
     }
 ];
@@ -125,14 +137,29 @@ export const JOB_MAPPING: JobMappingRule[] = [
 function splitInputClauses(userInput: string): string[] {
     return userInput
         .toLowerCase()
-        .split(/\s*(?:and|,|\+)\s*/g)
+        .split(/\s*(?:and|,|\+|&)\s*/g)
         .map((s) => s.trim())
         .filter(Boolean);
 }
 
 function extractQuantity(clause: string): number {
+    const NUMBER_WORDS: Record<string, number> = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10
+    };
     const quantityPattern = clause.match(/\b(\d+)\s*(x|mirrors?|pictures?|frames?|shelves?|sockets?|outlets?|lights?|curtains?|rails?)\b/);
-    const quantity = quantityPattern ? Number(quantityPattern[1]) : 1;
+    const wordPattern = clause.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(mirrors?|pictures?|frames?|shelves?|sockets?|outlets?|lights?|curtains?|rails?)\b/);
+    const quantity = quantityPattern
+        ? Number(quantityPattern[1])
+        : (wordPattern ? NUMBER_WORDS[wordPattern[1]] : 1);
     return Math.max(1, Math.min(10, quantity));
 }
 
@@ -184,7 +211,7 @@ function resolveAllowedJobId(rule: JobMappingRule, allowedSet: Set<string>): str
 
 function resolveCabinetFixOverride(input: string, allowedSet: Set<string>): string | null {
     const lower = input.toLowerCase();
-    const hasObject = hasAnyKeyword(lower, ['cabinet', 'door']);
+    const hasObject = hasAnyKeyword(lower, ['cabinet', 'door', 'cupboard']);
     const hasFixAction = hasAnyKeyword(lower, ['fix', 'repair', 'loose', 'hinge', 'adjust', 'tighten']);
     const hingeOnlyFix = hasAnyKeyword(lower, ['hinge']) && hasAnyKeyword(lower, ['fix', 'repair', 'adjust', 'tighten', 'loose']);
     if ((!hasObject || !hasFixAction) && !hingeOnlyFix) return null;
@@ -202,7 +229,7 @@ function scoreRule(rule: JobMappingRule, clause: string, intent: IntentType): nu
     const keywordScore = hasAllKeywords(clause, rule.keywords) ? 10 : 0;
     const intentScore = rule.intent === intent ? 5 : 0;
     const fallbackScore = rule.lowPriorityFallback ? 1 : 0;
-    return keywordScore + intentScore + fallbackScore;
+    return keywordScore + intentScore + fallbackScore + (rule.priority / 1000);
 }
 
 function getRuleKind(rule: JobMappingRule): 'GENERIC' | 'SPECIFIC' {
@@ -220,31 +247,30 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
 
     const allowedSet = new Set(allowedJobIds);
 
-    const hardOverrideJob = resolveCabinetFixOverride(input, allowedSet);
-    if (hardOverrideJob) {
-        const quantity = 1;
-        const baseMinutes = getMatrixTime(hardOverrideJob);
-        if (baseMinutes > 300) {
-            throw new Error(`ERROR_UNREALISTIC_TIME:${hardOverrideJob}:${baseMinutes}`);
-        }
-        return {
-            type: 'MAPPED',
-            matches: [{
-                job: hardOverrideJob,
-                jobId: hardOverrideJob,
-                quantity,
-                clause: input.toLowerCase(),
-                intent: 'FIX_MINOR',
-                resolutionSource: 'SPECIFIC',
-                quantityTier: deriveTierFromQuantity(quantity),
-            }]
-        };
-    }
-
     const clauses = splitInputClauses(input);
     const matches: MappedIntentJob[] = [];
 
     for (const clause of clauses) {
+        const hardOverrideJob = resolveCabinetFixOverride(clause, allowedSet);
+        if (hardOverrideJob) {
+            const quantity = extractQuantity(clause);
+            const baseMinutes = getMatrixTime(hardOverrideJob);
+            const computedMinutes = baseMinutes * quantity;
+            if (computedMinutes > 300) {
+                throw new Error(`ERROR_UNREALISTIC_TIME:${hardOverrideJob}:${computedMinutes}`);
+            }
+            matches.push({
+                job: 'cabinet_hinge_fix',
+                jobId: hardOverrideJob,
+                quantity,
+                clause,
+                intent: 'FIX_MINOR',
+                resolutionSource: 'SPECIFIC',
+                quantityTier: deriveTierFromQuantity(quantity),
+            });
+            continue;
+        }
+
         const intent = detectIntent(clause);
         const quantity = extractQuantity(clause);
         const scored = JOB_MAPPING
@@ -259,12 +285,13 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
                 if (!rule.lowPriorityFallback && rule.intent !== intent) return null;
 
                 return {
+                    ruleJob: rule.job,
                     resolvedJobId,
                     score: scoreRule(rule, clause, intent),
                     kind: getRuleKind(rule)
                 };
             })
-            .filter((v): v is { resolvedJobId: string; score: number; kind: 'GENERIC' | 'SPECIFIC' } => !!v)
+            .filter((v): v is { ruleJob: string; resolvedJobId: string; score: number; kind: 'GENERIC' | 'SPECIFIC' } => !!v)
             .sort((a, b) => b.score - a.score);
 
         const bestSpecific = scored.find((s) => s.kind === 'SPECIFIC') || null;
@@ -295,7 +322,7 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         }
 
         matches.push({
-            job: final.resolvedJobId,
+            job: final.ruleJob,
             jobId: final.resolvedJobId,
             quantity,
             clause,
@@ -309,7 +336,23 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         return { type: 'CLARIFY', reason: 'NO_STRONG_MATCH', matches: [] };
     }
 
-    return { type: 'MAPPED', matches };
+    const merged = new Map<string, MappedIntentJob>();
+    for (const match of matches) {
+        const existing = merged.get(match.jobId);
+        if (!existing) {
+            merged.set(match.jobId, { ...match });
+            continue;
+        }
+        const quantity = Math.min(10, existing.quantity + match.quantity);
+        merged.set(match.jobId, {
+            ...existing,
+            quantity,
+            quantityTier: deriveTierFromQuantity(quantity),
+            clause: `${existing.clause} | ${match.clause}`
+        });
+    }
+
+    return { type: 'MAPPED', matches: Array.from(merged.values()) };
 }
 
 export function enforceMappingOutputGuardrails(matches: MappedIntentJob[]) {

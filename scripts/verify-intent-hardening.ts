@@ -9,6 +9,7 @@ interface VerificationCase {
 const CASES: VerificationCase[] = [
     { input: 'cabinet hang fix', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
     { input: 'tighten hinge', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
+    { input: 'replace five sockets', expectedJob: 'replace_socket_faceplate', expectedQuantity: 5 },
     { input: 'replace 2 sockets', expectedJob: 'replace_socket_faceplate', expectedQuantity: 2 },
     { input: 'mount 55 inch tv', expectedJob: 'tv_mount_standard', expectedQuantity: 1 },
     { input: 'hang 2 mirrors', expectedJob: 'mirror_hang', expectedQuantity: 2 },
