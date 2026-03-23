@@ -6,6 +6,8 @@ import { cookies } from 'next/headers';
 import { uploadPhoto, BUCKETS, ensureBuckets } from '@/lib/storage';
 import { computeScopePricing } from '@/lib/pricing/scopeLockEngine';
 import { getClarifierSchemaForVisit } from '@/lib/pricing/clarifierEngine';
+import { emitReviewRequiredCreated } from '@/lib/review/reviewEvents';
+import { getReviewPriority, getSlaDeadline, getSlaStatus } from '@/lib/review/reviewWorkflow';
 
 /**
  * Visit-first Scope Lock
@@ -59,12 +61,135 @@ export async function POST(
     const minutesBefore = visit.base_minutes ?? 0;
     const tierBefore = visit.tier;
     const priceBefore = visit.price ?? 0;
-    const { effectiveMinutes, finalTier, finalPrice, extraMinutes } = computeScopePricing(visit, answers);
+    const pricingResult = computeScopePricing(visit, answers);
     const clarifiersLoaded = getClarifierSchemaForVisit({
       primary_job_item_id: visit.primary_job_item_id,
       addon_job_item_ids: visit.addon_job_item_ids
     }).map((c) => c.id);
 
+    if (pricingResult.status !== 'OK') {
+      const reviewPriority = getReviewPriority(pricingResult.overflowDelta);
+      const nextSlaDeadline = getSlaDeadline();
+      const overflowLogPayload = {
+        visit_id: visitId,
+        job_id: visit.jobId,
+        capability: pricingResult.capability,
+        calculated_time: pricingResult.effectiveMinutes,
+        ladder_max_time: pricingResult.ladderMaxTime,
+        overflow_delta: pricingResult.overflowDelta,
+        selected_clarifiers: pricingResult.selectedClarifiers,
+        reviewPriority,
+        slaDeadline: nextSlaDeadline.toISOString(),
+        clarifiers_loaded: clarifiersLoaded,
+        clarifier_answers: answers || {},
+        reason: pricingResult.reason,
+        action: pricingResult.action
+      };
+
+      console.warn('[PricingOverflow]', overflowLogPayload);
+      const reviewQueueRow = await (prisma as any).$transaction(async (tx: any) => {
+        await tx.job.update({
+          where: { id: visit.jobId },
+          data: {
+            status: 'REVIEW_REQUIRED',
+            statusUpdatedAt: new Date(),
+            needsReview: true,
+            reviewType: 'PRICING_OVERFLOW',
+            reviewPriority
+          }
+        });
+
+        const queue = await tx.reviewQueue.upsert({
+          where: { visitId },
+          create: {
+            visitId,
+            jobId: visit.jobId,
+            reviewType: 'PRICING_OVERFLOW',
+            reviewPriority,
+            status: 'PENDING',
+            capability: pricingResult.capability,
+            calculatedTime: pricingResult.effectiveMinutes,
+            ladderMaxTime: pricingResult.ladderMaxTime,
+            overflowDelta: pricingResult.overflowDelta,
+            selectedClarifiers: pricingResult.selectedClarifiers,
+            slaDeadline: nextSlaDeadline,
+            slaStatus: getSlaStatus(nextSlaDeadline)
+          },
+          update: {
+            reviewType: 'PRICING_OVERFLOW',
+            reviewPriority,
+            status: 'PENDING',
+            capability: pricingResult.capability,
+            calculatedTime: pricingResult.effectiveMinutes,
+            ladderMaxTime: pricingResult.ladderMaxTime,
+            overflowDelta: pricingResult.overflowDelta,
+            selectedClarifiers: pricingResult.selectedClarifiers,
+            slaDeadline: nextSlaDeadline,
+            slaStatus: getSlaStatus(nextSlaDeadline),
+            customPrice: null,
+            customTime: null,
+            reviewerId: null,
+            reviewedAt: null,
+            resolutionNotes: null
+          }
+        });
+
+        await tx.auditLog.create({
+          data: {
+            action: 'PRICING_OVERFLOW',
+            entityType: 'VISIT',
+            entityId: visitId,
+            details: JSON.stringify(overflowLogPayload),
+            actorId: userId || 'SYSTEM'
+          }
+        });
+
+        return queue;
+      });
+
+      const eventDelivery = await emitReviewRequiredCreated({
+        visit_id: visitId,
+        job_id: visit.jobId,
+        capability: pricingResult.capability,
+        calculated_time: pricingResult.effectiveMinutes,
+        ladder_max_time: pricingResult.ladderMaxTime,
+        overflow_delta: pricingResult.overflowDelta,
+        selected_clarifiers: pricingResult.selectedClarifiers,
+        reviewPriority,
+        slaDeadline: reviewQueueRow.slaDeadline.toISOString(),
+        created_at: reviewQueueRow.createdAt.toISOString()
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          action: 'REVIEW_REQUIRED_CREATED',
+          entityType: 'VISIT',
+          entityId: visitId,
+          details: JSON.stringify({
+            ...overflowLogPayload,
+            event: 'REVIEW_REQUIRED_CREATED',
+            created_at: reviewQueueRow.createdAt.toISOString(),
+            delivery: eventDelivery
+          }),
+          actorId: userId || 'SYSTEM'
+        }
+      }).catch((e) => console.error('[ReviewEvent] Failed to write delivery audit log', e));
+
+      return NextResponse.json({
+        status: 'OVERFLOW',
+        bookingAllowed: false,
+        nextStep: 'REVIEW',
+        message: pricingResult.message,
+        eta: pricingResult.eta,
+        reason: pricingResult.reason,
+        action: pricingResult.action,
+        calculatedTime: pricingResult.effectiveMinutes,
+        ladderMaxTime: pricingResult.ladderMaxTime,
+        overflow_delta: pricingResult.overflowDelta
+      });
+    }
+
+    const { effectiveMinutes, finalTier, finalPrice, extraMinutes } = pricingResult;
     console.log(`[ScopeLock] Visit ${visitId}: base=${visit.base_minutes}min, extra=${extraMinutes}min, effective=${effectiveMinutes}min, tier=${finalTier}, price=£${finalPrice}`);
 
     // 2. Immutable ScopeSummary snapshot (minimal contract text for now)
