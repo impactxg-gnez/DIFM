@@ -12,6 +12,25 @@ interface HomeSearchInterfaceProps {
     onLoginClick?: () => void;
 }
 
+const JOB_LABELS: Record<string, string> = {
+    tv_mount_standard: 'TV Mount',
+    shelf_install_single: 'Shelf Install',
+    install_shelves_set: 'Shelf Install',
+    mirror_hang: 'Mirror Hang',
+    pic_hang: 'Picture Hang',
+    handyman_small_repair: 'Minor Repair',
+};
+
+const FLAG_LABELS: Record<string, string> = {
+    heavyLoad: 'Heavy Load',
+    largeTV: 'Large TV',
+    highWall: 'Above 2.5m',
+};
+
+function resolveJobLabel(jobId: string): string {
+    return JOB_LABELS[jobId] || jobId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', showLoginButton = false, onLoginClick }: HomeSearchInterfaceProps) {
     const [locationText, setLocationText] = useState(initialLocation);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
@@ -144,6 +163,32 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
 
     const trimmedDescription = description.trim();
     const isTooShortForExtraction = trimmedDescription.length > 0 && trimmedDescription.length < 6;
+    const previewJobs: string[] = Array.isArray(pricePreview?.finalJobs)
+        ? pricePreview.finalJobs
+        : Array.isArray(pricePreview?.visits)
+            ? pricePreview.visits.flatMap((visit: any) => {
+                const primary = String(visit?.primary_job_item?.job_item_id || '').trim();
+                const addons = Array.isArray(visit?.addon_job_items)
+                    ? visit.addon_job_items.map((a: any) => String(a?.job_item_id || '').trim())
+                    : [];
+                return [primary, ...addons].filter(Boolean);
+            })
+            : [];
+    const jobLabels = previewJobs.map(resolveJobLabel);
+    const displayTitle =
+        jobLabels.length === 1
+            ? jobLabels[0]
+            : jobLabels.length === 2
+                ? jobLabels.join(' + ')
+                : jobLabels.length > 2
+                    ? `${jobLabels[0]} + ${jobLabels.length - 1} more`
+                    : (description || 'Custom Job');
+    const subtitle = Object.entries((pricePreview?.flags || {}) as Record<string, boolean>)
+        .filter(([, val]) => !!val)
+        .map(([key]) => FLAG_LABELS[key])
+        .filter(Boolean)
+        .join(' • ');
+    const displayPrice = Number(pricePreview?.price ?? pricePreview?.total_price ?? 0);
 
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
@@ -285,30 +330,16 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 <div className="flex flex-col max-w-[70%]">
                                     <span className="text-[10px] font-bold text-black/70 uppercase tracking-wider">Upfront Price</span>
                                     <span className="text-[11px] font-semibold text-black/80 mt-1">
-                                        {isPricingLoading ? 'Calculating...' : (
-                                            pricePreview?.visits?.length === 1 
-                                                ? (pricePreview.visits[0].primary_job_item?.display_name || description || 'Custom Job')
-                                                : pricePreview?.visits?.length > 1
-                                                    ? (
-                                                        <span>
-                                                            {pricePreview.visits.length} visits:
-                                                            <br />
-                                                            {pricePreview.visits.map((v: any, idx: number) => (
-                                                                <span key={idx}>
-                                                                    • {v.visit_type_label || 'Visit'}
-                                                                    {idx < pricePreview.visits.length - 1 ? <br /> : ''}
-                                                                </span>
-                                                            ))}
-                                                        </span>
-                                                    )
-                                                    : (description || 'Custom Job')
-                                        )}
+                                        {isPricingLoading ? 'Calculating...' : displayTitle}
                                     </span>
+                                    {!isPricingLoading && subtitle && (
+                                        <span className="text-[10px] text-black/65 mt-1">{subtitle}</span>
+                                    )}
                                     <span className="text-[10px] text-black/50">Price locked when you book</span>
                                 </div>
                                 <div className="text-right flex flex-col items-end shrink-0">
                                     <span className="text-[#007AFF] font-bold text-sm">
-                                        {isPricingLoading ? '...' : `£${pricePreview?.total_price?.toFixed(2) || '0.00'}`}
+                                        {isPricingLoading ? '...' : `£${displayPrice.toFixed(2)}`}
                                     </span>
                                     {!isPricingLoading && <span className="text-[#007AFF] text-[9px] font-bold cursor-pointer hover:underline">Change &gt;</span>}
                                 </div>
