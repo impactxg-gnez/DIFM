@@ -6,8 +6,28 @@ import { cookies } from 'next/headers';
 import { uploadPhoto, BUCKETS, ensureBuckets } from '@/lib/storage';
 import { computeScopePricing } from '@/lib/pricing/scopeLockEngine';
 import { getClarifierSchemaForVisit } from '@/lib/pricing/clarifierEngine';
-import { emitReviewRequiredCreated } from '@/lib/review/reviewEvents';
-import { getReviewPriority, getSlaDeadline, getSlaStatus } from '@/lib/review/reviewWorkflow';
+
+function getReviewPriority(overflowDelta: number): string {
+  if (overflowDelta >= 90) return 'HIGH';
+  if (overflowDelta >= 30) return 'MEDIUM';
+  return 'LOW';
+}
+
+function getSlaDeadline(): Date {
+  return new Date(Date.now() + 60 * 60 * 1000);
+}
+
+function getSlaStatus(deadline: Date): string {
+  return new Date() > deadline ? 'BREACHED' : 'PENDING';
+}
+
+async function emitReviewRequiredCreated(_payload: Record<string, unknown>) {
+  return {
+    channel: 'disabled',
+    status: 'skipped',
+    reason: 'review events module unavailable in this deployment'
+  };
+}
 
 /**
  * Visit-first Scope Lock
