@@ -7,11 +7,13 @@ interface VerificationCase {
 }
 
 const CASES: VerificationCase[] = [
-    { input: 'tighten cabinet hinge', expectedJob: 'cabinet_install', expectedQuantity: 1 },
+    { input: 'cabinet hang fix', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
+    { input: 'tighten hinge', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
     { input: 'replace 2 sockets', expectedJob: 'replace_socket_faceplate', expectedQuantity: 2 },
     { input: 'mount 55 inch tv', expectedJob: 'tv_mount_standard', expectedQuantity: 1 },
     { input: 'hang 2 mirrors', expectedJob: 'mirror_hang', expectedQuantity: 2 },
     { input: 'install 10 shelves', expectedJob: 'shelf_install_single', expectedQuantity: 10 },
+    { input: 'hang mirror', expectedJob: 'mirror_hang', expectedQuantity: 1 },
 ];
 
 async function verifyMappedCases() {
@@ -48,10 +50,26 @@ async function verifyClarifyCase() {
     }
 }
 
+async function verifyMultiJobCase() {
+    const result = await runExtractionPipeline('hang 2 mirrors and a shelf');
+    const mirrorOk = result.jobs.includes('mirror_hang') && (result.quantities.mirror_hang || 0) === 2;
+    const shelfOk = result.jobs.includes('shelf_install_single') && (result.quantities.shelf_install_single || 0) === 1;
+    console.log('[IntentHardeningMultiJob]', {
+        input: 'hang 2 mirrors and a shelf',
+        jobs: result.jobs,
+        quantities: result.quantities,
+        pass: mirrorOk && shelfOk
+    });
+    if (!mirrorOk || !shelfOk) {
+        throw new Error('Expected mirror_hang x2 and shelf_install_single x1');
+    }
+}
+
 async function main() {
     // Keep deterministic behavior while verifying mapping hardening.
     delete process.env.OPENAI_API_KEY;
     await verifyMappedCases();
+    await verifyMultiJobCase();
     await verifyClarifyCase();
     console.log('SUCCESS: Intent hardening verification checks passed.');
 }

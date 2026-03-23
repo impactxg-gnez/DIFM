@@ -4,11 +4,13 @@ import { getMatrixTime } from './visitEngine';
 export type IntentType = 'MOUNTING' | 'ELECTRICAL' | 'FIX_MINOR' | 'FURNITURE' | 'TV' | 'UNKNOWN';
 
 export interface MappedIntentJob {
+    job: string;
     jobId: string;
     quantity: number;
     clause: string;
     intent: IntentType;
     resolutionSource: 'SPECIFIC' | 'GENERIC';
+    quantityTier: 'H1' | 'H2' | 'H3';
 }
 
 export type IntentMappingResult =
@@ -29,7 +31,7 @@ const INTENT_KEYWORDS: Record<Exclude<IntentType, 'UNKNOWN'>, string[]> = {
     FIX_MINOR: ['tighten', 'fix', 'repair', 'loose', 'wobbly', 'hinge', 'cabinet hinge'],
     TV: ['tv', 'television'],
     FURNITURE: ['cabinet', 'drawer', 'wardrobe', 'furniture'],
-    MOUNTING: ['mount', 'install', 'hang', 'put up', 'wall mount']
+    MOUNTING: ['mount', 'install', 'hang', 'put up', 'wall mount', 'mirror', 'picture', 'frame', 'shelf', 'shelves', 'curtain']
 };
 
 const VAGUE_PATTERNS = [
@@ -44,7 +46,7 @@ const VAGUE_PATTERNS = [
 export const JOB_MAPPING: JobMappingRule[] = [
     {
         job: 'cabinet_hinge_fix',
-        candidates: ['cabinet_hinge_fix', 'cabinet_install'],
+        candidates: ['cabinet_hinge_fix', 'handyman_small_repair', 'general_handyman_repair'],
         intent: 'FIX_MINOR',
         keywords: ['cabinet', 'hinge'],
         exclude: ['tv', 'socket', 'electrical']
@@ -87,7 +89,14 @@ export const JOB_MAPPING: JobMappingRule[] = [
         job: 'pic_hang',
         candidates: ['pic_hang'],
         intent: 'MOUNTING',
-        keywords: ['picture', 'frame'],
+        keywords: ['picture'],
+        exclude: ['tv']
+    },
+    {
+        job: 'pic_hang',
+        candidates: ['pic_hang'],
+        intent: 'MOUNTING',
+        keywords: ['frame'],
         exclude: ['tv']
     },
     {
@@ -116,7 +125,7 @@ export const JOB_MAPPING: JobMappingRule[] = [
 function splitInputClauses(userInput: string): string[] {
     return userInput
         .toLowerCase()
-        .split(/\s*(?:,|\band\b|\+|&|\bplus\b)\s*/g)
+        .split(/\s*(?:and|,|\+)\s*/g)
         .map((s) => s.trim())
         .filter(Boolean);
 }
@@ -173,6 +182,22 @@ function resolveAllowedJobId(rule: JobMappingRule, allowedSet: Set<string>): str
     return rule.candidates.find((candidate) => allowedSet.has(candidate)) || null;
 }
 
+function resolveCabinetFixOverride(input: string, allowedSet: Set<string>): string | null {
+    const lower = input.toLowerCase();
+    const hasObject = hasAnyKeyword(lower, ['cabinet', 'door']);
+    const hasFixAction = hasAnyKeyword(lower, ['fix', 'repair', 'loose', 'hinge', 'adjust', 'tighten']);
+    const hingeOnlyFix = hasAnyKeyword(lower, ['hinge']) && hasAnyKeyword(lower, ['fix', 'repair', 'adjust', 'tighten', 'loose']);
+    if ((!hasObject || !hasFixAction) && !hingeOnlyFix) return null;
+    const overrideCandidates = ['cabinet_hinge_fix', 'handyman_small_repair', 'general_handyman_repair'];
+    return overrideCandidates.find((candidate) => allowedSet.has(candidate)) || null;
+}
+
+function deriveTierFromQuantity(quantity: number): 'H1' | 'H2' | 'H3' {
+    if (quantity > 8) return 'H3';
+    if (quantity >= 4) return 'H2';
+    return 'H1';
+}
+
 function scoreRule(rule: JobMappingRule, clause: string, intent: IntentType): number {
     const keywordScore = hasAllKeywords(clause, rule.keywords) ? 10 : 0;
     const intentScore = rule.intent === intent ? 5 : 0;
@@ -194,6 +219,28 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
     }
 
     const allowedSet = new Set(allowedJobIds);
+
+    const hardOverrideJob = resolveCabinetFixOverride(input, allowedSet);
+    if (hardOverrideJob) {
+        const quantity = 1;
+        const baseMinutes = getMatrixTime(hardOverrideJob);
+        if (baseMinutes > 300) {
+            throw new Error(`ERROR_UNREALISTIC_TIME:${hardOverrideJob}:${baseMinutes}`);
+        }
+        return {
+            type: 'MAPPED',
+            matches: [{
+                job: hardOverrideJob,
+                jobId: hardOverrideJob,
+                quantity,
+                clause: input.toLowerCase(),
+                intent: 'FIX_MINOR',
+                resolutionSource: 'SPECIFIC',
+                quantityTier: deriveTierFromQuantity(quantity),
+            }]
+        };
+    }
+
     const clauses = splitInputClauses(input);
     const matches: MappedIntentJob[] = [];
 
@@ -237,6 +284,9 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         if (intent === 'ELECTRICAL' && final.resolvedJobId === 'mount_hang_install_wall') {
             throw new Error('ERROR_DOMAIN_PROTECTION_ELECTRICAL_MAPPED_TO_MOUNTING');
         }
+        if (intent === 'FIX_MINOR' && final.resolvedJobId === 'mount_hang_install_wall') {
+            throw new Error('ERROR_DOMAIN_PROTECTION_FIX_MINOR_MAPPED_TO_MOUNTING');
+        }
 
         const baseMinutes = getMatrixTime(final.resolvedJobId);
         const computedMinutes = baseMinutes * quantity;
@@ -245,11 +295,13 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         }
 
         matches.push({
+            job: final.resolvedJobId,
             jobId: final.resolvedJobId,
             quantity,
             clause,
             intent,
-            resolutionSource: bestSpecific ? 'SPECIFIC' : 'GENERIC'
+            resolutionSource: bestSpecific ? 'SPECIFIC' : 'GENERIC',
+            quantityTier: deriveTierFromQuantity(quantity),
         });
     }
 
@@ -267,6 +319,9 @@ export function enforceMappingOutputGuardrails(matches: MappedIntentJob[]) {
         }
         if (match.intent === 'ELECTRICAL' && match.jobId === 'mount_hang_install_wall') {
             throw new Error('ERROR_DOMAIN_PROTECTION_ELECTRICAL_MAPPED_TO_MOUNTING');
+        }
+        if (match.intent === 'FIX_MINOR' && match.jobId === 'mount_hang_install_wall') {
+            throw new Error('ERROR_DOMAIN_PROTECTION_FIX_MINOR_MAPPED_TO_MOUNTING');
         }
     }
 }
