@@ -1,4 +1,4 @@
-import { calculateTierAndPrice, getPriceByTier } from './visitEngine';
+import { calculateTierAndPrice, getMatrixTime, getPriceByTier } from './visitEngine';
 import { excelSource } from './excelLoader';
 import { computeClarifierAdjustmentMinutes } from './clarifierEngine';
 
@@ -96,7 +96,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     clarifierTime += computeClarifierAdjustmentMinutes(visit, answers);
 
     const matrixBaseTime = [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])]
-        .map((jobItemId: string) => Number(excelSource.jobItems.get(jobItemId)?.default_time_weight_minutes || 0))
+        .map((jobItemId: string) => getMatrixTime(jobItemId))
         .reduce((sum: number, minutes: number) => sum + minutes, 0);
     const baseTime = Number(visit.base_minutes ?? 0);
     const finalBaseTimeUsed = baseTime;

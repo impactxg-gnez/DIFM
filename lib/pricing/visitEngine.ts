@@ -67,9 +67,47 @@ interface MatrixTimedItem {
     finalBaseTimeUsed: number;
 }
 
+const REQUIRED_HANDYMAN_MATRIX_KEYS = [
+    'pic_hang',
+    'mirror_hang',
+    'shelf_install_single',
+    'install_shelves_set',
+];
+let matrixCoverageValidated = false;
+
+function verifyRequiredMatrixCoverage() {
+    if (matrixCoverageValidated) return;
+    const missingKeys = REQUIRED_HANDYMAN_MATRIX_KEYS.filter((key) => !excelSource.jobItems.has(key));
+    console.log('[MatrixCoverageCheck]', {
+        requiredKeys: REQUIRED_HANDYMAN_MATRIX_KEYS,
+        missingKeys,
+        availableCount: excelSource.jobItems.size,
+    });
+    if (missingKeys.length > 0) {
+        throw new Error(`MATRIX_KEY_MISSING: ${missingKeys.join(', ')}`);
+    }
+    matrixCoverageValidated = true;
+}
+
 export function getMatrixTime(jobItemId: string): number {
-    const item = excelSource.jobItems.get(jobItemId);
-    return Number(item?.default_time_weight_minutes || 0);
+    const inputJobItemId = String(jobItemId || '');
+    const normalizedKey = inputJobItemId.trim();
+    const matrixRow = excelSource.jobItems.get(normalizedKey);
+    const matrixRowFound = !!matrixRow;
+    const time = matrixRow ? Number(matrixRow.default_time_weight_minutes) : null;
+
+    console.log('[GetMatrixTimeTrace]', {
+        inputJobItemId,
+        normalizedKey,
+        matrixRowFound,
+        time
+    });
+
+    if (!time) {
+        throw new Error(`MATRIX_TIME_NOT_FOUND for ${inputJobItemId}`);
+    }
+
+    return time;
 }
 
 function getExpectedUpperBoundForCapability(capability: string, ladder: string): number {
@@ -108,6 +146,7 @@ export function buildVisits(itemIds: string[]): GeneratedVisit[] {
 
 export function buildVisitsWithQuantities(itemIds: string[], quantities: Record<string, number>): GeneratedVisit[] {
     const visits: GeneratedVisit[] = [];
+    verifyRequiredMatrixCoverage();
 
     // Map IDs to matrix-backed time rows with explicit quantity multiplication.
     const uniqueIds = [...new Set(itemIds)];
@@ -119,6 +158,15 @@ export function buildVisitsWithQuantities(itemIds: string[], quantities: Record<
             const matrixBaseTime = getMatrixTime(id);
             const finalBaseTimeUsed = matrixBaseTime * quantity;
             const expectedUpperBound = getExpectedUpperBoundForCapability(item.capability_tag || 'HANDYMAN', item.pricing_ladder || item.capability_tag || 'HANDYMAN');
+            const matrixLookupKey = String(id || '').trim();
+
+            console.log('[MatrixLookup]', {
+                capability: item.capability_tag || 'HANDYMAN',
+                jobItemId: id,
+                matrixLookupKey,
+                matrixTimeFound: matrixBaseTime > 0,
+                matrixTime: matrixBaseTime
+            });
 
             if (finalBaseTimeUsed > expectedUpperBound) {
                 console.error('[BASE_TIME_INFLATED]', {
