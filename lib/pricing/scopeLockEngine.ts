@@ -64,6 +64,21 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     let clarifierTime = 0;
     let forceH3 = false;
 
+    const primaryItem = excelSource.jobItems.get(visit.primary_job_item_id);
+    const ladder = primaryItem?.pricing_ladder || (visit.item_class === 'CLEANING' ? 'CLEANING' : 'HANDYMAN');
+    const capability =
+        primaryItem?.capability_tag ||
+        visit.required_capability_tags_union?.[0] ||
+        visit.required_capability_tags?.[0] ||
+        'HANDYMAN';
+    const visitBaseMinutes = Number(visit.base_minutes ?? 0);
+
+    console.log({
+        stage: 'incoming_visit',
+        capability,
+        visitBaseMinutes
+    });
+
     if (visit.item_class === 'CLEANING') {
         const beds = parseInt(answers.CLEAN_BEDROOMS || answers.bedrooms || '1', 10);
         const baths = parseInt(answers.CLEAN_BATHROOMS || answers.bathrooms || '1', 10);
@@ -72,7 +87,6 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         clarifierTime += (extraBeds * 30) + (extraBaths * 20);
     }
 
-    const primaryItem = excelSource.jobItems.get(visit.primary_job_item_id);
     const addonItems = (visit.addon_job_item_ids || []).map((itemId: string) => excelSource.jobItems.get(itemId));
     const allItems = [primaryItem, ...addonItems].filter(Boolean);
 
@@ -95,28 +109,25 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
 
     clarifierTime += computeClarifierAdjustmentMinutes(visit, answers);
 
-    const matrixBaseTime = [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])]
+    // Integrity check only: compare persisted visit base time against matrix sum.
+    const matrixBaseMinutes = [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])]
         .map((jobItemId: string) => getMatrixTime(jobItemId))
         .reduce((sum: number, minutes: number) => sum + minutes, 0);
-    const baseTime = Number(visit.base_minutes ?? 0);
-    const finalBaseTimeUsed = baseTime;
-    const mappingTime = baseTime + clarifierTime;
-    const effectiveMinutes = mappingTime + bufferTime;
-    const ladder = primaryItem?.pricing_ladder || (visit.item_class === 'CLEANING' ? 'CLEANING' : 'HANDYMAN');
-    const capability =
-        primaryItem?.capability_tag ||
-        visit.required_capability_tags_union?.[0] ||
-        visit.required_capability_tags?.[0] ||
-        'HANDYMAN';
+    if (visitBaseMinutes !== matrixBaseMinutes) {
+        throw new Error('VISIT_BASE_TIME_MISMATCH');
+    }
+
+    const mappingTime = visitBaseMinutes + clarifierTime;
+    const effectiveMinutes = visitBaseMinutes + clarifierTime;
     const selectedClarifiers = getSelectedClarifiers(answers);
     const guardrail = getLadderGuardrail(capability, ladder);
     const expectedUpperBoundForCapability = guardrail?.ladder_max_time || Number.MAX_SAFE_INTEGER;
 
-    if (finalBaseTimeUsed > expectedUpperBoundForCapability) {
+    if (visitBaseMinutes > expectedUpperBoundForCapability) {
         console.error('[BASE_TIME_INFLATED]', {
             capability,
-            matrix_base_time: matrixBaseTime,
-            final_base_time_used: finalBaseTimeUsed,
+            matrix_base_time: matrixBaseMinutes,
+            final_base_time_used: visitBaseMinutes,
             expected_upper_bound_for_capability: expectedUpperBoundForCapability
         });
     }
@@ -146,7 +157,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         : calculateTierAndPrice(mappingTime, ladder);
 
     const h1Tier = (excelSource.pricingTiers.get(ladder) || []).find((tier) => tier.tier === 'H1');
-    if (!forceH3 && h1Tier && baseTime < h1Tier.max_minutes && clarifierTime <= 0) {
+    if (!forceH3 && h1Tier && visitBaseMinutes < h1Tier.max_minutes && clarifierTime <= 0) {
         finalTier = 'H1';
         finalPrice = getPriceByTier('H1', ladder);
     }
@@ -166,18 +177,23 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     console.log('[ScopePricingDebug]', {
         capability,
         ladder,
-        matrix_base_time: matrixBaseTime,
-        final_base_time_used: finalBaseTimeUsed,
-        base_time: baseTime,
+        matrix_base_time: matrixBaseMinutes,
+        final_base_time_used: visitBaseMinutes,
+        base_time: visitBaseMinutes,
         added_time_from_clarifiers: clarifierTime,
         buffer_time: bufferTime,
         final_mapping_time: mappingTime,
         selected_tier: finalTier
     });
 
+    console.log({
+        stage: 'final_computed',
+        effectiveMinutes
+    });
+
     console.log('[PricingJobTrace]', {
         capability,
-        matrix_base_time: matrixBaseTime,
+        matrix_base_time: matrixBaseMinutes,
         quantity: 1,
         clarifier_time: clarifierTime,
         buffer_time: bufferTime,
@@ -190,7 +206,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         effectiveMinutes,
         finalTier,
         finalPrice,
-        extraMinutes: clarifierTime + bufferTime
+        extraMinutes: clarifierTime
     };
 }
 
