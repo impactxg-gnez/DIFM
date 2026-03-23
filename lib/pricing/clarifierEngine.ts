@@ -8,6 +8,10 @@ export interface ClarifierQuestion {
     required: boolean;
     options?: string[];
     impacts?: string;
+    capability_tag?: string;
+    affects_time: boolean;
+    affects_safety: boolean;
+    clarifier_type: 'PRICING' | 'SAFETY';
 }
 
 function toArray(value: unknown): string[] {
@@ -48,9 +52,18 @@ function getDerivedClarifierIds(jobIds: string[]): string[] {
     return [...ids];
 }
 
+function parseImpactFlags(impacts: unknown): { affectsTime: boolean; affectsSafety: boolean } {
+    const normalized = String(impacts || '').toLowerCase();
+    return {
+        affectsTime: /time|tier|price/.test(normalized),
+        affectsSafety: /safety|inspection|compliance|risk/.test(normalized)
+    };
+}
+
 export function getClarifierSchemaForVisit(visit: any): ClarifierQuestion[] {
     const jobIds = getVisitJobIds(visit);
     const clarifierIds = new Set<string>();
+    const capabilityTag = visit?.required_capability_tags?.[0] || visit?.required_capability_tags_union?.[0];
 
     for (const jobId of jobIds) {
         const item = excelSource.jobItems.get(jobId);
@@ -64,6 +77,9 @@ export function getClarifierSchemaForVisit(visit: any): ClarifierQuestion[] {
     for (const id of [...clarifierIds]) {
         const definition = excelSource.clarifierDefinitions.get(id);
         if (!definition) continue;
+        const impactFlags = parseImpactFlags(definition.impacts);
+        const affectsTime = impactFlags.affectsTime || ['TV_SIZE_INCHES', 'WALL_TYPE', 'ITEM_COUNT', 'ELECTRICAL_POINT_COUNT'].includes(id);
+        const affectsSafety = impactFlags.affectsSafety;
         questions.push({
             id,
             question: definition.question || id,
@@ -71,6 +87,10 @@ export function getClarifierSchemaForVisit(visit: any): ClarifierQuestion[] {
             required: String(definition.required_YN || '').toUpperCase() === 'Y',
             options: definition.options || [],
             impacts: definition.impacts || '',
+            capability_tag: String((definition as any).capability_tag || capabilityTag || ''),
+            affects_time: affectsTime,
+            affects_safety: affectsSafety,
+            clarifier_type: affectsTime ? 'PRICING' : 'SAFETY'
         });
     }
     return questions;
@@ -90,15 +110,17 @@ function includesAny(value: string, needles: string[]) {
 export function computeClarifierAdjustmentMinutes(visit: any, answers: Record<string, any>): number {
     let delta = 0;
     const jobIds = getVisitJobIds(visit);
+    const clarifierSchema = getClarifierSchemaForVisit(visit);
+    const affectsTimeIds = new Set(clarifierSchema.filter((q) => q.affects_time).map((q) => q.id));
 
     const tvSize = parseNumber(answers.TV_SIZE_INCHES ?? answers.tv_size);
-    if (tvSize !== null) {
+    if (tvSize !== null && affectsTimeIds.has('TV_SIZE_INCHES')) {
         if (tvSize > 85) delta += 60;
         else if (tvSize >= 65) delta += 30;
     }
 
     const wallType = String(answers.WALL_TYPE ?? answers.wall_type ?? '');
-    if (wallType) {
+    if (wallType && affectsTimeIds.has('WALL_TYPE')) {
         if (includesAny(wallType, ['concrete'])) delta += 45;
         else if (includesAny(wallType, ['brick'])) delta += 30;
     }
@@ -110,7 +132,7 @@ export function computeClarifierAdjustmentMinutes(visit: any, answers: Record<st
         id.includes('light') ||
         id.includes('radiator_bleed')
     );
-    if (hasQuantityPattern) {
+    if (hasQuantityPattern && (affectsTimeIds.has('ITEM_COUNT') || affectsTimeIds.has('ELECTRICAL_POINT_COUNT'))) {
         const count = parseNumber(
             answers.ITEM_COUNT ??
             answers.ELECTRICAL_POINT_COUNT ??

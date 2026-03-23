@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertCircle, Camera, Check, X, Minus, Plus } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
 
@@ -29,6 +29,10 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         type: 'boolean' | 'select' | 'number' | 'text';
         required?: boolean;
         options?: string[];
+        affects_time?: boolean;
+        affects_safety?: boolean;
+        clarifier_type?: 'PRICING' | 'SAFETY';
+        capability_tag?: string;
     }
 
     const getQuestions = (visit: any): Question[] => {
@@ -39,14 +43,34 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                 text: q.question,
                 type: q.inputType || 'text',
                 required: !!q.required,
-                options: Array.isArray(q.options) ? q.options : []
+                options: Array.isArray(q.options) ? q.options : [],
+                affects_time: q.affects_time !== false,
+                affects_safety: q.affects_safety === true,
+                clarifier_type: q.clarifier_type || (q.affects_time === false ? 'SAFETY' : 'PRICING'),
+                capability_tag: q.capability_tag
             }));
         }
         return [];
     };
 
     const questions = getQuestions(currentVisit);
+    const visitCapability = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();
+    const scopedQuestions = questions.filter((q) => {
+        if (!q.capability_tag || !visitCapability) return true;
+        return String(q.capability_tag).toUpperCase() === visitCapability;
+    });
+    const pricingQuestions = scopedQuestions.filter((q) => q.clarifier_type !== 'SAFETY' && q.affects_time !== false);
+    const pricingQuestionIds = new Set(pricingQuestions.map((q) => q.id));
+    const safetyQuestions = scopedQuestions.filter((q) =>
+        !pricingQuestionIds.has(q.id) && (q.clarifier_type === 'SAFETY' || q.affects_time === false || q.affects_safety)
+    );
     const [preview, setPreview] = useState({
+        status: 'OK' as 'OK' | 'OVERFLOW',
+        bookingAllowed: true,
+        nextStep: '' as '' | 'REVIEW',
+        message: '',
+        eta: '',
+        overflowDelta: 0,
         minutesBefore: Number(currentVisit?.total_minutes || 0),
         minutesAfter: Number(currentVisit?.total_minutes || 0),
         tierBefore: currentVisit?.tier || 'H1',
@@ -57,6 +81,12 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
 
     useEffect(() => {
         setPreview({
+            status: 'OK',
+            bookingAllowed: true,
+            nextStep: '',
+            message: '',
+            eta: '',
+            overflowDelta: 0,
             minutesBefore: Number(currentVisit?.total_minutes || 0),
             minutesAfter: Number(currentVisit?.total_minutes || 0),
             tierBefore: currentVisit?.tier || 'H1',
@@ -82,7 +112,30 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                 if (!res.ok) return;
                 const data = await res.json();
                 if (!mounted) return;
+                if (data.status === 'OVERFLOW') {
+                    setPreview({
+                        status: 'OVERFLOW',
+                        bookingAllowed: false,
+                        nextStep: data.nextStep || 'REVIEW',
+                        message: data.message || "This job looks more complex than a standard booking. We'll review it and share a custom quote shortly.",
+                        eta: data.eta || '30-60 minutes',
+                        overflowDelta: Number(data.overflow_delta || 0),
+                        minutesBefore: Number(data.minutes_before ?? currentVisit.total_minutes ?? 0),
+                        minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
+                        tierBefore: data.tier_before ?? currentVisit.tier,
+                        tierAfter: data.max_ladder ?? currentVisit.tier,
+                        priceBefore: Number(data.price_before ?? currentVisit.price ?? 0),
+                        priceAfter: Number(data.price_before ?? currentVisit.price ?? 0)
+                    });
+                    return;
+                }
                 setPreview({
+                    status: 'OK',
+                    bookingAllowed: true,
+                    nextStep: '',
+                    message: '',
+                    eta: '',
+                    overflowDelta: 0,
                     minutesBefore: Number(data.minutes_before ?? currentVisit.total_minutes ?? 0),
                     minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
                     tierBefore: data.tier_before ?? currentVisit.tier,
@@ -120,7 +173,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         setScopePhotos(prev => prev.filter((_, i) => i !== index));
     };
 
-    const requiredQuestions = questions.filter((q) => q.required);
+    const requiredQuestions = scopedQuestions.filter((q) => q.required);
     const isAllAnswered = requiredQuestions.every(q => answers[q.id] !== undefined && answers[q.id] !== '');
     const isPhotoUploaded = scopePhotos.length > 0;
 
@@ -156,7 +209,29 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                             </div>
                         </div>
 
-                        {questions.map((q) => (
+                        {preview.status === 'OVERFLOW' && (
+                            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                                <p className="text-sm font-medium text-amber-400">{preview.message}</p>
+                                <p className="mt-1 text-xs text-amber-200">
+                                    Booking is blocked for this visit. Next step: {preview.nextStep || 'REVIEW'}.
+                                </p>
+                                <p className="mt-1 text-xs text-amber-200">
+                                    Expected review ETA: {preview.eta || '30-60 minutes'}.
+                                </p>
+                                <p className="mt-1 text-xs text-amber-200">
+                                    Additional complexity detected: +{preview.overflowDelta} minutes over standard limit.
+                                </p>
+                            </div>
+                        )}
+
+                        {pricingQuestions.length > 0 && (
+                            <div className="space-y-1">
+                                <p className="text-xs uppercase tracking-wide text-blue-300">Pricing clarifiers</p>
+                                <p className="text-[11px] text-gray-400">These answers affect time and price.</p>
+                            </div>
+                        )}
+
+                        {pricingQuestions.map((q) => (
                             <div key={q.id} className="space-y-4">
                                 <Label className="text-lg font-medium leading-tight">
                                     {q.text} {q.required ? <span className="text-red-400">*</span> : null}
@@ -192,33 +267,80 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                     </div>
                                 )}
                                 {q.type === 'number' && (
-                                    <div className="flex items-center gap-4 bg-white/5 p-4 rounded-lg w-fit">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-10 w-10 border-white/10 p-0"
-                                            onClick={() => {
-                                                const current = parseInt(answers[q.id] || '1');
-                                                if (current > 0) handleAnswer(q.id, (current - 1).toString());
-                                            }}
-                                        >
-                                            <Minus className="h-4 w-4" />
-                                        </Button>
-                                        <span className="text-2xl font-bold min-w-[2rem] text-center">
-                                            {answers[q.id] || '1'}
-                                        </span>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-10 w-10 border-white/10 p-0"
-                                            onClick={() => {
-                                                const current = parseInt(answers[q.id] || '1');
-                                                handleAnswer(q.id, (current + 1).toString());
-                                            }}
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        inputMode="numeric"
+                                        className="bg-white/5 border-white/10 py-6 text-lg"
+                                        placeholder="Enter a number..."
+                                        value={answers[q.id] || ''}
+                                        onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                    />
+                                )}
+
+                                {q.type === 'text' && (
+                                    <Input
+                                        className="bg-white/5 border-white/10 py-6 text-lg"
+                                        placeholder="Enter details..."
+                                        value={answers[q.id] || ''}
+                                        onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                    />
+                                )}
+                            </div>
+                        ))}
+
+                        {safetyQuestions.length > 0 && (
+                            <div className="space-y-1 pt-2 border-t border-white/10">
+                                <p className="text-xs uppercase tracking-wide text-amber-300">Safety / inspection clarifiers</p>
+                                <p className="text-[11px] text-gray-400">These help with risk checks and on-site safety; they do not change pricing.</p>
+                            </div>
+                        )}
+
+                        {safetyQuestions.map((q) => (
+                            <div key={q.id} className="space-y-4">
+                                <Label className="text-lg font-medium leading-tight">
+                                    {q.text} {q.required ? <span className="text-red-400">*</span> : null}
+                                </Label>
+
+                                {q.type === 'boolean' && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['yes', 'no'].map((val) => (
+                                            <Button
+                                                key={val}
+                                                variant={answers[q.id] === val ? 'default' : 'outline'}
+                                                className={`capitalize ${answers[q.id] === val ? 'bg-blue-600' : 'border-white/10 hover:bg-white/5'}`}
+                                                onClick={() => handleAnswer(q.id, val)}
+                                            >
+                                                {val.replace('_', ' ')}
+                                            </Button>
+                                        ))}
                                     </div>
+                                )}
+
+                                {q.type === 'select' && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        {q.options?.map((val: string) => (
+                                            <Button
+                                                key={val}
+                                                variant={answers[q.id] === val ? 'default' : 'outline'}
+                                                className={`text-xs ${answers[q.id] === val ? 'bg-blue-600' : 'border-white/10 hover:bg-white/5'}`}
+                                                onClick={() => handleAnswer(q.id, val)}
+                                            >
+                                                {val}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                )}
+                                {q.type === 'number' && (
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        inputMode="numeric"
+                                        className="bg-white/5 border-white/10 py-6 text-lg"
+                                        placeholder="Enter a number..."
+                                        value={answers[q.id] || ''}
+                                        onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                    />
                                 )}
 
                                 {q.type === 'text' && (
@@ -276,10 +398,14 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                 <div className="space-y-3">
                     <Button
                         className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold"
-                        disabled={!isAllAnswered || !isPhotoUploaded || isSubmitting}
+                        disabled={!isAllAnswered || !isPhotoUploaded || isSubmitting || preview.status === 'OVERFLOW' || preview.bookingAllowed === false}
                         onClick={handleNext}
                     >
-                        {isSubmitting ? 'Finalizing...' : (currentVisitIndex === visits.length - 1 ? 'Confirm & Book' : 'Next Visit')}
+                        {isSubmitting
+                            ? 'Finalizing...'
+                            : preview.status === 'OVERFLOW'
+                                ? 'Requires Review'
+                                : (currentVisitIndex === visits.length - 1 ? 'Confirm & Book' : 'Next Visit')}
                     </Button>
                     <Button
                         variant="ghost"

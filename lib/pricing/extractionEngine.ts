@@ -2,14 +2,16 @@ import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import { excelSource } from './excelLoader';
 import { parseJobDescription, tokenize } from './jobParser';
-import { buildVisits, GeneratedVisit } from './visitEngine';
+import { buildVisitsWithQuantities, GeneratedVisit } from './visitEngine';
 import { attachClarifiersToVisits } from './clarifierEngine';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
+    capabilities: string[];
+    quantities: Record<string, number>;
     visits: GeneratedVisit[];
     price: number;
-    clarifiers: Array<{ tag: string; question: string }>;
+    clarifiers: Array<{ tag: string; question: string; capability_tag?: string; affects_time?: boolean; affects_safety?: boolean }>;
     aiResult: string[];
     fallbackResult: string[];
     message?: string;
@@ -22,6 +24,36 @@ function normalizeCacheKey(input: string) {
     return input.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+const NUMBER_WORDS: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10
+};
+
+function splitInputClauses(userInput: string): string[] {
+    return userInput
+        .toLowerCase()
+        .split(/\s*(?:,|\band\b|\+|&|\bplus\b)\s*/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+function extractQuantityFromClause(clause: string): number {
+    const numeric = clause.match(/\b(\d+)\b/);
+    if (numeric) return Math.max(1, Number(numeric[1]));
+    for (const [word, value] of Object.entries(NUMBER_WORDS)) {
+        if (new RegExp(`\\b${word}\\b`, 'i').test(clause)) return value;
+    }
+    return 1;
+}
+
 function buildClarifiers(jobIds: string[]) {
     const allClarifierIds = new Set<string>();
     jobIds.forEach((id) => {
@@ -32,12 +64,26 @@ function buildClarifiers(jobIds: string[]) {
     return Array.from(allClarifierIds).map((id) => ({
         tag: id,
         question: excelSource.clarifierLibrary.get(id) || `Please provide details for ${id}`,
+        capability_tag: Array.from(new Set(jobIds
+            .map((jobId) => {
+                const item = excelSource.jobItems.get(jobId);
+                return item?.clarifier_ids?.includes(id) ? item?.capability_tag : null;
+            })
+            .filter(Boolean)))[0] || undefined,
+        affects_time: /time|tier|price/i.test(String(excelSource.clarifierDefinitions.get(id)?.impacts || '')),
+        affects_safety: /safety|inspection|compliance|risk/i.test(String(excelSource.clarifierDefinitions.get(id)?.impacts || '')),
     }));
 }
 
 function validateAllowedJobs(candidateIds: string[], allowedJobIds: string[]) {
     const allowed = new Set(allowedJobIds);
     return candidateIds.filter((id) => allowed.has(id));
+}
+
+interface PhraseMatch {
+    jobId: string;
+    quantity: number;
+    clause: string;
 }
 
 function hasRadiatorDiagnosticPhrase(userInput: string) {
@@ -55,17 +101,16 @@ function hasRadiatorDiagnosticPhrase(userInput: string) {
     return phrases.some((phrase) => lower.includes(phrase));
 }
 
-function phraseMatchJobs(userInput: string, allowedJobIds: string[]) {
+function phraseMatchJobs(userInput: string, allowedJobIds: string[]): PhraseMatch[] {
     const lower = userInput.toLowerCase();
     const tokenSet = new Set(tokenize(userInput));
     const allowedSet = new Set(allowedJobIds);
-    const clauses = lower
-        .split(/,| and | & | plus /g)
-        .map((s) => s.trim())
-        .filter(Boolean);
+    const clauses = splitInputClauses(lower);
 
     if (hasRadiatorDiagnosticPhrase(userInput)) {
-        if (allowedSet.has('radiator_diagnosis')) return ['radiator_diagnosis'];
+        if (allowedSet.has('radiator_diagnosis')) {
+            return [{ jobId: 'radiator_diagnosis', quantity: 1, clause: lower }];
+        }
         // Prevent over-assuming bleed when diagnostic intent is explicit.
         return [];
     }
@@ -106,8 +151,18 @@ function phraseMatchJobs(userInput: string, allowedJobIds: string[]) {
         return ranked[0]?.id || null;
     };
 
-    const perClause = clauses.map(scoreClause).filter(Boolean) as string[];
-    return [...new Set(perClause)];
+    const perClause = clauses
+        .map((clause) => {
+            const matchedJobId = scoreClause(clause);
+            if (!matchedJobId) return null;
+            return {
+                jobId: matchedJobId,
+                quantity: extractQuantityFromClause(clause),
+                clause
+            };
+        })
+        .filter((v): v is PhraseMatch => !!v);
+    return perClause;
 }
 
 function directRuleOverrides(userInput: string, allowedJobIds: string[]): { jobs: string[]; skipFallback: boolean } | null {
@@ -152,7 +207,8 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const allowedJobIds = jobItems.map((j) => j.job_item_id);
     const directOverride = directRuleOverrides(userInput, allowedJobIds);
 
-    const phraseResult = validateAllowedJobs(phraseMatchJobs(userInput, allowedJobIds), allowedJobIds);
+    const phraseMatches = phraseMatchJobs(userInput, allowedJobIds);
+    const phraseResult = validateAllowedJobs(phraseMatches.map((m) => m.jobId), allowedJobIds);
     let aiResult: string[] = [];
     let fallbackResult: string[] = [];
     let aiConfidence = 0;
@@ -282,10 +338,34 @@ Return matching job_item_ids from allowed_jobs.`,
         extractionMode = 'FALLBACK';
     }
 
-    const finalJobs = [...new Set(aiResult.length > 0 ? aiResult : fallbackResult)];
-    const visits = attachClarifiersToVisits(buildVisits(finalJobs));
+    const selectedModelJobs = aiResult.length > 0 ? aiResult : fallbackResult;
+    const quantityByJob: Record<string, number> = {};
+
+    for (const match of phraseMatches) {
+        if (!allowedJobIds.includes(match.jobId)) continue;
+        quantityByJob[match.jobId] = (quantityByJob[match.jobId] || 0) + Math.max(1, match.quantity);
+    }
+
+    for (const jobId of selectedModelJobs) {
+        quantityByJob[jobId] = Math.max(1, quantityByJob[jobId] || 1);
+    }
+
+    const finalJobs = Object.keys(quantityByJob);
+    const visits = attachClarifiersToVisits(buildVisitsWithQuantities(finalJobs, quantityByJob));
+    const capabilities = Array.from(new Set(
+        finalJobs
+            .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)
+            .filter(Boolean)
+    ));
     const price = visits.reduce((sum, v) => sum + v.price, 0);
     const clarifiers = buildClarifiers(finalJobs);
+    const unresolvedClauses = splitInputClauses(userInput).filter((clause) => {
+        const normalizedClause = clause.toLowerCase();
+        return !phraseMatches.some((m) => m.clause.toLowerCase() === normalizedClause);
+    });
+    if (!message && finalJobs.length > 0 && unresolvedClauses.length > 0 && unresolvedClauses.length < splitInputClauses(userInput).length) {
+        message = `Need a bit more detail for: ${unresolvedClauses.join(', ')}`;
+    }
 
     const minutesBefore = visits.reduce((sum, v) => sum + (v.total_minutes || 0), 0);
     const tierBefore = visits.map((v) => v.tier).join(',');
@@ -294,11 +374,13 @@ Return matching job_item_ids from allowed_jobs.`,
         userInput,
         direct_override: directOverride?.jobs || [],
         phrase_result: phraseResult,
+        phrase_quantities: quantityByJob,
         extraction_mode: extractionMode,
         ai_result: aiResult,
         ai_confidence: aiConfidence,
         fallback_result: fallbackResult,
         jobs_detected: finalJobs,
+        capabilities,
         final_jobs: finalJobs,
         clarifiers_loaded: clarifiers.map((c) => c.tag),
         clarifier_answers: {},
@@ -329,6 +411,8 @@ Return matching job_item_ids from allowed_jobs.`,
 
     const result = {
         jobs: finalJobs,
+        capabilities,
+        quantities: quantityByJob,
         visits,
         price,
         clarifiers,

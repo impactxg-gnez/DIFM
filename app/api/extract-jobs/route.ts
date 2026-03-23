@@ -11,6 +11,8 @@ export async function POST(req: Request) {
 
     return Response.json({
       jobs: extraction.jobs,
+      capabilities: extraction.capabilities,
+      quantities: extraction.quantities,
       visits: extraction.visits,
       price: extraction.price,
       clarifiers: extraction.clarifiers,
