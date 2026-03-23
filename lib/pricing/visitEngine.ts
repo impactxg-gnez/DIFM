@@ -73,8 +73,6 @@ export function getMatrixTime(jobItemId: string): number {
 }
 
 function getExpectedUpperBoundForCapability(capability: string, ladder: string): number {
-    const guardrail = excelSource.getCapabilityGuardrail(capability, ladder);
-    if (guardrail?.ladder_max_time) return guardrail.ladder_max_time;
     const tiers = excelSource.pricingTiers.get(ladder) || [];
     if (tiers.length === 0) return Number.MAX_SAFE_INTEGER;
     return tiers.reduce((max, tier) => Math.max(max, Number(tier.max_minutes || 0)), 0);

@@ -35,6 +35,21 @@ export interface ScopePricingOverflowResult {
 
 export type ScopePricingResult = ScopePricingSuccessResult | ScopePricingOverflowResult;
 
+function getLadderGuardrail(capability: string, ladder: string) {
+    const tiers = excelSource.pricingTiers.get(ladder) || [];
+    if (tiers.length === 0) return null;
+    const highest = tiers.reduce((acc, tier) => {
+        if (!acc) return tier;
+        return Number(tier.max_minutes || 0) >= Number(acc.max_minutes || 0) ? tier : acc;
+    }, tiers[0]);
+    return {
+        capability,
+        max_ladder: highest.tier,
+        ladder_max_time: Number(highest.max_minutes || 0),
+        overflow_action: 'REVIEW' as const,
+    };
+}
+
 function getSelectedClarifiers(answers: Record<string, string>): string[] {
     return Object.entries(answers || {})
         .filter(([, value]) => {
@@ -94,7 +109,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         visit.required_capability_tags?.[0] ||
         'HANDYMAN';
     const selectedClarifiers = getSelectedClarifiers(answers);
-    const guardrail = excelSource.getCapabilityGuardrail(capability, ladder);
+    const guardrail = getLadderGuardrail(capability, ladder);
     const expectedUpperBoundForCapability = guardrail?.ladder_max_time || Number.MAX_SAFE_INTEGER;
 
     if (finalBaseTimeUsed > expectedUpperBoundForCapability) {
