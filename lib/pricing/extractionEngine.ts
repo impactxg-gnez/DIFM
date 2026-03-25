@@ -13,7 +13,10 @@ import {
 
 export interface ExtractionPipelineResult {
     jobs: string[];
-    jobDetails: Array<{ job: string; quantity: number }>;
+    quantitiesList: number[];
+    total_minutes: number;
+    tier: string;
+    jobDetails: Array<{ job: string; pricingJobId: string; quantity: number; adjustedMinutes: number; complexityTierDelta: number }>;
     capabilities: string[];
     quantities: Record<string, number>;
     visits: GeneratedVisit[];
@@ -42,11 +45,28 @@ function validateAllowedJobs(candidateIds: string[], allowedJobIds: string[]) {
 }
 
 interface PhraseMatch {
+    canonicalJob: string;
     jobId: string;
     quantity: number;
+    adjustedMinutes: number;
+    complexityTierDelta: number;
     clause: string;
-    sourceJob: string;
     resolutionSource: 'SPECIFIC' | 'GENERIC';
+}
+
+function tierRank(tier: string): number {
+    const match = String(tier || '').match(/(\d)/);
+    return match ? Number(match[1]) : 1;
+}
+
+function rankToTier(rank: number): string {
+    return `H${Math.max(1, Math.min(3, rank))}`;
+}
+
+function deriveBaseTierFromVisitJob(jobId: string, visits: GeneratedVisit[]): number {
+    const visit = visits.find((v) => v.primary_job_item.job_item_id === jobId || v.addon_job_items.some((a) => a.job_item_id === jobId));
+    if (!visit) return 1;
+    return tierRank(visit.tier);
 }
 
 export async function runExtractionPipeline(userInput: string): Promise<ExtractionPipelineResult> {
@@ -64,6 +84,9 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     if (mappedIntentResult.type === 'CLARIFY') {
         const clarifyResult: ExtractionPipelineResult = {
             jobs: [],
+            quantitiesList: [],
+            total_minutes: 0,
+            tier: 'H1',
             jobDetails: [],
             capabilities: [],
             quantities: {},
@@ -88,37 +111,48 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
 
     enforceMappingOutputGuardrails(mappedIntentResult.matches);
     const phraseMatches: PhraseMatch[] = mappedIntentResult.matches.map((match) => ({
+        canonicalJob: match.job,
         jobId: match.jobId,
         quantity: match.quantity,
+        adjustedMinutes: match.adjustedMinutes,
+        complexityTierDelta: match.complexityTierDelta,
         clause: match.clause,
-        sourceJob: match.job,
         resolutionSource: match.resolutionSource
     }));
     const phraseResult = validateAllowedJobs(phraseMatches.map((m) => m.jobId), allowedJobIds);
     const aiResult: string[] = phraseResult;
     const fallbackResult: string[] = [];
     const quantityByJob: Record<string, number> = {};
+    const quantityByCanonicalJob: Record<string, number> = {};
+    const adjustedMinutesByCanonicalJob: Record<string, number> = {};
 
     for (const match of phraseMatches) {
         if (!allowedJobIds.includes(match.jobId)) continue;
         quantityByJob[match.jobId] = (quantityByJob[match.jobId] || 0) + Math.max(1, match.quantity);
+        quantityByCanonicalJob[match.canonicalJob] = (quantityByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.quantity);
+        adjustedMinutesByCanonicalJob[match.canonicalJob] = (adjustedMinutesByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.adjustedMinutes);
     }
 
-    const finalJobs = Object.keys(quantityByJob);
+    const finalJobs = Object.keys(quantityByCanonicalJob);
+    const pricingJobIds = Object.keys(quantityByJob);
+    const quantitiesList = finalJobs.map((job) => quantityByCanonicalJob[job] || 1);
     const jobDetails = phraseMatches.map((match) => ({
-        job: match.jobId,
+        job: match.canonicalJob,
+        pricingJobId: match.jobId,
         quantity: Math.max(1, match.quantity),
+        adjustedMinutes: Math.max(1, match.adjustedMinutes),
+        complexityTierDelta: Math.max(0, match.complexityTierDelta),
     }));
-    const visits = attachClarifiersToVisits(buildVisitsWithQuantities(finalJobs, quantityByJob));
+    const visits = attachClarifiersToVisits(buildVisitsWithQuantities(pricingJobIds, quantityByJob));
     const capabilities = Array.from(new Set(
-        finalJobs
+        pricingJobIds
             .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)
             .filter(Boolean)
     ));
     const price = visits.reduce((sum, v) => sum + v.price, 0);
     const clarifiers = getClarifiers(
         normalizedInput,
-        phraseMatches.map((match) => ({ job: match.sourceJob, quantity: match.quantity, part: match.clause }))
+        phraseMatches.map((match) => ({ job: match.canonicalJob, quantity: match.quantity, part: match.clause }))
     );
     const unresolvedClauses = parts.filter((part) => {
         const mapped = mapPartToJob(part);
@@ -139,6 +173,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         unresolvedPartCount: unresolvedClauses.length,
     };
     const unresolvedDiagnostics = [...unresolvedClauses];
+    const totalMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
+
+    const perJobTierRanks = phraseMatches.map((match) => {
+        const baseRank = deriveBaseTierFromVisitJob(match.jobId, visits);
+        return Math.min(3, baseRank + Math.max(0, match.complexityTierDelta));
+    });
+    const finalTierRank = perJobTierRanks.length > 0 ? Math.max(...perJobTierRanks) : 1;
+    const finalTier = rankToTier(finalTierRank);
 
     const minutesBefore = visits.reduce((sum, v) => sum + (v.total_minutes || 0), 0);
     const tierBefore = visits.map((v) => v.tier).join(',');
@@ -146,7 +188,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const logPayload = {
         userInput,
         phrase_result: phraseResult,
-        phrase_quantities: quantityByJob,
+        phrase_quantities: quantityByCanonicalJob,
         extraction_mode: 'PATTERN_MATCH',
         ai_result: aiResult,
         ai_confidence: 1,
@@ -158,9 +200,9 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         clarifiers_loaded: clarifiers.map((c) => c.tag),
         clarifier_answers: {},
         minutes_before: minutesBefore,
-        minutes_after: minutesBefore,
+        minutes_after: totalMinutes,
         tier_before: tierBefore,
-        tier_after: tierBefore,
+        tier_after: finalTier,
         price_before: price,
         price_after: price,
         final_price: price,
@@ -186,9 +228,12 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
 
     const result = {
         jobs: finalJobs,
+        quantitiesList,
+        total_minutes: totalMinutes,
+        tier: finalTier,
         jobDetails,
         capabilities,
-        quantities: quantityByJob,
+        quantities: quantityByCanonicalJob,
         visits,
         price,
         clarifiers,

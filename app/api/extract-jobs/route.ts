@@ -11,12 +11,15 @@ export async function POST(req: Request) {
 
     return Response.json({
       jobs: extraction.jobs,
+      quantities: extraction.quantitiesList,
+      total_minutes: extraction.total_minutes,
+      tier: extraction.tier,
+      clarifiers: extraction.clarifiers.map((c) => c.tag),
+      // Extended diagnostics payload for UI/debug.
       jobDetails: extraction.jobDetails,
       capabilities: extraction.capabilities,
-      quantities: extraction.quantities,
       visits: extraction.visits,
       price: extraction.price,
-      clarifiers: extraction.clarifiers,
       flags: extraction.flags,
       message: extraction.message
     });
