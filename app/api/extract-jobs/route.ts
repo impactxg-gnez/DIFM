@@ -11,11 +11,13 @@ export async function POST(req: Request) {
 
     return Response.json({
       jobs: extraction.jobs,
+      jobDetails: extraction.jobDetails,
       capabilities: extraction.capabilities,
       quantities: extraction.quantities,
       visits: extraction.visits,
       price: extraction.price,
       clarifiers: extraction.clarifiers,
+      flags: extraction.flags,
       message: extraction.message
     });
 
