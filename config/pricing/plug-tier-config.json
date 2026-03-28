@@ -1,0 +1,20 @@
+{
+  "BASIC": {
+    "base_price": 100,
+    "included_plugs": 2,
+    "price_per_extra_plug": 20,
+    "max_cap": null
+  },
+  "STANDARD": {
+    "base_price": 150,
+    "included_plugs": 3,
+    "price_per_extra_plug": 15,
+    "max_cap": 300
+  },
+  "PREMIUM": {
+    "base_price": 200,
+    "included_plugs": 5,
+    "price_per_extra_plug": 10,
+    "max_cap": 350
+  }
+}
