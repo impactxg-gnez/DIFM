@@ -66,6 +66,7 @@ const RULE_JOB_ALIASES: Record<string, string[]> = {
     heating_diagnostic: ['heating_diagnostic', 'radiator_diagnosis'],
     plumbing_diagnostic: ['plumbing_diagnostic', 'toilet_repair_simple', 'toilet_flush_repair', 'unblock_toilet_simple'],
     appliance_install: ['appliance_install', 'install_dishwasher', 'replace_dishwasher', 'install_dishwasher_integrated', 'appliance_install_plug_in'],
+    handyman_small_repair: ['handyman_small_repair', 'general_handyman_repair', 'cabinet_hinge_fix'],
 };
 
 const VAGUE_PATTERNS = [
@@ -89,10 +90,26 @@ function includesAny(part: string, tokens: string[]): boolean {
     return tokens.some((token) => hasMatchToken(part, token));
 }
 
+function fuzzyMapPartToJob(part: string): string | null {
+    const fuzzyRules: Array<{ needle: string; job: string }> = [
+        { needle: 'pict', job: 'pic_hang' },
+        { needle: 'mirro', job: 'mirror_hang' },
+        { needle: 'shelf', job: 'shelf_install_single' },
+        { needle: 'dish', job: 'appliance_install' },
+        { needle: 'socket', job: 'replace_socket' },
+        { needle: 'cabinet', job: 'handyman_small_repair' },
+        { needle: 'tv', job: 'tv_mount_standard' },
+        { needle: 'mount', job: 'tv_mount_standard' },
+    ];
+    const lower = part.toLowerCase();
+    const matched = fuzzyRules.find((rule) => lower.includes(rule.needle));
+    return matched?.job || null;
+}
+
 function isIntentUnclear(part: string): boolean {
     const hasGenericAction = includesAny(part, ['mount', 'hang', 'install', 'put', 'replace', 'fix', 'repair']);
     if (!hasGenericAction) return false;
-    const hasKnownObject = RULES.some((rule) => includesAny(part, rule.match));
+    const hasKnownObject = RULES.some((rule) => includesAny(part, rule.match)) || !!fuzzyMapPartToJob(part);
     return !hasKnownObject;
 }
 
@@ -160,9 +177,6 @@ function parseComplexity(part: string, canonicalJob: string, tvDetails: { size: 
     let overrideJobId: string | null = null;
 
     const isConcrete = tvDetails.wall === 'concrete' || hasMatchToken(part, 'concrete');
-    const isHigh = parseHeightOver25m(part);
-    const noFixings = parseFixingsUnavailable(part);
-
     if (canonicalJob === 'tv_mount_standard') {
         if ((tvDetails.size || 0) > 65) {
             tierDelta += 1;
@@ -195,15 +209,6 @@ function parseComplexity(part: string, canonicalJob: string, tvDetails: { size: 
             deltaMinutes += 15;
             tierDelta += 1;
         }
-    }
-
-    if (isHigh) {
-        deltaMinutes += 20;
-        tierDelta += 1;
-    }
-    if (noFixings) {
-        deltaMinutes += 15;
-        tierDelta += 1;
     }
 
     return { deltaMinutes, tierDelta: Math.min(2, tierDelta), overrideJobId };
@@ -261,6 +266,11 @@ export function mapPartToJob(part: string): { job: string; resolutionSource: 'SP
         }
     }
 
+    const fuzzyJob = fuzzyMapPartToJob(part);
+    if (fuzzyJob) {
+        return { job: fuzzyJob, resolutionSource: 'SPECIFIC' };
+    }
+
     if (isIntentUnclear(part)) {
         return { job: GENERIC_FALLBACK_JOB, resolutionSource: 'GENERIC' };
     }
@@ -283,11 +293,9 @@ export function getClarifiers(
 
     for (const entry of jobs) {
         if (entry.job === 'tv_mount_standard') {
-            addClarifier({ tag: 'TV_SIZE_INCHES', question: 'What is the TV size in inches?', affects_time: true });
-            addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            addClarifier({ tag: 'CABLE_CONCEALMENT', question: 'Do you need cable concealment?', affects_time: true });
-            addClarifier({ tag: 'HEIGHT_OVER_2_5M', question: 'Is installation height over 2.5m?', affects_time: true, affects_safety: true });
-            addClarifier({ tag: 'FIXINGS_AVAILABLE', question: 'Do you already have suitable fixings?', affects_time: true });
+            if (tvDetails.size === null) addClarifier({ tag: 'TV_SIZE_INCHES', question: 'What is the TV size in inches?', affects_time: true });
+            if (!tvDetails.wall) addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
+            if (tvDetails.concealed === null) addClarifier({ tag: 'CABLE_CONCEALMENT', question: 'Do you need cable concealment?', affects_time: true });
             continue;
         }
 
@@ -296,28 +304,32 @@ export function getClarifiers(
             if (quantityUnclear) {
                 addClarifier({ tag: 'SHELF_COUNT', question: 'How many shelves should be installed?', affects_time: true });
             }
-            addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            addClarifier({ tag: 'HEIGHT_OVER_2_5M', question: 'Is installation height over 2.5m?', affects_time: true, affects_safety: true });
-            addClarifier({ tag: 'FIXINGS_AVAILABLE', question: 'Do you already have suitable fixings?', affects_time: true });
+            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
+                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
+            }
+            continue;
+        }
+
+        if (entry.job === 'mirror_hang') {
+            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
+                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
+            }
             continue;
         }
 
         if (entry.job === 'curtain_rail_install') {
-            addClarifier({ tag: 'CURTAIN_RAIL_LENGTH', question: 'What is the curtain rail length?', affects_time: true });
-            addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            addClarifier({ tag: 'HEIGHT_OVER_2_5M', question: 'Is installation height over 2.5m?', affects_time: true, affects_safety: true });
-            addClarifier({ tag: 'FIXINGS_AVAILABLE', question: 'Do you already have suitable fixings?', affects_time: true });
+            if (parseCurtainLengthMeters(entry.part) === null) {
+                addClarifier({ tag: 'CURTAIN_RAIL_LENGTH', question: 'What is the curtain rail length?', affects_time: true });
+            }
+            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
+                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
+            }
             continue;
         }
 
         if (entry.job === 'replace_socket') {
             addClarifier({ tag: 'SOCKET_TYPE', question: 'What socket type needs replacement?', affects_time: true });
             continue;
-        }
-
-        if (includesAny(entry.part, ['mount', 'hang', 'install'])) {
-            addClarifier({ tag: 'HEIGHT_OVER_2_5M', question: 'Is installation height over 2.5m?', affects_time: true, affects_safety: true });
-            addClarifier({ tag: 'FIXINGS_AVAILABLE', question: 'Do you already have suitable fixings?', affects_time: true });
         }
     }
 

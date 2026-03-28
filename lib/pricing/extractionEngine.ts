@@ -34,6 +34,11 @@ export interface ExtractionPipelineResult {
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const extractionCache = new Map<string, { expiresAt: number; result: ExtractionPipelineResult }>();
+const TIER_PRICING: Record<'H1' | 'H2' | 'H3', number> = {
+    H1: 59,
+    H2: 109,
+    H3: 159,
+};
 
 function normalizeCacheKey(input: string) {
     return normalizeInput(input);
@@ -54,19 +59,10 @@ interface PhraseMatch {
     resolutionSource: 'SPECIFIC' | 'GENERIC';
 }
 
-function tierRank(tier: string): number {
-    const match = String(tier || '').match(/(\d)/);
-    return match ? Number(match[1]) : 1;
-}
-
-function rankToTier(rank: number): string {
-    return `H${Math.max(1, Math.min(3, rank))}`;
-}
-
-function deriveBaseTierFromVisitJob(jobId: string, visits: GeneratedVisit[]): number {
-    const visit = visits.find((v) => v.primary_job_item.job_item_id === jobId || v.addon_job_items.some((a) => a.job_item_id === jobId));
-    if (!visit) return 1;
-    return tierRank(visit.tier);
+function deriveTierFromMinutes(totalMinutes: number): 'H1' | 'H2' | 'H3' {
+    if (totalMinutes >= 160) return 'H3';
+    if (totalMinutes > 60) return 'H2';
+    return 'H1';
 }
 
 export async function runExtractionPipeline(userInput: string): Promise<ExtractionPipelineResult> {
@@ -149,7 +145,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
             .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)
             .filter(Boolean)
     ));
-    const price = visits.reduce((sum, v) => sum + v.price, 0);
+    const legacyVisitPrice = visits.reduce((sum, v) => sum + v.price, 0);
     const clarifiers = getClarifiers(
         normalizedInput,
         phraseMatches.map((match) => ({ job: match.canonicalJob, quantity: match.quantity, part: match.clause }))
@@ -173,14 +169,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         unresolvedPartCount: unresolvedClauses.length,
     };
     const unresolvedDiagnostics = [...unresolvedClauses];
-    const totalMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
+    const summedMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
+    const multiJobOverhead = Math.max(0, finalJobs.length - 1) * 10;
+    const totalMinutes = summedMinutes + multiJobOverhead;
+    const minuteTier = deriveTierFromMinutes(totalMinutes);
 
-    const perJobTierRanks = phraseMatches.map((match) => {
-        const baseRank = deriveBaseTierFromVisitJob(match.jobId, visits);
-        return Math.min(3, baseRank + Math.max(0, match.complexityTierDelta));
-    });
-    const finalTierRank = perJobTierRanks.length > 0 ? Math.max(...perJobTierRanks) : 1;
-    const finalTier = rankToTier(finalTierRank);
+    const hasComplexityFlags = phraseMatches.some((match) => match.complexityTierDelta > 0);
+    const finalTier: 'H1' | 'H2' | 'H3' = hasComplexityFlags ? 'H3' : minuteTier;
+    const finalPrice = TIER_PRICING[finalTier as 'H1' | 'H2' | 'H3'];
 
     const minutesBefore = visits.reduce((sum, v) => sum + (v.total_minutes || 0), 0);
     const tierBefore = visits.map((v) => v.tier).join(',');
@@ -203,9 +199,9 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         minutes_after: totalMinutes,
         tier_before: tierBefore,
         tier_after: finalTier,
-        price_before: price,
-        price_after: price,
-        final_price: price,
+        price_before: legacyVisitPrice,
+        price_after: finalPrice,
+        final_price: finalPrice,
         flags,
         unresolved_clauses: unresolvedDiagnostics,
     };
@@ -235,13 +231,22 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         capabilities,
         quantities: quantityByCanonicalJob,
         visits,
-        price,
+        price: finalPrice,
         clarifiers,
         flags,
         aiResult,
         fallbackResult,
         message
     };
+
+    // Validation gate: enforce deterministic contract constraints before returning.
+    const fallbackUsedUnnecessarily = flags.usedGenericFallback && phraseMatches.some((m) => m.resolutionSource === 'SPECIFIC');
+    if (![59, 109, 159].includes(finalPrice)) {
+        throw new Error(`INVALID_TIER_PRICE:${finalPrice}`);
+    }
+    if (fallbackUsedUnnecessarily) {
+        throw new Error('INVALID_FALLBACK_USAGE');
+    }
 
     extractionCache.set(cacheKey, {
         expiresAt: Date.now() + CACHE_TTL_MS,
