@@ -1,7 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RemoteImage } from '@/components/ui/RemoteImage';
-import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 export interface Visit {
   visit_id: string;
@@ -21,6 +20,7 @@ export interface Visit {
   total_minutes: number;
   tier: 'H1' | 'H2' | 'H3';
   price: number;
+  display_price?: number | null;
   scope_photos?: string;
   parts_photos?: string;
   parts_status?: string;
@@ -37,7 +37,11 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
     ? allJobNames.join(' + ')
     : `${allJobNames.length} Tasks`;
 
-  const displayPrice = getDisplayPriceFromTier(visit.tier);
+  const displayPrice = Number(visit.display_price);
+  const hasDisplayPrice = Number.isFinite(displayPrice);
+  if (!hasDisplayPrice) {
+    console.error('Missing backend display_price', visit);
+  }
 
   return (
     <Card className="bg-[#1E1E20] border-white/10 text-white">
@@ -64,7 +68,9 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-lg font-black text-white">£{displayPrice.toFixed(2)}</div>
+            {hasDisplayPrice ? (
+              <div className="text-lg font-black text-white">£{displayPrice.toFixed(2)}</div>
+            ) : null}
             <div className="text-xs text-gray-500">{visit.total_minutes} min</div>
           </div>
         </div>

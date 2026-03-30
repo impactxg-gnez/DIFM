@@ -33,6 +33,13 @@ export async function GET() {
             tier: details?.tier !== undefined ? normalizeTier(details.tier) : details?.tier,
             tier_before: details?.tier_before !== undefined ? normalizeTier(details.tier_before) : details?.tier_before,
             tier_after: details?.tier_after !== undefined ? normalizeTier(details.tier_after) : details?.tier_after,
+            display_price: Number(
+                details?.display_price ??
+                details?.final_price ??
+                details?.price_after ??
+                details?.price ??
+                0
+            ),
         };
     });
 

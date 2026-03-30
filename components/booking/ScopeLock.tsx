@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
-import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 interface ScopeLockProps {
     visits: any[];
@@ -76,8 +75,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         minutesAfter: Number(currentVisit?.total_minutes || 0),
         tierBefore: currentVisit?.tier || 'H1',
         tierAfter: currentVisit?.tier || 'H1',
-        priceBefore: getDisplayPriceFromTier(currentVisit?.tier),
-        priceAfter: getDisplayPriceFromTier(currentVisit?.tier)
+        priceBefore: Number(currentVisit?.display_price),
+        priceAfter: Number(currentVisit?.display_price)
     });
 
     useEffect(() => {
@@ -92,8 +91,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
             minutesAfter: Number(currentVisit?.total_minutes || 0),
             tierBefore: currentVisit?.tier || 'H1',
             tierAfter: currentVisit?.tier || 'H1',
-            priceBefore: getDisplayPriceFromTier(currentVisit?.tier),
-            priceAfter: getDisplayPriceFromTier(currentVisit?.tier)
+            priceBefore: Number(currentVisit?.display_price),
+            priceAfter: Number(currentVisit?.display_price)
         });
     }, [currentVisitIndex]);
 
@@ -125,8 +124,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                         minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
                         tierBefore: data.tier_before ?? currentVisit.tier,
                         tierAfter: data.max_ladder ?? currentVisit.tier,
-                        priceBefore: getDisplayPriceFromTier(data.tier_before ?? currentVisit.tier),
-                        priceAfter: getDisplayPriceFromTier(data.max_ladder ?? currentVisit.tier)
+                        priceBefore: Number(data.display_price),
+                        priceAfter: Number(data.display_price)
                     });
                     return;
                 }
@@ -141,8 +140,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                     minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
                     tierBefore: data.tier_before ?? currentVisit.tier,
                     tierAfter: data.tier_after ?? currentVisit.tier,
-                    priceBefore: getDisplayPriceFromTier(data.tier_before ?? currentVisit.tier),
-                    priceAfter: getDisplayPriceFromTier(data.tier_after ?? currentVisit.tier)
+                    priceBefore: Number(data.display_price),
+                    priceAfter: Number(data.display_price)
                 });
             } catch {
                 // Keep latest known preview on transient errors.
@@ -205,7 +204,14 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                             </div>
                             <div className="bg-white/5 rounded-lg p-3">
                                 <div className="text-xs text-gray-400">Updated Price</div>
-                                <div className="text-lg font-bold">£{Number(preview.priceAfter || 0).toFixed(2)}</div>
+                                {(() => {
+                                    const displayPrice = Number(preview.priceAfter);
+                                    if (!Number.isFinite(displayPrice)) {
+                                        console.error('Missing backend display_price', { preview, currentVisit });
+                                        return null;
+                                    }
+                                    return <div className="text-lg font-bold">£{displayPrice.toFixed(2)}</div>;
+                                })()}
                                 <div className="text-[11px] text-gray-500">Tier {preview.tierAfter}</div>
                             </div>
                         </div>

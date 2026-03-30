@@ -78,7 +78,12 @@ export async function POST(
                 })
             ]);
 
-            return NextResponse.json({ success: true, newTier: normalizedTier, newPrice });
+            return NextResponse.json({
+                success: true,
+                newTier: normalizedTier,
+                newPrice,
+                display_price: Number(newPrice ?? 0)
+            });
 
         } else if (action === 'REBOOK') {
             // Large mismatch -> Rebook new visit

@@ -19,8 +19,10 @@ export async function POST(request: Request) {
             visits: pricing.visits.map((visit: any) => ({
                 ...visit,
                 tier: normalizeTier(visit?.tier),
+                display_price: Number(visit?.price ?? 0),
             })),
             total_price: pricing.totalPrice,
+            display_price: Number(pricing.totalPrice ?? 0),
             warnings: pricing.warnings || [],
             isOutOfScope: pricing.isOutOfScope || false,
             suggestedServices: pricing.suggestedServices || [],

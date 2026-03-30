@@ -111,7 +111,12 @@ export async function POST(
         ]);
 
 
-        return NextResponse.json({ success: true, tier: finalTier, price: finalPrice });
+        return NextResponse.json({
+            success: true,
+            tier: finalTier,
+            price: finalPrice,
+            display_price: Number(finalPrice ?? 0)
+        });
 
     } catch (error) {
         console.error('Scope lock error', error);

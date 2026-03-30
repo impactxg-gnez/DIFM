@@ -44,7 +44,8 @@ export async function POST(
         ladder_max_time: after.ladderMaxTime,
         overflow_delta: after.overflowDelta,
         capability: after.capability,
-        max_ladder: normalizeTier(after.maxLadder)
+        max_ladder: normalizeTier(after.maxLadder),
+        display_price: Number(before.price ?? 0),
       });
     }
 
@@ -56,6 +57,7 @@ export async function POST(
       tier_after: normalizeTier(after.finalTier),
       price_before: before.price,
       price_after: after.finalPrice,
+      display_price: Number(after.finalPrice ?? 0),
       extra_minutes: after.extraMinutes
     });
   } catch (error) {

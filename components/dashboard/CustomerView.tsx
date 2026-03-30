@@ -16,7 +16,6 @@ import { BottomNav } from './BottomNav';
 import { LocationPicker } from './LocationPicker';
 import { HomeSearchInterface } from './HomeSearchInterface';
 import { VisitCard, type Visit } from '@/components/booking/VisitCard';
-import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -143,7 +142,8 @@ export function CustomerView({ user }: { user: any }) {
             required_capability_tags: required,
             total_minutes: Number(v.total_minutes || v.effective_minutes || v.base_minutes || 0),
             tier: v.tier,
-            price: getDisplayPriceFromTier(v.tier as 'H1' | 'H2' | 'H3'),
+            price: Number(v.display_price),
+            display_price: Number(v.display_price),
             scope_photos: v.scope_photos,
             parts_photos: v.partsPhotos || v.parts_photos,
             parts_status: v.partsStatus || v.parts_status,
@@ -158,6 +158,9 @@ export function CustomerView({ user }: { user: any }) {
             renderedLabel: primaryLabel,
             source: 'BACKEND'
         });
+        if (!Number.isFinite(uiVisit.display_price)) {
+            console.error('Missing backend display_price', v);
+        }
 
         const backendTaskCount = getBackendTaskCount(v);
         const uiTaskCount = getUiTaskCount(uiVisit);
@@ -749,7 +752,8 @@ export function CustomerView({ user }: { user: any }) {
                                             return {
                                                 ...v,
                                                 tier: result.tier,
-                                                price: getDisplayPriceFromTier(result.tier as 'H1' | 'H2' | 'H3'),
+                                                price: Number(result.display_price),
+                                                display_price: Number(result.display_price),
                                                 total_minutes: result.effective_minutes || v.total_minutes
                                             };
                                         }

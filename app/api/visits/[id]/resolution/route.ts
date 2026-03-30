@@ -48,7 +48,12 @@ export async function POST(
                 }
             });
 
-            return NextResponse.json({ success: true, newTier: nextTier, newPrice: nextPrice });
+            return NextResponse.json({
+                success: true,
+                newTier: nextTier,
+                newPrice: nextPrice,
+                display_price: Number(nextPrice ?? 0)
+            });
 
         } else if (action === 'REBOOK') {
             // Logic: Cancel current visit/job, provide 100% credit (simplified for now)

@@ -20,9 +20,14 @@ export async function POST(req: Request) {
       jobDetails: extraction.jobDetails,
       capabilities: extraction.capabilities,
       visits: Array.isArray(extraction.visits)
-        ? extraction.visits.map((visit: any) => ({ ...visit, tier: normalizeTier(visit?.tier) }))
+        ? extraction.visits.map((visit: any) => ({
+          ...visit,
+          tier: normalizeTier(visit?.tier),
+          display_price: Number(visit?.price ?? 0),
+        }))
         : extraction.visits,
       price: extraction.price,
+      display_price: Number(extraction.price ?? 0),
       flags: extraction.flags,
       message: extraction.message
     });

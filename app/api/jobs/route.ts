@@ -102,6 +102,7 @@ export async function POST(request: Request) {
         const quoteVisits = pricing.visits.map((v, idx) => ({
             ...v,
             tier: normalizeTier(v?.tier),
+            display_price: Number(v?.price ?? 0),
             visit_id: persistedVisits[idx]?.id || ''
         }));
 
@@ -115,7 +116,8 @@ export async function POST(request: Request) {
         // 🔒 V1 Contract: Visit-first pricing response (do not return job/price objects)
         return NextResponse.json({
             visits: quoteVisits,
-            total_price: pricing.totalPrice
+            total_price: pricing.totalPrice,
+            display_price: Number(pricing.totalPrice ?? 0),
         });
 
 

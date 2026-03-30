@@ -37,16 +37,20 @@ export function normalizeTier(tier: unknown): UiTier {
 
 export function normalizeVisitForUi<T extends Record<string, any> | null | undefined>(visit: T): T {
   if (!visit || typeof visit !== 'object') return visit;
+  const sourcePrice = (visit as any).display_price ?? (visit as any).price;
   return {
     ...visit,
     tier: normalizeTier((visit as any).tier),
+    display_price: Number.isFinite(Number(sourcePrice)) ? Number(sourcePrice) : null,
   } as T;
 }
 
 export function normalizeJobForUi<T extends Record<string, any> | null | undefined>(job: T): T {
   if (!job || typeof job !== 'object') return job;
+  const sourcePrice = (job as any).display_price ?? (job as any).fixedPrice;
   return {
     ...job,
+    display_price: Number.isFinite(Number(sourcePrice)) ? Number(sourcePrice) : null,
     visits: Array.isArray((job as any).visits)
       ? (job as any).visits.map((visit: any) => normalizeVisitForUi(visit))
       : (job as any).visits,

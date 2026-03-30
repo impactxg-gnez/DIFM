@@ -399,8 +399,10 @@ export async function POST(
       visit_id: visitId,
       tier: normalizeTier(finalTier),
       price: finalPrice,
+      display_price: Number(finalPrice ?? 0),
       effective_minutes: effectiveMinutes,
       total_price: result.totalPrice,
+      total_display_price: Number(result.totalPrice ?? 0),
       job_status: result.jobStatus,
       all_visits_locked: result.allLocked,
     });

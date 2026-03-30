@@ -13,7 +13,6 @@ import { UserLocationMap } from './UserLocationMap';
 import { MapPin, AlertTriangle, Timer, Plus, Trash2 } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { RemoteImage } from '@/components/ui/RemoteImage';
-import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -541,9 +540,18 @@ export function ProviderView({ user }: { user: any }) {
 
                                 <div className="mt-2 flex flex-wrap gap-2">
                                     {(Array.isArray(job.visits) ? job.visits : []).map((visit: any, idx: number) => (
-                                        <Badge key={`${job.id}-visit-${visit.id || idx}`} variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">
-                                            Visit {idx + 1} {visit.tier}: £{getDisplayPriceFromTier(visit.tier).toFixed(2)}
-                                        </Badge>
+                                        (() => {
+                                            const displayPrice = Number(visit?.display_price ?? job?.display_price);
+                                            if (!Number.isFinite(displayPrice)) {
+                                                console.error('Missing backend display_price', { visit, job });
+                                                return null;
+                                            }
+                                            return (
+                                                <Badge key={`${job.id}-visit-${visit.id || idx}`} variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">
+                                                    Visit {idx + 1} {visit.tier}: £{displayPrice.toFixed(2)}
+                                                </Badge>
+                                            );
+                                        })()
                                     ))}
                                 </div>
                                 <p className="text-xs text-gray-400 mt-1">{job.isASAP ? 'ASAP' : new Date(job.scheduledAt).toLocaleString()}</p>
@@ -580,9 +588,18 @@ export function ProviderView({ user }: { user: any }) {
                             <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
                             <div className="flex flex-wrap justify-end gap-2">
                                 {(Array.isArray(job.visits) ? job.visits : []).map((visit: any, idx: number) => (
-                                    <Badge key={`${job.id}-my-visit-${visit.id || idx}`} variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">
-                                        V{idx + 1} {visit.tier}: £{getDisplayPriceFromTier(visit.tier).toFixed(2)}
-                                    </Badge>
+                                    (() => {
+                                        const displayPrice = Number(visit?.display_price ?? job?.display_price);
+                                        if (!Number.isFinite(displayPrice)) {
+                                            console.error('Missing backend display_price', { visit, job });
+                                            return null;
+                                        }
+                                        return (
+                                            <Badge key={`${job.id}-my-visit-${visit.id || idx}`} variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">
+                                                V{idx + 1} {visit.tier}: £{displayPrice.toFixed(2)}
+                                            </Badge>
+                                        );
+                                    })()
                                 ))}
                             </div>
                         </div>
