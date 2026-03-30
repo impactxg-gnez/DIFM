@@ -64,11 +64,16 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         };
     }
 
-    // 3. Build Visits (Capability-Aware Summation & Split)
-    const visits = extraction.visits;
-
-    // 4. Final Aggregation
-    const totalPrice = visits.reduce((sum, v) => sum + v.price, 0);
+    // 3. Build Visits (Capability-aware split for labels/tasks)
+    // Backend extraction pipeline already computes the final display price after
+    // quantity scaling + complexity escalation + tier resolution.
+    const totalPrice = Number(extraction.price ?? 0);
+    const visits = extraction.visits.map((visit) => ({
+        ...visit,
+        // Keep visit/task structure, but ensure single-visit previews render
+        // the same backend-final price shown in extraction/admin logs.
+        price: extraction.visits.length === 1 ? totalPrice : visit.price,
+    }));
 
     // Determination of Primary Category
     let primaryCategory = 'HANDYMAN';
