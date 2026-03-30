@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
+import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 interface HomeSearchInterfaceProps {
     onBookNow: (data: { description: string; address: string; label?: string; pricePrediction?: any }) => void;
@@ -188,7 +189,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         .map(([key]) => FLAG_LABELS[key])
         .filter(Boolean)
         .join(' • ');
-    const displayPrice = Number(pricePreview?.price ?? pricePreview?.total_price ?? 0);
+    const previewTier =
+        pricePreview?.tier ??
+        pricePreview?.tier_after ??
+        (Array.isArray(pricePreview?.visits) ? pricePreview.visits[0]?.tier : undefined);
+    const displayPrice = getDisplayPriceFromTier(previewTier);
 
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
@@ -362,8 +367,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 <div className="mt-8">
                     <Button
                         onClick={handleBookClick}
-                        disabled={isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))}
-                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || (pricePreview?.total_price === 0 && !pricePreview?.warnings?.includes('NEEDS_CLARIFICATION'))
+                        disabled={isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE')}
+                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE')
                             ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
                             : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
                             }`}

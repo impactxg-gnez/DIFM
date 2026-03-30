@@ -12,8 +12,13 @@ import { SERVICE_CATEGORIES, PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { getNextStates } from '@/lib/jobStateMachine';
 import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2, Timer } from 'lucide-react';
 import { RemoteImage } from '@/components/ui/RemoteImage';
+import { getDisplayPriceFromTier, normalizeTier } from '@/lib/ui/tierPricing';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+function getJobPrimaryTierPrice(job: any): number {
+    return getDisplayPriceFromTier(job?.visits?.[0]?.tier);
+}
 
 const tabs = [
     { id: 'jobs', label: 'Jobs', icon: ShieldAlert },
@@ -337,7 +342,8 @@ export function AdminView({ user }: { user: any }) {
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="text-xl font-black text-foreground">£{job.fixedPrice}</div>
+                                <div className="text-xl font-black text-foreground">£{getJobPrimaryTierPrice(job).toFixed(2)}</div>
+                                <div className="text-[10px] text-gray-500">Tier {normalizeTier(job?.visits?.[0]?.tier)}</div>
                                 <div className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</div>
                                 <div className="text-xs text-primary mt-1 font-medium">Click for Details & Actions</div>
                             </div>
@@ -378,7 +384,8 @@ export function AdminView({ user }: { user: any }) {
                                 <p className="text-sm text-gray-300"><span className="text-gray-500">Tier:</span> {String(log.tier_before ?? '-')} → {String(log.tier_after ?? '-')}</p>
                             </div>
                             <div className="text-right">
-                                <div className="text-lg font-black text-foreground">£{Number(log.final_price || 0).toFixed(2)}</div>
+                                <div className="text-lg font-black text-foreground">£{getDisplayPriceFromTier(log.tier_after ?? log.tier_before).toFixed(2)}</div>
+                                <div className="text-[10px] text-gray-500">Tier {normalizeTier(log.tier_after ?? log.tier_before)}</div>
                                 <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
                             </div>
                         </div>
@@ -1406,7 +1413,7 @@ export function AdminView({ user }: { user: any }) {
                                                                 </Badge>
                                                                 <span className="text-xs text-gray-500">{visit.status}</span>
                                                             </div>
-                                                            <span className="text-lg font-black text-white">£{visit.price.toFixed(2)}</span>
+                                                            <span className="text-lg font-black text-white">£{getDisplayPriceFromTier(visit.tier).toFixed(2)}</span>
                                                         </div>
 
                                                         {/* Visit Photos Display for Admin */}

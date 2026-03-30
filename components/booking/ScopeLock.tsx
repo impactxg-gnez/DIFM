@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertCircle, Camera, Check, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
+import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 interface ScopeLockProps {
     visits: any[];
@@ -75,8 +76,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         minutesAfter: Number(currentVisit?.total_minutes || 0),
         tierBefore: currentVisit?.tier || 'H1',
         tierAfter: currentVisit?.tier || 'H1',
-        priceBefore: Number(currentVisit?.price || 0),
-        priceAfter: Number(currentVisit?.price || 0)
+        priceBefore: getDisplayPriceFromTier(currentVisit?.tier),
+        priceAfter: getDisplayPriceFromTier(currentVisit?.tier)
     });
 
     useEffect(() => {
@@ -91,8 +92,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
             minutesAfter: Number(currentVisit?.total_minutes || 0),
             tierBefore: currentVisit?.tier || 'H1',
             tierAfter: currentVisit?.tier || 'H1',
-            priceBefore: Number(currentVisit?.price || 0),
-            priceAfter: Number(currentVisit?.price || 0)
+            priceBefore: getDisplayPriceFromTier(currentVisit?.tier),
+            priceAfter: getDisplayPriceFromTier(currentVisit?.tier)
         });
     }, [currentVisitIndex]);
 
@@ -124,8 +125,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                         minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
                         tierBefore: data.tier_before ?? currentVisit.tier,
                         tierAfter: data.max_ladder ?? currentVisit.tier,
-                        priceBefore: Number(data.price_before ?? currentVisit.price ?? 0),
-                        priceAfter: Number(data.price_before ?? currentVisit.price ?? 0)
+                        priceBefore: getDisplayPriceFromTier(data.tier_before ?? currentVisit.tier),
+                        priceAfter: getDisplayPriceFromTier(data.max_ladder ?? currentVisit.tier)
                     });
                     return;
                 }
@@ -140,8 +141,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                     minutesAfter: Number(data.minutes_after ?? currentVisit.total_minutes ?? 0),
                     tierBefore: data.tier_before ?? currentVisit.tier,
                     tierAfter: data.tier_after ?? currentVisit.tier,
-                    priceBefore: Number(data.price_before ?? currentVisit.price ?? 0),
-                    priceAfter: Number(data.price_after ?? currentVisit.price ?? 0)
+                    priceBefore: getDisplayPriceFromTier(data.tier_before ?? currentVisit.tier),
+                    priceAfter: getDisplayPriceFromTier(data.tier_after ?? currentVisit.tier)
                 });
             } catch {
                 // Keep latest known preview on transient errors.

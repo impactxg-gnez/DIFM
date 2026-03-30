@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { ServiceCategory, PRICE_MATRIX, SERVICE_CATEGORIES } from '@/lib/constants';
+import { ServiceCategory, SERVICE_CATEGORIES } from '@/lib/constants';
 import { getTierByCode, TierCode, getTradeLabel } from '@/lib/pricing/matrix';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { MapPin } from 'lucide-react';
 import useSWR from 'swr';
+import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 interface JobCreationFormProps {
     onSubmit: (details: { description: string; location: string; isASAP: boolean; scheduledAt?: Date }) => void;
@@ -110,8 +111,11 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
         });
     };
 
-    const basePrice = PRICE_MATRIX[category];
-    const displayedPrice = pricePreview?.totalPrice ?? basePrice;
+    const previewTier =
+        pricePreview?.tier ??
+        pricePreview?.tier_after ??
+        (Array.isArray(pricePreview?.visits) ? pricePreview.visits[0]?.tier : undefined);
+    const displayedPrice = getDisplayPriceFromTier(previewTier);
 
     const formatItemLabel = (item: any) => {
         const tier = getTierByCode(item.itemType as TierCode);
@@ -180,18 +184,18 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 {pricePreview.items.map((item: any, idx: number) => (
                                     <div key={idx} className="flex justify-between text-sm text-slate-700">
                                         <span className="font-medium">{item.quantity}x {formatItemLabel(item)}</span>
-                                        <span>£{item.totalPrice.toFixed(2)}</span>
+                                        <span>£{getDisplayPriceFromTier(item?.tier ?? item?.visitTier ?? previewTier).toFixed(2)}</span>
                                     </div>
                                 ))}
                                 <div className="flex justify-between border-t pt-2 font-semibold text-slate-900">
-                                    <span>Total</span>
-                                    <span>£{pricePreview.totalPrice.toFixed(2)}</span>
+                                    <span>Tier Price</span>
+                                    <span>£{displayedPrice.toFixed(2)}</span>
                                 </div>
                                 {pricePreview.needsReview && (
                                     <p className="text-xs text-amber-600">Flagged for admin review</p>
                                 )}
                                 {pricePreview.usedFallback && (
-                                    <p className="text-xs text-slate-500">Using fallback pricing</p>
+                                    <p className="text-xs text-slate-500">Tier-based pricing applied.</p>
                                 )}
                                 {pricePreview.routingNotes?.length ? (
                                     <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
@@ -202,7 +206,7 @@ export function JobCreationForm({ onSubmit, onCancel, loading, defaultLocation =
                                 ) : null}
                             </div>
                         ) : (
-                            <p className="text-xs text-slate-500">Start typing a description to see pricing. Base from £{basePrice}</p>
+                            <p className="text-xs text-slate-500">Start typing a description to see tier-based pricing. From £59.</p>
                         )}
                     </div>
 

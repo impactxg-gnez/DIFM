@@ -16,7 +16,7 @@ import { BottomNav } from './BottomNav';
 import { LocationPicker } from './LocationPicker';
 import { HomeSearchInterface } from './HomeSearchInterface';
 import { VisitCard, type Visit } from '@/components/booking/VisitCard';
-import { TotalPrice } from '@/components/booking/TotalPrice';
+import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -92,11 +92,6 @@ export function CustomerView({ user }: { user: any }) {
     // 🔒 Visit-first state (no job/price assumptions)
     const [visits, setVisits] = useState<Visit[]>([]);
 
-    // Total price is derived from visits - always recalculates when visits change
-    const totalPrice = useMemo(
-        () => visits.reduce((sum, v) => sum + (v.price || 0), 0),
-        [visits]
-    );
     const totalMinutes = useMemo(
         () => visits.reduce((sum, v) => sum + Number(v.total_minutes || 0), 0),
         [visits]
@@ -148,7 +143,7 @@ export function CustomerView({ user }: { user: any }) {
             required_capability_tags: required,
             total_minutes: Number(v.total_minutes || v.effective_minutes || v.base_minutes || 0),
             tier: v.tier,
-            price: Number(v.price || 0),
+            price: getDisplayPriceFromTier(v.tier as 'H1' | 'H2' | 'H3'),
             scope_photos: v.scope_photos,
             parts_photos: v.partsPhotos || v.parts_photos,
             parts_status: v.partsStatus || v.parts_status,
@@ -715,16 +710,6 @@ export function CustomerView({ user }: { user: any }) {
                                 </div>
                             )}
 
-                            {/* Deterministic Price for THIS Job only + Approved Parts */}
-                            {(() => {
-                                const partsTotal = jobVisits.reduce((sum: number, v: Visit) => {
-                                    if (v.parts_status === 'APPROVED' || v.parts_status === 'PENDING') {
-                                        return sum + (v.parts_breakdown?.totalCost || 0);
-                                    }
-                                    return sum;
-                                }, 0);
-                                return <TotalPrice amount={Number(job.fixedPrice || 0) + partsTotal} />;
-                            })()}
                             <div className="h-px bg-white/5 mx-4" /> {/* Separator between multiple jobs */}
                         </div>
                     );
@@ -764,7 +749,7 @@ export function CustomerView({ user }: { user: any }) {
                                             return {
                                                 ...v,
                                                 tier: result.tier,
-                                                price: result.price,
+                                                price: getDisplayPriceFromTier(result.tier as 'H1' | 'H2' | 'H3'),
                                                 total_minutes: result.effective_minutes || v.total_minutes
                                             };
                                         }
@@ -802,7 +787,6 @@ export function CustomerView({ user }: { user: any }) {
                             <VisitCard key={v.visit_id || `${v.primary_job_item.job_item_id}-${idx}`} visit={v} index={idx} />
                         ))}
                     </div>
-                    <TotalPrice amount={totalPrice} />
                     <div className="text-sm text-gray-300">Total time: {totalMinutes} min</div>
                     <p className="text-sm text-gray-400">
                         Scope locked. We’re now finding the right pro(s) for each visit.

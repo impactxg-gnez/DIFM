@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RemoteImage } from '@/components/ui/RemoteImage';
+import { getDisplayPriceFromTier } from '@/lib/ui/tierPricing';
 
 export interface Visit {
   visit_id: string;
@@ -36,6 +37,8 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
     ? allJobNames.join(' + ')
     : `${allJobNames.length} Tasks`;
 
+  const displayPrice = getDisplayPriceFromTier(visit.tier);
+
   return (
     <Card className="bg-[#1E1E20] border-white/10 text-white">
       <CardContent className="p-5 space-y-4">
@@ -61,7 +64,7 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-lg font-black text-white">£{Number(visit.price || 0).toFixed(2)}</div>
+            <div className="text-lg font-black text-white">£{displayPrice.toFixed(2)}</div>
             <div className="text-xs text-gray-500">{visit.total_minutes} min</div>
           </div>
         </div>
