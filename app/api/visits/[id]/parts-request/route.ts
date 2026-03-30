@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { applyStatusChange } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
 import { uploadPhoto, BUCKETS } from '@/lib/storage';
+import { normalizeVisitForUi } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -116,7 +117,7 @@ export async function POST(
             return updatedVisit;
         });
 
-        return NextResponse.json({ success: true, visit: result });
+        return NextResponse.json({ success: true, visit: normalizeVisitForUi(result) });
 
     } catch (error: any) {
         console.error('Parts request error', error);

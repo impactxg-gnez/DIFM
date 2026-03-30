@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(request: Request) {
     try {
@@ -15,7 +16,10 @@ export async function POST(request: Request) {
         
         // Return visit-first contract with warnings and metadata
         return NextResponse.json({
-            visits: pricing.visits,
+            visits: pricing.visits.map((visit: any) => ({
+                ...visit,
+                tier: normalizeTier(visit?.tier),
+            })),
             total_price: pricing.totalPrice,
             warnings: pricing.warnings || [],
             isOutOfScope: pricing.isOutOfScope || false,

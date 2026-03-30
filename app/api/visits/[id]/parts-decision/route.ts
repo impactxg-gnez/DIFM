@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import { normalizeVisitForUi } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -73,7 +74,11 @@ export async function POST(
             }
         });
 
-        return NextResponse.json({ success: true, ...result });
+        return NextResponse.json({
+            success: true,
+            ...result,
+            visit: normalizeVisitForUi(result.visit),
+        });
 
     } catch (error: any) {
         console.error('Parts decision error', error);

@@ -4,6 +4,7 @@ import { getPriceByTier } from '@/lib/pricing/visitEngine';
 import { excelSource } from '@/lib/pricing/excelLoader';
 import { applyStatusChange } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 /**
  * Step 6: Mismatch Handling
@@ -43,14 +44,15 @@ export async function POST(
             const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
             const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
 
-            const newPrice = getPriceByTier(newTier, ladder);
+            const normalizedTier = normalizeTier(newTier);
+            const newPrice = getPriceByTier(normalizedTier, ladder);
 
             await (prisma as any).$transaction([
                 // Update Visit
                 (prisma as any).visit.update({
                     where: { id: visitId },
                     data: {
-                        tier: newTier,
+                        tier: normalizedTier,
                         price: newPrice,
                         status: 'SCHEDULED' // Continue with upgraded visit
                     }
@@ -69,14 +71,14 @@ export async function POST(
                         jobId,
                         fromStatus: visit.job.status,
                         toStatus: 'IN_PROGRESS',
-                        reason: `Upgrade to ${newTier}: ${reason}`,
+                        reason: `Upgrade to ${normalizedTier}: ${reason}`,
                         changedById: userId,
                         changedByRole: userRole
                     }
                 })
             ]);
 
-            return NextResponse.json({ success: true, newTier, newPrice });
+            return NextResponse.json({ success: true, newTier: normalizedTier, newPrice });
 
         } else if (action === 'REBOOK') {
             // Large mismatch -> Rebook new visit

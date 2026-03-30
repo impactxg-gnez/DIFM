@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { uploadPhoto, BUCKETS, ensureBuckets } from '@/lib/storage';
 import { computeScopePricing } from '@/lib/pricing/scopeLockEngine';
 import { getClarifierSchemaForVisit } from '@/lib/pricing/clarifierEngine';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 function getReviewPriority(overflowDelta: number): string {
   if (overflowDelta >= 90) return 'HIGH';
@@ -396,7 +397,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       visit_id: visitId,
-      tier: finalTier,
+      tier: normalizeTier(finalTier),
       price: finalPrice,
       effective_minutes: effectiveMinutes,
       total_price: result.totalPrice,

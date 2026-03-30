@@ -4,6 +4,7 @@ import { PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { canTransition, JobStatus } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
 import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
+import { normalizeJobForUi } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -429,7 +430,7 @@ export async function POST(
             return updatedJob;
         });
 
-        return NextResponse.json({ success: true, job: result });
+        return NextResponse.json({ success: true, job: normalizeJobForUi(result) });
 
     } catch (error: any) {
         console.error('Update status error', error);

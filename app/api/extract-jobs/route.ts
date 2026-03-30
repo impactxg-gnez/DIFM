@@ -1,4 +1,5 @@
 import { runExtractionPipeline } from "@/lib/pricing/extractionEngine";
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(req: Request) {
   try {
@@ -13,12 +14,14 @@ export async function POST(req: Request) {
       jobs: extraction.jobs,
       quantities: extraction.quantitiesList,
       total_minutes: extraction.total_minutes,
-      tier: extraction.tier,
+      tier: normalizeTier(extraction.tier),
       clarifiers: extraction.clarifiers.map((c) => c.tag),
       // Extended diagnostics payload for UI/debug.
       jobDetails: extraction.jobDetails,
       capabilities: extraction.capabilities,
-      visits: extraction.visits,
+      visits: Array.isArray(extraction.visits)
+        ? extraction.visits.map((visit: any) => ({ ...visit, tier: normalizeTier(visit?.tier) }))
+        : extraction.visits,
       price: extraction.price,
       flags: extraction.flags,
       message: extraction.message

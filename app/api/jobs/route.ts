@@ -7,6 +7,7 @@ import { calculateJobPrice } from '@/lib/pricing/calculator';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { computeStuck } from '@/lib/jobStateMachine';
 import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispatchTracker';
+import { normalizeTier, normalizeJobForUi } from '@/lib/pricing/tierNormalization';
 
 export async function POST(request: Request) {
     try {
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
         // Attach visit_id to the pricing visits in order
         const quoteVisits = pricing.visits.map((v, idx) => ({
             ...v,
+            tier: normalizeTier(v?.tier),
             visit_id: persistedVisits[idx]?.id || ''
         }));
 
@@ -175,7 +177,11 @@ export async function GET(request: Request) {
                 // For poll simplicity, allowing if status matches or role admin.
             }
             const { isStuck, reason } = computeStuck(job?.status || '', job?.statusUpdatedAt);
-            return NextResponse.json([{ ...job, isStuck, stuckReason: reason }]);
+            return NextResponse.json([{
+                ...normalizeJobForUi(job),
+                isStuck,
+                stuckReason: reason
+            }]);
         }
 
         let whereClause: any = {};
@@ -249,7 +255,7 @@ export async function GET(request: Request) {
             if (!['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(job.status)) {
                 if (job.provider) {
                     return {
-                        ...job,
+                        ...normalizeJobForUi(job),
                         provider: {
                             id: job.provider.id,
                             name: job.provider.name,
@@ -261,7 +267,7 @@ export async function GET(request: Request) {
                     };
                 }
             }
-            return { ...job, isStuck, stuckReason: reason };
+            return { ...normalizeJobForUi(job), isStuck, stuckReason: reason };
         });
 
         return NextResponse.json(processedJobs);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { computeScopePricing } from '@/lib/pricing/scopeLockEngine';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
   request: Request,
@@ -24,7 +25,7 @@ export async function POST(
 
     const before = {
       minutes: visit.base_minutes ?? 0,
-      tier: visit.tier,
+      tier: normalizeTier(visit.tier),
       price: visit.price ?? 0
     };
     const after = computeScopePricing(visit, answers);
@@ -43,7 +44,7 @@ export async function POST(
         ladder_max_time: after.ladderMaxTime,
         overflow_delta: after.overflowDelta,
         capability: after.capability,
-        max_ladder: after.maxLadder
+        max_ladder: normalizeTier(after.maxLadder)
       });
     }
 
@@ -52,7 +53,7 @@ export async function POST(
       minutes_before: before.minutes,
       minutes_after: after.effectiveMinutes,
       tier_before: before.tier,
-      tier_after: after.finalTier,
+      tier_after: normalizeTier(after.finalTier),
       price_before: before.price,
       price_after: after.finalPrice,
       extra_minutes: after.extraMinutes

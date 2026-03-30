@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function GET() {
     const cookieStore = await cookies();
@@ -29,6 +30,9 @@ export async function GET() {
             id: log.id,
             createdAt: log.createdAt,
             ...details,
+            tier: details?.tier !== undefined ? normalizeTier(details.tier) : details?.tier,
+            tier_before: details?.tier_before !== undefined ? normalizeTier(details.tier_before) : details?.tier_before,
+            tier_after: details?.tier_after !== undefined ? normalizeTier(details.tier_after) : details?.tier_after,
         };
     });
 

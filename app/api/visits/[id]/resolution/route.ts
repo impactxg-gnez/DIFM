@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateTierAndPrice } from '@/lib/pricing/visitEngine';
 import { excelSource } from '@/lib/pricing/excelLoader';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -35,12 +36,13 @@ export async function POST(
             const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
             const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
 
-            const { tier: nextTier, price: nextPrice } = calculateTierAndPrice(nextMins, ladder);
+            const { tier: computedTier, price: nextPrice } = calculateTierAndPrice(nextMins, ladder);
+            const nextTier = normalizeTier(computedTier);
 
             await (prisma as any).visit.update({
                 where: { id: visitId },
                 data: {
-                    visit_tier: nextTier,
+                    tier: nextTier,
                     price: nextPrice,
                     status: 'SCHEDULED' // Resolve back to scheduled
                 }

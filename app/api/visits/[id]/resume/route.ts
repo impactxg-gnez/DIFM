@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { applyStatusChange } from '@/lib/jobStateMachine';
+import { normalizeJobForUi } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -59,7 +60,7 @@ export async function POST(
             } as any);
         });
 
-        return NextResponse.json({ success: true, job: result });
+        return NextResponse.json({ success: true, job: normalizeJobForUi(result) });
 
     } catch (error: any) {
         console.error('Resume error', error);

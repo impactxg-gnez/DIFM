@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateTierAndPrice } from '@/lib/pricing/visitEngine';
 import { excelSource } from '@/lib/pricing/excelLoader';
+import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(
     request: Request,
@@ -50,9 +51,10 @@ export async function POST(
         const excelItem = excelSource.jobItems.get(visit.primary_job_item_id);
         const ladder = excelItem?.pricing_ladder || 'HANDYMAN';
 
-        const { tier: finalTier, price: finalPrice } = forceH3
+        const { tier: computedTier, price: finalPrice } = forceH3
             ? { tier: 'H3', price: calculateTierAndPrice(150, ladder).price } // Force H3 price
             : calculateTierAndPrice(effectiveMinutes, ladder);
+        const finalTier = normalizeTier(computedTier);
 
         // 2. Create ScopeSummary Contract Snapshot
         const includes_text = "This visit covers the items listed above.";
