@@ -4,6 +4,8 @@ interface VerificationCase {
     input: string;
     expectedJob: string;
     expectedQuantity?: number;
+    expectedTier?: string;
+    expectedPrice?: number;
 }
 
 const CASES: VerificationCase[] = [
@@ -11,13 +13,22 @@ const CASES: VerificationCase[] = [
     { input: 'tighten hinge', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
     { input: 'replace five sockets', expectedJob: 'replace_socket_bulk', expectedQuantity: 5 },
     { input: 'replace 2 sockets', expectedJob: 'replace_socket_multi', expectedQuantity: 2 },
-    { input: 'mount 55 inch tv', expectedJob: 'tv_mount_residential_single', expectedQuantity: 1 },
+    {
+        input: 'mount 55 inch tv',
+        expectedJob: 'tv_mount_residential_single',
+        expectedQuantity: 1,
+        expectedTier: 'H1',
+        expectedPrice: 59,
+    },
     { input: 'mount 3 tvs on wall', expectedJob: 'tv_mount_multi_room', expectedQuantity: 3 },
     { input: 'hang 2 mirrors', expectedJob: 'mirror_hang_multi', expectedQuantity: 2 },
     { input: 'install 10 shelves', expectedJob: 'shelf_install_bulk', expectedQuantity: 10 },
     { input: 'put up four shelves', expectedJob: 'shelf_install_multi', expectedQuantity: 4 },
     { input: 'put up twenty four shelves', expectedJob: 'shelf_install_bulk', expectedQuantity: 24 },
     { input: 'hang mirror', expectedJob: 'mirror_hang_single', expectedQuantity: 1 },
+    { input: 'put up 50shelves', expectedJob: 'shelf_install_bulk', expectedQuantity: 50 },
+    { input: 'put up 24hs', expectedJob: 'shelf_install_bulk', expectedQuantity: 24 },
+    { input: 'build a chair', expectedJob: 'furniture_assembly', expectedQuantity: 1 },
 ];
 
 async function verifyMappedCases() {
@@ -26,15 +37,19 @@ async function verifyMappedCases() {
         const hasJob = result.jobs.includes(testCase.expectedJob);
         const quantity = result.quantities[testCase.expectedJob] || 0;
         const quantityPass = testCase.expectedQuantity === undefined || quantity === testCase.expectedQuantity;
+        const tierPass = testCase.expectedTier === undefined || result.tier === testCase.expectedTier;
+        const pricePass = testCase.expectedPrice === undefined || result.price === testCase.expectedPrice;
         console.log('[IntentHardeningCase]', {
             input: testCase.input,
             expectedJob: testCase.expectedJob,
             expectedQuantity: testCase.expectedQuantity,
             actualJobs: result.jobs,
             actualQuantity: quantity,
-            pass: hasJob && quantityPass
+            actualTier: result.tier,
+            actualPrice: result.price,
+            pass: hasJob && quantityPass && tierPass && pricePass,
         });
-        if (!hasJob || !quantityPass) {
+        if (!hasJob || !quantityPass || !tierPass || !pricePass) {
             throw new Error(`Failed for "${testCase.input}"`);
         }
     }

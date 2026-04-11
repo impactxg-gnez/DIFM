@@ -1,4 +1,5 @@
 import { parseBookingClause, type ParsedBookingClause } from './bookingParse';
+import { preprocessBookingInput } from './inputPreprocess';
 import { extractQuantityFromPart } from './quantityParse';
 import { resolveQuantityClassification } from './quantityClassification';
 import { getMatrixTime } from './visitEngine';
@@ -50,6 +51,31 @@ export const RULES: DeterministicRule[] = [
     { match: ['radiator', 'radiators'], job: 'heating_diagnostic' },
     { match: ['toilet', 'toilets'], job: 'plumbing_diagnostic' },
     { match: ['dishwasher', 'dishwashers'], job: 'appliance_install' },
+    {
+        match: [
+            'chair',
+            'chairs',
+            'table',
+            'tables',
+            'desk',
+            'desks',
+            'wardrobe',
+            'wardrobes',
+            'flatpack',
+            'ikea',
+            'bookcase',
+            'bookcases',
+            'bookshelf',
+            'bookshelves',
+            'nightstand',
+            'dresser',
+            'dressers',
+            'cot',
+            'crib',
+            'furniture',
+        ],
+        job: 'furniture_assembly',
+    },
 ];
 
 const GENERIC_FALLBACK_JOB = 'mount_hang_install_wall';
@@ -63,6 +89,7 @@ const RULE_JOB_ALIASES: Record<string, string[]> = {
     appliance_install: ['appliance_install', 'install_dishwasher', 'replace_dishwasher', 'install_dishwasher_integrated', 'appliance_install_plug_in'],
     handyman_small_repair: ['handyman_small_repair', 'general_handyman_repair', 'cabinet_hinge_fix'],
     install_blinds: ['install_blinds'],
+    furniture_assembly: ['assemble_flatpack_small', 'assemble_flatpack_large', 'assemble_install_furniture'],
 };
 
 const VAGUE_PATTERNS = [
@@ -96,6 +123,14 @@ function fuzzyMapPartToJob(part: string): string | null {
         { needle: 'socket', job: 'replace_socket' },
         { needle: 'hinge', job: 'handyman_small_repair' },
         { needle: 'cabinet', job: 'handyman_small_repair' },
+        { needle: 'flatpack', job: 'furniture_assembly' },
+        { needle: 'ikea', job: 'furniture_assembly' },
+        { needle: 'wardrob', job: 'furniture_assembly' },
+        { needle: 'bookcase', job: 'furniture_assembly' },
+        { needle: 'chair', job: 'furniture_assembly' },
+        { needle: 'table', job: 'furniture_assembly' },
+        { needle: 'desk', job: 'furniture_assembly' },
+        { needle: 'furnitur', job: 'furniture_assembly' },
         { needle: 'tv', job: 'tv_mount_standard' },
         { needle: 'mount', job: 'tv_mount_standard' },
     ];
@@ -105,7 +140,17 @@ function fuzzyMapPartToJob(part: string): string | null {
 }
 
 function isIntentUnclear(part: string): boolean {
-    const hasGenericAction = includesAny(part, ['mount', 'hang', 'install', 'put', 'replace', 'fix', 'repair']);
+    const hasGenericAction = includesAny(part, [
+        'mount',
+        'hang',
+        'install',
+        'put',
+        'replace',
+        'fix',
+        'repair',
+        'build',
+        'assemble',
+    ]);
     if (!hasGenericAction) return false;
     const hasKnownObject = RULES.some((rule) => includesAny(part, rule.match)) || !!fuzzyMapPartToJob(part);
     return !hasKnownObject;
@@ -125,7 +170,10 @@ function deriveIntent(jobId: string): IntentType {
         jobId.includes('pic') ||
         jobId.includes('frame') ||
         jobId.includes('mirror') ||
-        jobId.includes('tv')
+        jobId.includes('tv') ||
+        jobId.includes('flatpack') ||
+        jobId.includes('furniture') ||
+        jobId.includes('assemble')
     ) {
         return 'MOUNTING';
     }
@@ -186,16 +234,25 @@ function parseComplexity(part: string, canonicalJob: string, tvDetails: { size: 
     let tierDelta = 0;
     let overrideJobId: string | null = null;
 
-    const isConcrete = tvDetails.wall === 'concrete' || hasMatchToken(part, 'concrete');
+    const wallFromTvParse = tvDetails.wall;
+    const tvDifficultWallExplicit =
+        (wallFromTvParse !== null && ['concrete', 'brick'].includes(wallFromTvParse)) ||
+        /\b(concrete|brick)\s+wall\b/i.test(part) ||
+        /\bwall\s+is\s+(concrete|brick)\b/i.test(part) ||
+        /\bon\s+(a\s+)?(concrete|brick)(\s+wall)?\b/i.test(part);
+
+    const curtainHardWall = hasMatchToken(part, 'concrete') || hasMatchToken(part, 'brick');
+
     if (canonicalJob === 'tv_mount_standard') {
-        if ((tvDetails.size || 0) > 65) {
+        // Large-TV premium only when an explicit size was parsed from the request (not defaults).
+        if (tvDetails.size !== null && tvDetails.size > 65) {
             tierDelta += 1;
             deltaMinutes += 30;
             overrideJobId = 'mount_tv_custom';
         }
-        if (isConcrete) {
+        if (tvDifficultWallExplicit) {
             tierDelta += 1;
-            deltaMinutes += 30;
+            deltaMinutes += 25;
         }
         if (tvDetails.concealed === true || includesAny(part, ['concealed', 'hidden cables', 'hide cables'])) {
             tierDelta += 1;
@@ -215,7 +272,7 @@ function parseComplexity(part: string, canonicalJob: string, tvDetails: { size: 
             deltaMinutes += 20;
             tierDelta += 1;
         }
-        if (isConcrete) {
+        if (curtainHardWall) {
             deltaMinutes += 15;
             tierDelta += 1;
         }
@@ -243,7 +300,7 @@ function parseTvDetails(input: string): { size: number | null; wall: string | nu
 }
 
 export function normalizeInput(input: string): string {
-    return input
+    return preprocessBookingInput(input)
         .toLowerCase()
         .replace(/\+/g, ' and ')
         .replace(/,/g, ' and ')
@@ -406,7 +463,8 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         }
         const adjustedBaseMinutes = getMatrixTime(timeBasisId);
         const computedMinutes = applyBulkEfficiency(adjustedBaseMinutes, quantity) + complexity.deltaMinutes;
-        const maxPhraseMinutes = 600;
+        /** Bulk shelf/socket jobs scale linearly with qty; 600 was too low for legitimate large counts (e.g. 50 shelves). */
+        const maxPhraseMinutes = 5000;
         if (computedMinutes > maxPhraseMinutes) {
             throw new Error(`ERROR_UNREALISTIC_TIME:${resolvedJobId}:${computedMinutes}`);
         }

@@ -75,7 +75,7 @@ const FIXED_BASE_MINUTES: Record<string, number> = {
     pic_hang: 25,
     mirror_hang: 20,
     shelf_install_single: 25,
-    tv_mount_standard: 120,
+    tv_mount_standard: 60,
     handyman_small_repair: 45,
 };
 
@@ -90,6 +90,9 @@ const REQUIRED_HANDYMAN_MATRIX_KEYS = [
     'curtain_rail_standard',
     'tv_mount_standard',
     'mount_tv_custom',
+    'assemble_flatpack_small',
+    'assemble_flatpack_large',
+    'assemble_install_furniture',
 ];
 let matrixCoverageValidated = false;
 

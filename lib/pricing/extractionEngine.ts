@@ -205,9 +205,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const multiJobOverhead = Math.max(0, finalJobs.length - 1) * 10;
     const totalMinutes = summedMinutes + multiJobOverhead;
     const minuteTier = deriveTierFromMinutes(totalMinutes);
-
-    const hasComplexityFlags = phraseMatches.some((match) => match.complexityTierDelta > 0);
-    const finalTier: 'H1' | 'H2' | 'H3' = hasComplexityFlags ? 'H3' : minuteTier;
+    const finalTier: 'H1' | 'H2' | 'H3' = minuteTier;
     const finalPrice = TIER_PRICING[finalTier as 'H1' | 'H2' | 'H3'];
 
     const minutesBefore = visits.reduce((sum, v) => sum + (v.total_minutes || 0), 0);
