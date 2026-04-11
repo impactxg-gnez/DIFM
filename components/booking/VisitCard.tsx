@@ -28,6 +28,19 @@ export interface Visit {
   parts_status?: string;
   parts_breakdown?: any;
   parts_notes?: string;
+  /** From quote / scope lock — drives pre-lock clarifier UI */
+  clarifiers?: Array<{
+    id: string;
+    question: string;
+    inputType?: string;
+    required?: boolean;
+    options?: string[];
+    affects_time?: boolean;
+    affects_safety?: boolean;
+    clarifier_type?: string;
+    capability_tag?: string;
+  }>;
+  detected_tasks?: string[];
 }
 
 export function VisitCard({ visit, index }: { visit: Visit; index: number }) {

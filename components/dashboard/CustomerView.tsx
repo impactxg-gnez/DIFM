@@ -150,6 +150,8 @@ export function CustomerView({ user }: { user: any }) {
             parts_status: v.partsStatus || v.parts_status,
             parts_breakdown: v.partsBreakdown || v.parts_breakdown,
             parts_notes: v.partsNotes || v.parts_notes,
+            clarifiers: Array.isArray(v.clarifiers) ? v.clarifiers : undefined,
+            detected_tasks: Array.isArray(v.detected_tasks) ? v.detected_tasks : undefined,
         };
 
         console.log('[VisitRender]', {
