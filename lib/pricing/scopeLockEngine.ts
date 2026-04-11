@@ -124,12 +124,19 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     );
     clarifierTime += clarifierEffects.extraMinutes;
 
-    // Integrity check only: compare persisted visit base time against matrix sum.
+    // Diagnostic: quoted base_minutes often differs from raw matrix row sum (quantity tiers, bulk
+    // efficiency, extraction overrides). Persisted visit.base_minutes is the contract baseline — do not throw.
     const matrixBaseMinutes = [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])]
         .map((jobItemId: string) => getMatrixTime(jobItemId))
         .reduce((sum: number, minutes: number) => sum + minutes, 0);
     if (visitBaseMinutes !== matrixBaseMinutes) {
-        throw new Error('VISIT_BASE_TIME_MISMATCH');
+        console.warn('[VISIT_BASE_TIME_NOTE]', {
+            visitBaseMinutes,
+            matrixBaseMinutes,
+            primary: visit.primary_job_item_id,
+            addons: visit.addon_job_item_ids || [],
+            message: 'Quoted base differs from single-pass matrix sum (expected for quantity/extraction pricing).',
+        });
     }
 
     const mappingTime = visitBaseMinutes + clarifierTime;
