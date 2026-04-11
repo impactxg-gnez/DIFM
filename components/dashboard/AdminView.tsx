@@ -1502,6 +1502,25 @@ export function AdminView({ user }: { user: any }) {
                                                         {visit.scopeSummary && (
                                                             <div className="text-sm bg-black/20 rounded-lg p-3 space-y-2">
                                                                 <p className="text-xs font-bold text-gray-500 uppercase">Scope Summary</p>
+                                                                {(() => {
+                                                                    const raw = visit.scopeSummary.scope_lock_answers;
+                                                                    const cust =
+                                                                        raw &&
+                                                                        typeof raw === 'object' &&
+                                                                        !Array.isArray(raw) &&
+                                                                        typeof (raw as Record<string, unknown>).CUSTOMER_SCOPE_DESCRIPTION ===
+                                                                            'string'
+                                                                            ? String((raw as Record<string, string>).CUSTOMER_SCOPE_DESCRIPTION).trim()
+                                                                            : '';
+                                                                    return cust ? (
+                                                                        <div className="rounded border border-sky-500/20 bg-sky-500/5 p-2 text-gray-200">
+                                                                            <p className="text-[10px] font-semibold uppercase text-sky-400">
+                                                                                Customer job description
+                                                                            </p>
+                                                                            <p className="mt-1 whitespace-pre-wrap text-sm">{cust}</p>
+                                                                        </div>
+                                                                    ) : null;
+                                                                })()}
                                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
                                                                     <div className="text-gray-500">Includes:</div>
                                                                     <div>{visit.scopeSummary.includes_text}</div>

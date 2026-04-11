@@ -16,6 +16,21 @@ import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+function getCustomerScopeDescriptionFromVisit(visit: any): string | null {
+    const raw = visit?.scopeSummary?.scope_lock_answers;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const d = (raw as Record<string, unknown>).CUSTOMER_SCOPE_DESCRIPTION;
+    if (typeof d !== 'string') return null;
+    const t = d.trim();
+    return t.length > 0 ? t : null;
+}
+
+function scopePhotoPaths(visit: any): string[] {
+    const s = visit?.scope_photos;
+    if (!s || typeof s !== 'string') return [];
+    return s.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
 function TimerDisplay({ startTime }: { startTime: string | Date }) {
     const [elapsed, setElapsed] = useState('');
 
@@ -529,12 +544,35 @@ export function ProviderView({ user }: { user: any }) {
                                 <h3 className="font-semibold text-white">{job.category} - {job.description}</h3>
                                 <p className="text-sm text-gray-400">{job.location}</p>
 
+                                {(job.visits || []).map((v: any, vIdx: number) => {
+                                    const scopeDesc = getCustomerScopeDescriptionFromVisit(v);
+                                    if (!scopeDesc) return null;
+                                    return (
+                                        <div
+                                            key={`scope-desc-${v.id || vIdx}`}
+                                            className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-200"
+                                        >
+                                            <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+                                                Customer scope (visit {vIdx + 1})
+                                            </p>
+                                            <p className="mt-1 whitespace-pre-wrap text-gray-200">{scopeDesc}</p>
+                                        </div>
+                                    );
+                                })}
+
                                 {/* Photo Display for Provider Review */}
-                                {job.visits?.some((v: any) => v.scope_photos) && (
+                                {job.visits?.some((v: any) => scopePhotoPaths(v).length > 0) && (
                                     <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-                                        {job.visits.map((v: any) => v.scope_photos?.split(',').map((url: string, i: number) => (
-                                            <RemoteImage key={`${v.id}-${i}`} path={url} bucket="SCOPE" className="w-20 h-20 object-cover rounded border border-white/10" />
-                                        )))}
+                                        {job.visits.map((v: any) =>
+                                            scopePhotoPaths(v).map((url: string, i: number) => (
+                                                <RemoteImage
+                                                    key={`${v.id}-${i}`}
+                                                    path={url}
+                                                    bucket="SCOPE"
+                                                    className="w-20 h-20 object-cover rounded border border-white/10"
+                                                />
+                                            )),
+                                        )}
                                     </div>
                                 )}
 
@@ -605,12 +643,28 @@ export function ProviderView({ user }: { user: any }) {
                         </div>
                         <h3 className="font-semibold mb-1 text-white">{job.description}</h3>
 
+                        {(job.visits || []).map((v: any, vIdx: number) => {
+                            const scopeDesc = getCustomerScopeDescriptionFromVisit(v);
+                            if (!scopeDesc) return null;
+                            return (
+                                <div
+                                    key={`my-scope-desc-${v.id || vIdx}`}
+                                    className="mt-2 mb-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm"
+                                >
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+                                        Customer scope (visit {vIdx + 1})
+                                    </p>
+                                    <p className="mt-1 whitespace-pre-wrap text-gray-200">{scopeDesc}</p>
+                                </div>
+                            );
+                        })}
+
                         {/* Photo Display for Provider Schedule */}
-                        {job.visits?.some((v: any) => v.scope_photos || v.partsPhotos) && (
+                        {job.visits?.some((v: any) => scopePhotoPaths(v).length > 0 || v.partsPhotos) && (
                             <div className="mt-3 mb-4 flex gap-2 overflow-x-auto pb-2 border-t border-white/5 pt-3">
                                 {job.visits.map((v: any) => (
                                     <div key={v.id} className="flex gap-2">
-                                        {v.scope_photos?.split(',').map((url: string, i: number) => (
+                                        {scopePhotoPaths(v).map((url: string, i: number) => (
                                             <div key={`scope-${v.id}-${i}`} className="space-y-1">
                                                 <RemoteImage path={url} bucket="SCOPE" className="w-16 h-16 object-cover rounded border border-white/10" />
                                                 <p className="text-[7px] text-gray-500 text-center uppercase font-bold">Scope</p>

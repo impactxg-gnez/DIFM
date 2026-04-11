@@ -235,7 +235,8 @@ export async function GET(request: Request) {
                 provider: { select: { id: true, name: true, latitude: true, longitude: true, providerType: true, complianceConfirmed: true } },
                 visits: {
                     include: {
-                        visitPhotos: true
+                        visitPhotos: true,
+                        scopeSummary: true,
                     }
                 },
                 stateChanges: { orderBy: { createdAt: 'asc' } },

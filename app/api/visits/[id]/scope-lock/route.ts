@@ -48,21 +48,31 @@ export async function POST(
     await ensureBuckets().catch(e => console.error('ensureBuckets failed', e));
 
     const body = await request.json();
-    const { answers, scope_photos } = body as {
+    const { answers, scope_photos, customer_scope_description } = body as {
       answers: Record<string, string>,
-      scope_photos: string | string[] // Can be single base64 or array
+      scope_photos?: string | string[],
+      customer_scope_description?: string,
     };
 
     const cookieStore = await cookies();
     const userId = cookieStore.get('userId')?.value || 'ANONYMOUS';
 
-    if (!answers) {
+    if (!answers || typeof answers !== 'object') {
       return NextResponse.json({ error: 'Missing answers' }, { status: 400 });
     }
 
-    if (!scope_photos || scope_photos.length === 0) {
-      return NextResponse.json({ error: 'At least one photo is required' }, { status: 400 });
+    const descriptionTrimmed = String(customer_scope_description ?? '').trim();
+    if (descriptionTrimmed.length < 10) {
+      return NextResponse.json(
+        { error: 'Please add a short description of the job (at least 10 characters).' },
+        { status: 400 }
+      );
     }
+
+    const scopeLockAnswers = {
+      ...answers,
+      CUSTOMER_SCOPE_DESCRIPTION: descriptionTrimmed,
+    };
 
     const visit = await (prisma as any).visit.findUnique({
       where: { id: visitId },
@@ -105,7 +115,7 @@ export async function POST(
         reviewPriority,
         slaDeadline: nextSlaDeadline.toISOString(),
         clarifiers_loaded: clarifiersLoaded,
-        clarifier_answers: answers || {},
+        clarifier_answers: scopeLockAnswers,
         reason: pricingResult.reason,
         action: pricingResult.action
       };
@@ -225,8 +235,12 @@ export async function POST(
     const mismatch_rule =
       'If the job is different on arrival, we’ll upgrade the visit or rebook. No arguments on site.';
 
-    // 3. Handle Photo Uploads to Supabase (Outside Transaction)
-    const photosArray = Array.isArray(scope_photos) ? scope_photos : [scope_photos];
+    // 3. Handle Photo Uploads to Supabase (Outside Transaction) — optional
+    const photosArray = !scope_photos
+      ? []
+      : Array.isArray(scope_photos)
+        ? scope_photos
+        : [scope_photos];
     console.log(`[ScopeLock] Starting storage upload for visit ${visitId}. Photos count: ${photosArray.length}`);
     const uploadedPaths: string[] = [];
 
@@ -281,7 +295,7 @@ export async function POST(
           effective_minutes: effectiveMinutes,
           price: finalPrice,
           status: 'SCHEDULED',
-          scope_photos: uploadedPaths.join(','),
+          scope_photos: uploadedPaths.length > 0 ? uploadedPaths.join(',') : null,
         },
       });
 
@@ -300,7 +314,7 @@ export async function POST(
             excludes_text,
             parts_rule_text: parts_text,
             mismatch_rule_text: mismatch_rule,
-            scope_lock_answers: answers,
+            scope_lock_answers: scopeLockAnswers,
           },
         });
       }
@@ -357,7 +371,7 @@ export async function POST(
       job_id: visit.jobId,
       jobs_detected: [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])],
       clarifiers_loaded: clarifiersLoaded,
-      clarifier_answers: answers || {},
+      clarifier_answers: scopeLockAnswers,
       minutes_before: minutesBefore,
       minutes_after: effectiveMinutes,
       tier_before: tierBefore,

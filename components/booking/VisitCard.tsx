@@ -107,7 +107,7 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
         {/* Photo Gallery */}
         {(visit.scope_photos || visit.parts_photos) && (
           <div className="flex gap-2 overflow-x-auto pb-2 border-t border-white/5 pt-4">
-            {visit.scope_photos?.split(',').map((url, i) => (
+            {(visit.scope_photos?.split(',') || []).filter(Boolean).map((url, i) => (
               <div key={`scope-${i}`} className="space-y-1">
                 <RemoteImage
                   path={url}

@@ -7,9 +7,11 @@ import { CheckCircle2, AlertCircle, Camera, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
 
+const MIN_SCOPE_DESCRIPTION_CHARS = 10;
+
 interface ScopeLockProps {
     visits: any[];
-    onComplete: (visitId: string, answers: any, scopePhotos: string[]) => void;
+    onComplete: (visitId: string, answers: any, scopePhotos: string[], customerScopeDescription: string) => void;
     onCancel: () => void;
 }
 
@@ -51,6 +53,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     const [currentVisitIndex, setCurrentVisitIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [scopePhotos, setScopePhotos] = useState<string[]>([]);
+    const [scopeDescription, setScopeDescription] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     /** When visits have clarifiers: collect answers first, then show price + photos. */
     const [clarifierPhaseDone, setClarifierPhaseDone] = useState(false);
@@ -75,6 +78,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         setClarifierPhaseDone(false);
         setAnswers({});
         setScopePhotos([]);
+        setScopeDescription('');
     }, [currentVisitIndex]);
 
     const questions = currentVisit ? buildQuestionsFromVisit(currentVisit) : [];
@@ -100,6 +104,9 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         const a = answers[q.id];
         return a !== undefined && String(a).trim() !== '';
     });
+
+    const descriptionTrimmed = scopeDescription.trim();
+    const descriptionValid = descriptionTrimmed.length >= MIN_SCOPE_DESCRIPTION_CHARS;
 
     useEffect(() => {
         if (!currentVisit) return;
@@ -194,10 +201,11 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     };
 
     const handleFinalSubmit = async () => {
+        if (!descriptionValid) return;
         if (currentVisitIndex === visits.length - 1) {
             setIsSubmitting(true);
             const visitId = currentVisit.visit_id || currentVisit.id;
-            await onComplete(visitId, answers, scopePhotos);
+            await onComplete(visitId, answers, scopePhotos, descriptionTrimmed);
             setIsSubmitting(false);
         } else {
             setCurrentVisitIndex((prev) => prev + 1);
@@ -208,7 +216,6 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
         setScopePhotos((prev) => prev.filter((_, i) => i !== index));
     };
 
-    const isPhotoUploaded = scopePhotos.length > 0;
 
     const renderQuestionBlock = (q: Question) => (
         <div key={q.id} className="space-y-4">
@@ -250,7 +257,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                     type="number"
                     min="0"
                     inputMode="numeric"
-                    className="bg-white/5 border-white/10 py-6 text-lg"
+                    className="border-white/10 bg-white/5 py-6 text-lg text-white caret-white placeholder:text-gray-400 focus-visible:ring-blue-500"
                     placeholder="Enter a number..."
                     value={answers[q.id] || ''}
                     onChange={(e) => handleAnswer(q.id, e.target.value)}
@@ -259,7 +266,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
 
             {q.type === 'text' && (
                 <Input
-                    className="bg-white/5 border-white/10 py-6 text-lg"
+                    className="border-white/10 bg-white/5 py-6 text-lg text-white caret-white placeholder:text-gray-400 focus-visible:ring-blue-500"
                     placeholder="Enter details..."
                     value={answers[q.id] || ''}
                     onChange={(e) => handleAnswer(q.id, e.target.value)}
@@ -297,8 +304,8 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                     <CardContent className="p-6 space-y-6">
                         {showClarifierOnly && (
                             <p className="text-sm text-gray-400">
-                                Answer each question so we can size time and price correctly. You’ll see the updated
-                                estimate next, then add photos to confirm.
+                                Answer each question so we can size time and price correctly. Next you’ll confirm the
+                                estimate, add a short job description (required), and optionally add photos.
                             </p>
                         )}
 
@@ -348,6 +355,33 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                             </>
                         )}
 
+                        {showPriceAndPhotos && (
+                            <div className="space-y-2 pt-2 border-t border-white/10">
+                                <Label className="text-base font-medium text-white">
+                                    Job description <span className="text-red-400">*</span>
+                                </Label>
+                                <p className="text-[11px] text-gray-400">
+                                    Describe the work in your own words so your pro can prepare before arrival.
+                                </p>
+                                <textarea
+                                    className="min-h-[120px] w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white caret-white placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                    placeholder="Please describe the job in more detail so your pro can prepare properly."
+                                    value={scopeDescription}
+                                    onChange={(e) => setScopeDescription(e.target.value)}
+                                    rows={5}
+                                    maxLength={4000}
+                                    aria-invalid={!descriptionValid && descriptionTrimmed.length > 0}
+                                />
+                                <p className="text-[11px] text-gray-500">
+                                    Minimum {MIN_SCOPE_DESCRIPTION_CHARS} characters ({descriptionTrimmed.length}/
+                                    {MIN_SCOPE_DESCRIPTION_CHARS}).
+                                    {!descriptionValid && descriptionTrimmed.length > 0 ? (
+                                        <span className="text-amber-400 ml-1">Keep typing to continue.</span>
+                                    ) : null}
+                                </p>
+                            </div>
+                        )}
+
                         {preview.status === 'OVERFLOW' && (
                             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
                                 <p className="text-sm font-medium text-amber-400">{preview.message}</p>
@@ -383,11 +417,14 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
 
                         {showPriceAndPhotos && (
                             <div className="pt-4 border-t border-white/10 space-y-4">
-                                <div className="flex items-center gap-3 text-blue-400 mb-2 bg-blue-400/10 p-4 rounded-lg">
+                                <div className="flex items-center gap-3 text-sky-300 mb-2 bg-sky-500/10 border border-sky-500/20 p-4 rounded-lg">
                                     <Camera className="w-6 h-6 shrink-0" />
                                     <div className="space-y-0.5">
-                                        <p className="text-sm font-medium">Photos of the area (required)</p>
-                                        <p className="text-gray-400 text-xs">Capture multiple angles to avoid price mismatches.</p>
+                                        <p className="text-sm font-medium text-white">Photos recommended</p>
+                                        <p className="text-gray-400 text-xs">
+                                            Adding photos helps your pro prepare and reduces delays. You can continue
+                                            without photos.
+                                        </p>
                                     </div>
                                 </div>
 
@@ -416,10 +453,10 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                     label={scopePhotos.length > 0 ? 'Add another photo' : 'Take photo'}
                                 />
 
-                                {isPhotoUploaded && (
+                                {scopePhotos.length > 0 && (
                                     <div className="text-green-500 text-xs flex items-center gap-1">
                                         <CheckCircle2 className="w-3 h-3" />
-                                        {scopePhotos.length} photo(s) ready
+                                        {scopePhotos.length} photo(s) attached
                                     </div>
                                 )}
                             </div>
@@ -445,7 +482,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                             className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold"
                             disabled={
                                 !allClarifiersAnswered ||
-                                !isPhotoUploaded ||
+                                !descriptionValid ||
                                 isSubmitting ||
                                 preview.status === 'OVERFLOW' ||
                                 preview.bookingAllowed === false
@@ -457,7 +494,7 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
                                 : preview.status === 'OVERFLOW'
                                   ? 'Requires review'
                                   : currentVisitIndex === visits.length - 1
-                                    ? 'Confirm & book'
+                                    ? 'Confirm booking'
                                     : 'Next visit'}
                         </Button>
                     )}
