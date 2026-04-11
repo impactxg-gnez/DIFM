@@ -224,15 +224,17 @@ export function buildVisitsWithQuantities(
                 final_time: finalBaseTimeUsed
             });
 
-            return {
+            const classificationId = classificationByJobId[id];
+            const row: MatrixTimedItem = {
                 item,
                 quantity,
                 matrixBaseTime,
                 finalBaseTimeUsed,
-                classificationId: classificationByJobId[id],
+                ...(classificationId !== undefined ? { classificationId } : {}),
             };
+            return row;
         })
-        .filter((i): i is MatrixTimedItem => !!i);
+        .filter((i): i is MatrixTimedItem => i != null);
 
     // Group by capability_tag
     const groups: Record<string, MatrixTimedItem[]> = {};
