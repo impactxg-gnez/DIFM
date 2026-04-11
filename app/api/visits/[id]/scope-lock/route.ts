@@ -83,10 +83,13 @@ export async function POST(
     const tierBefore = visit.tier;
     const priceBefore = visit.price ?? 0;
     const pricingResult = computeScopePricing(visit, answers);
-    const clarifiersLoaded = getClarifierSchemaForVisit({
-      primary_job_item_id: visit.primary_job_item_id,
-      addon_job_item_ids: visit.addon_job_item_ids
-    }).map((c) => c.id);
+    const clarifiersLoaded = getClarifierSchemaForVisit(
+      {
+        primary_job_item_id: visit.primary_job_item_id,
+        addon_job_item_ids: visit.addon_job_item_ids
+      },
+      { jobDescription: visit.job?.description || '' }
+    ).map((c) => c.id);
 
     if (pricingResult.status !== 'OK') {
       const reviewPriority = getReviewPriority(pricingResult.overflowDelta);

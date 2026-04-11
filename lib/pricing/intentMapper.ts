@@ -1,5 +1,7 @@
 import { parseBookingClause, type ParsedBookingClause } from './bookingParse';
+import { parseCurtainLengthMeters, parseTvDetails } from './bookingSignals';
 import { preprocessBookingInput } from './inputPreprocess';
+import { planClarifiersForExtraction } from './dynamicClarifiers';
 import { extractQuantityFromPart } from './quantityParse';
 import { resolveQuantityClassification } from './quantityClassification';
 import { getMatrixTime } from './visitEngine';
@@ -210,14 +212,6 @@ function resolveJobIdForPart(ruleJob: string, part: string, allowedSet: Set<stri
     return resolveAllowedJobId(ruleJob, allowedSet);
 }
 
-function parseCurtainLengthMeters(part: string): number | null {
-    const meter = part.match(/\b(\d+(?:\.\d+)?)\s*(m|meter|meters)\b/i);
-    if (meter) return Number(meter[1]);
-    const cm = part.match(/\b(\d{2,4})\s*(cm)\b/i);
-    if (cm) return Number(cm[1]) / 100;
-    return null;
-}
-
 function parseHeightOver25m(part: string): boolean {
     if (hasMatchToken(part, 'ladder')) return true;
     if (/\bheight\b/i.test(part) && /\b(2\.[6-9]|[3-9](?:\.\d+)?)\b/.test(part)) return true;
@@ -287,18 +281,6 @@ function applyBulkEfficiency(baseMinutes: number, quantity: number): number {
     return Math.round(baseMinutes * (1 + ((quantity - 1) * 0.8)));
 }
 
-function parseTvDetails(input: string): { size: number | null; wall: string | null; concealed: boolean | null } {
-    const sizeMatch = input.match(/\b(\d{2,3})\s*(?:inch|inches|")\b/i) || input.match(/\b(\d{2,3})\b(?=\s*tv)/i);
-    const wallMatch = input.match(/\b(concrete|brick|drywall|plaster|wood|stud)\b/i);
-    const concealment = /\b(conceal(?:ed)?|hide|hidden)\b.*\b(cable|cables|wire|wires)\b/i.test(input)
-        || /\b(cable|cables|wire|wires)\b.*\b(conceal(?:ed)?|hide|hidden)\b/i.test(input);
-    return {
-        size: sizeMatch ? Number(sizeMatch[1]) : null,
-        wall: wallMatch ? wallMatch[1].toLowerCase() : null,
-        concealed: concealment ? true : null,
-    };
-}
-
 export function normalizeInput(input: string): string {
     return preprocessBookingInput(input)
         .toLowerCase()
@@ -314,18 +296,6 @@ export function splitInput(input: string): string[] {
 
 export function extractQuantity(part: string): number {
     return extractQuantityFromPart(part);
-}
-
-function hasExplicitQuantitySignal(part: string): boolean {
-    return (
-        /\b\d+\b/.test(part) ||
-        /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/i.test(
-            part
-        ) ||
-        /\bpair\s+of\b/i.test(part) ||
-        /\b\d+\s*x\b/i.test(part) ||
-        /\bx\s*\d+\b/i.test(part)
-    );
 }
 
 export function mapPartToJob(part: string): { job: string; resolutionSource: 'SPECIFIC' | 'GENERIC' } | null {
@@ -351,58 +321,12 @@ export function getClarifiers(
     normalizedInput: string,
     jobs: Array<{ job: string; quantity: number; part: string }>
 ): ClarifierQuestion[] {
-    const clarifiers: ClarifierQuestion[] = [];
-    const addClarifier = (clarifier: ClarifierQuestion) => {
-        if (!clarifiers.some((item) => item.tag === clarifier.tag)) {
-            clarifiers.push(clarifier);
-        }
-    };
-
-    const tvDetails = parseTvDetails(normalizedInput);
-
-    for (const entry of jobs) {
-        if (entry.job === 'tv_mount_standard') {
-            if (tvDetails.size === null) addClarifier({ tag: 'TV_SIZE_INCHES', question: 'What is the TV size in inches?', affects_time: true });
-            if (!tvDetails.wall) addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            if (tvDetails.concealed === null) addClarifier({ tag: 'CABLE_CONCEALMENT', question: 'Do you need cable concealment?', affects_time: true });
-            continue;
-        }
-
-        if (entry.job === 'shelf_install_single') {
-            const quantityUnclear = entry.quantity <= 1 && !hasExplicitQuantitySignal(entry.part);
-            if (quantityUnclear) {
-                addClarifier({ tag: 'SHELF_COUNT', question: 'How many shelves should be installed?', affects_time: true });
-            }
-            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
-                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            }
-            continue;
-        }
-
-        if (entry.job === 'mirror_hang') {
-            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
-                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            }
-            continue;
-        }
-
-        if (entry.job === 'curtain_rail_install') {
-            if (parseCurtainLengthMeters(entry.part) === null) {
-                addClarifier({ tag: 'CURTAIN_RAIL_LENGTH', question: 'What is the curtain rail length?', affects_time: true });
-            }
-            if (!/\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(entry.part)) {
-                addClarifier({ tag: 'WALL_TYPE', question: 'What wall type is it mounted on?', affects_time: true });
-            }
-            continue;
-        }
-
-        if (entry.job === 'replace_socket') {
-            addClarifier({ tag: 'SOCKET_TYPE', question: 'What socket type needs replacement?', affects_time: true });
-            continue;
-        }
-    }
-
-    return clarifiers;
+    return planClarifiersForExtraction(normalizedInput, jobs).map((p) => ({
+        tag: p.id,
+        question: p.question,
+        affects_time: p.affects_time,
+        affects_safety: p.affects_safety,
+    }));
 }
 
 export function detectIntent(input: string): IntentType {

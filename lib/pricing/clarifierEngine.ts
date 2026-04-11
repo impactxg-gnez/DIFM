@@ -1,4 +1,6 @@
-import { excelSource } from './excelLoader';
+import { excelSource, type ClarifierExcel } from './excelLoader';
+import { planClarifiersForVisitJobIds, type PlannedClarifier } from './dynamicClarifiers';
+import { normalizeInput } from './intentMapper';
 import type { GeneratedVisit } from './visitEngine';
 
 export interface ClarifierQuestion {
@@ -22,139 +24,116 @@ function toArray(value: unknown): string[] {
 function getVisitJobIds(visit: any): string[] {
     const primary = visit?.primary_job_item?.job_item_id || visit?.primary_job_item_id;
     const addons = toArray(visit?.addon_job_item_ids).concat(
-        toArray(visit?.addon_job_items).map((a: any) => a?.job_item_id).filter(Boolean)
+        toArray(visit?.addon_job_items)
+            .map((a: any) => a?.job_item_id)
+            .filter(Boolean),
     );
     return [primary, ...addons].filter(Boolean);
-}
-
-function getDerivedClarifierIds(jobIds: string[]): string[] {
-    const ids = new Set<string>();
-    const hasTvMount = jobIds.some((id) =>
-        id.includes('tv_mount') || id.includes('mount_tv') || id.includes('install_wall_tv_cabling_hide')
-    );
-    const hasShelfOrPicture = jobIds.some((id) =>
-        id.includes('shelf') || id.includes('pic_hang') || id.includes('mirror_hang')
-    );
-    const hasSocketOrLight = jobIds.some((id) =>
-        id.includes('socket') || id.includes('light')
-    );
-    const hasRadiatorBleed = jobIds.some((id) => id.includes('radiator_bleed'));
-
-    if (hasTvMount) {
-        ids.add('TV_SIZE_INCHES');
-        ids.add('WALL_TYPE');
-        ids.add('CABLE_CONCEALMENT');
-    }
-    if (hasShelfOrPicture) ids.add('ITEM_COUNT');
-    if (hasSocketOrLight) ids.add('ELECTRICAL_POINT_COUNT');
-    if (hasRadiatorBleed) ids.add('ITEM_COUNT');
-
-    return [...ids];
 }
 
 function parseImpactFlags(impacts: unknown): { affectsTime: boolean; affectsSafety: boolean } {
     const normalized = String(impacts || '').toLowerCase();
     return {
         affectsTime: /time|tier|price/.test(normalized),
-        affectsSafety: /safety|inspection|compliance|risk/.test(normalized)
+        affectsSafety: /safety|inspection|compliance|risk/.test(normalized),
     };
 }
 
-export function getClarifierSchemaForVisit(visit: any): ClarifierQuestion[] {
+function mergePlannedWithExcel(planned: PlannedClarifier, def?: ClarifierExcel): ClarifierQuestion {
+    const impactFlags = def ? parseImpactFlags(def.impacts) : { affectsTime: true, affectsSafety: false };
+    const affectsTime = impactFlags.affectsTime || planned.affects_time;
+    const affectsSafety = impactFlags.affectsSafety || planned.affects_safety;
+    const inputType = (def?.input_type || def?.type || planned.inputType || 'text') as ClarifierQuestion['inputType'];
+    const options =
+        def?.options && def.options.length > 0 ? def.options : planned.options.length > 0 ? planned.options : [];
+    return {
+        id: planned.id,
+        question: def?.question || planned.question,
+        inputType,
+        required: String(def?.required_YN || '').toUpperCase() === 'Y' ? true : planned.required,
+        options,
+        impacts: def?.impacts || 'time,tier,price',
+        capability_tag: String((def as any)?.capability_tag || ''),
+        affects_time: affectsTime,
+        affects_safety: affectsSafety,
+        clarifier_type: affectsSafety && !affectsTime ? 'SAFETY' : planned.clarifier_type,
+    };
+}
+
+function excelOnlyQuestion(id: string, capabilityTag: string | undefined): ClarifierQuestion | null {
+    const definition = excelSource.clarifierDefinitions.get(id);
+    if (!definition) return null;
+    const impactFlags = parseImpactFlags(definition.impacts);
+    const affectsTime = impactFlags.affectsTime || ['TV_SIZE_INCHES', 'WALL_TYPE', 'ITEM_COUNT', 'ELECTRICAL_POINT_COUNT'].includes(id);
+    const affectsSafety = impactFlags.affectsSafety;
+    return {
+        id,
+        question: definition.question || id,
+        inputType: (definition.input_type || definition.type || 'text') as ClarifierQuestion['inputType'],
+        required: String(definition.required_YN || '').toUpperCase() === 'Y',
+        options: definition.options || [],
+        impacts: definition.impacts || '',
+        capability_tag: String((definition as any).capability_tag || capabilityTag || ''),
+        affects_time: affectsTime,
+        affects_safety: affectsSafety,
+        clarifier_type: affectsTime ? 'PRICING' : 'SAFETY',
+    };
+}
+
+/**
+ * Scope-shaping clarifiers: gated on job description + matrix job ids, merged with Excel copy when present.
+ */
+export function getClarifierSchemaForVisit(
+    visit: any,
+    options?: { jobDescription?: string },
+): ClarifierQuestion[] {
     const jobIds = getVisitJobIds(visit);
-    const clarifierIds = new Set<string>();
     const capabilityTag = visit?.required_capability_tags?.[0] || visit?.required_capability_tags_union?.[0];
+    const normalizedDesc = options?.jobDescription ? normalizeInput(options.jobDescription) : '';
+    const primary = jobIds[0] || '';
+    const addons = jobIds.slice(1);
+
+    const planned = planClarifiersForVisitJobIds(normalizedDesc, primary, addons);
+    const plannedIds = new Set(planned.map((p) => p.id));
+    const questions: ClarifierQuestion[] = planned.map((p) =>
+        mergePlannedWithExcel(p, excelSource.clarifierDefinitions.get(p.id)),
+    );
 
     for (const jobId of jobIds) {
         const item = excelSource.jobItems.get(jobId);
-        if (!item?.clarifier_ids) continue;
-        item.clarifier_ids.forEach((clarifierId) => clarifierIds.add(clarifierId));
-    }
-
-    getDerivedClarifierIds(jobIds).forEach((id) => clarifierIds.add(id));
-
-    const questions: ClarifierQuestion[] = [];
-    for (const id of [...clarifierIds]) {
-        const definition = excelSource.clarifierDefinitions.get(id);
-        if (!definition) continue;
-        const impactFlags = parseImpactFlags(definition.impacts);
-        const affectsTime = impactFlags.affectsTime || ['TV_SIZE_INCHES', 'WALL_TYPE', 'ITEM_COUNT', 'ELECTRICAL_POINT_COUNT'].includes(id);
-        const affectsSafety = impactFlags.affectsSafety;
-        questions.push({
-            id,
-            question: definition.question || id,
-            inputType: (definition.input_type || definition.type || 'text') as ClarifierQuestion['inputType'],
-            required: String(definition.required_YN || '').toUpperCase() === 'Y',
-            options: definition.options || [],
-            impacts: definition.impacts || '',
-            capability_tag: String((definition as any).capability_tag || capabilityTag || ''),
-            affects_time: affectsTime,
-            affects_safety: affectsSafety,
-            clarifier_type: affectsTime ? 'PRICING' : 'SAFETY'
-        });
-    }
-    return questions;
-}
-
-function parseNumber(raw: unknown): number | null {
-    if (raw === null || raw === undefined) return null;
-    const num = Number(raw);
-    return Number.isFinite(num) ? num : null;
-}
-
-function includesAny(value: string, needles: string[]) {
-    const lower = String(value || '').toLowerCase();
-    return needles.some((n) => lower.includes(n));
-}
-
-export function computeClarifierAdjustmentMinutes(visit: any, answers: Record<string, any>): number {
-    let delta = 0;
-    const jobIds = getVisitJobIds(visit);
-    const clarifierSchema = getClarifierSchemaForVisit(visit);
-    const affectsTimeIds = new Set(clarifierSchema.filter((q) => q.affects_time).map((q) => q.id));
-
-    const tvSize = parseNumber(answers.TV_SIZE_INCHES ?? answers.tv_size);
-    if (tvSize !== null && affectsTimeIds.has('TV_SIZE_INCHES')) {
-        if (tvSize > 85) delta += 60;
-        else if (tvSize >= 65) delta += 30;
-    }
-
-    const wallType = String(answers.WALL_TYPE ?? answers.wall_type ?? '');
-    if (wallType && affectsTimeIds.has('WALL_TYPE')) {
-        if (includesAny(wallType, ['concrete'])) delta += 45;
-        else if (includesAny(wallType, ['brick'])) delta += 30;
-    }
-
-    const hasQuantityPattern = jobIds.some((id) =>
-        id.includes('shelf') ||
-        id.includes('pic_hang') ||
-        id.includes('socket') ||
-        id.includes('light') ||
-        id.includes('radiator_bleed')
-    );
-    if (hasQuantityPattern && (affectsTimeIds.has('ITEM_COUNT') || affectsTimeIds.has('ELECTRICAL_POINT_COUNT'))) {
-        const count = parseNumber(
-            answers.ITEM_COUNT ??
-            answers.ELECTRICAL_POINT_COUNT ??
-            answers.shelf_count
-        );
-        if (count !== null) {
-            if (count >= 5) delta += 60;
-            else if (count >= 3) delta += 30;
+        if (!item?.clarifier_ids?.length) continue;
+        for (const clarifierId of item.clarifier_ids) {
+            if (plannedIds.has(clarifierId)) continue;
+            const q = excelOnlyQuestion(clarifierId, item.capability_tag || capabilityTag);
+            if (q && !questions.some((x) => x.id === q.id)) questions.push(q);
         }
     }
 
-    return delta;
+    return questions;
 }
 
-export function attachClarifiersToVisits(visits: GeneratedVisit[]): GeneratedVisit[] {
+/**
+ * @deprecated Use computeClarifierPricingEffects in dynamicClarifiers + scopeLockEngine tier bump.
+ */
+export function computeClarifierAdjustmentMinutes(_visit: any, _answers: Record<string, any>): number {
+    return 0;
+}
+
+export function attachClarifiersToVisits(visits: GeneratedVisit[], jobDescription?: string): GeneratedVisit[] {
+    const normalizedDesc = jobDescription ? normalizeInput(jobDescription) : '';
     return visits.map((visit) => ({
         ...visit,
-        clarifiers: getClarifierSchemaForVisit(visit),
+        clarifiers: getClarifierSchemaForVisit(
+            {
+                primary_job_item_id: visit.primary_job_item.job_item_id,
+                addon_job_item_ids: visit.addon_job_items.map((a) => a.job_item_id),
+                required_capability_tags: visit.required_capability_tags,
+            },
+            { jobDescription: normalizedDesc || undefined },
+        ),
         detected_tasks: [
             visit.primary_job_item?.job_item_id,
-            ...(visit.addon_job_items || []).map((a) => a.job_item_id)
-        ].filter(Boolean)
+            ...(visit.addon_job_items || []).map((a) => a.job_item_id),
+        ].filter(Boolean),
     })) as GeneratedVisit[];
 }
-

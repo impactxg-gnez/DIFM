@@ -171,6 +171,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
             minuteTotalsByJob,
             classificationByJobId,
         }),
+        userInput,
     );
     const capabilities = Array.from(new Set(
         pricingJobIds

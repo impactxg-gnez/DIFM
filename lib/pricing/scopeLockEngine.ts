@@ -1,6 +1,6 @@
 import { calculateTierAndPrice, getMatrixTime, getPriceByTier } from './visitEngine';
 import { excelSource } from './excelLoader';
-import { computeClarifierAdjustmentMinutes } from './clarifierEngine';
+import { computeClarifierPricingEffects } from './dynamicClarifiers';
 
 // Keep overflow copy local to avoid hard dependency on review modules in builds
 // where review workflow files are not deployed yet.
@@ -34,6 +34,16 @@ export interface ScopePricingOverflowResult {
 }
 
 export type ScopePricingResult = ScopePricingSuccessResult | ScopePricingOverflowResult;
+
+function bumpTierOnLadder(ladder: string, tier: string, steps: number): string {
+    if (steps <= 0) return tier;
+    const tiers = excelSource.pricingTiers.get(ladder) || [];
+    const ordered = [...tiers].sort((a, b) => Number(a.max_minutes || 0) - Number(b.max_minutes || 0));
+    const idx = ordered.findIndex((t) => t.tier === tier);
+    if (idx < 0) return tier;
+    const nextIdx = Math.min(ordered.length - 1, idx + steps);
+    return ordered[nextIdx].tier;
+}
 
 function getLadderGuardrail(capability: string, ladder: string) {
     const tiers = excelSource.pricingTiers.get(ladder) || [];
@@ -107,7 +117,12 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         }
     }
 
-    clarifierTime += computeClarifierAdjustmentMinutes(visit, answers);
+    const clarifierEffects = computeClarifierPricingEffects(
+        visit.primary_job_item_id,
+        visit.addon_job_item_ids || [],
+        answers,
+    );
+    clarifierTime += clarifierEffects.extraMinutes;
 
     // Integrity check only: compare persisted visit base time against matrix sum.
     const matrixBaseMinutes = [visit.primary_job_item_id, ...(visit.addon_job_item_ids || [])]
@@ -156,10 +171,9 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         ? { tier: 'H3', price: calculateTierAndPrice(150, ladder).price }
         : calculateTierAndPrice(mappingTime, ladder);
 
-    const h1Tier = (excelSource.pricingTiers.get(ladder) || []).find((tier) => tier.tier === 'H1');
-    if (!forceH3 && h1Tier && visitBaseMinutes < h1Tier.max_minutes && clarifierTime <= 0) {
-        finalTier = 'H1';
-        finalPrice = getPriceByTier('H1', ladder);
+    if (!forceH3 && clarifierEffects.tierStepDelta > 0) {
+        finalTier = bumpTierOnLadder(ladder, finalTier, clarifierEffects.tierStepDelta);
+        finalPrice = getPriceByTier(finalTier, ladder);
     }
 
     if (visit.item_class === 'CLEANING') {

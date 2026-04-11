@@ -114,6 +114,22 @@ async function verifyMultiJobCase() {
     }
 }
 
+async function verifyClarifierGating() {
+    const fourShelves = await runExtractionPipeline('put up 4 shelves');
+    const tags4 = fourShelves.clarifiers.map((c: { tag: string }) => c.tag);
+    if (tags4.includes('SHELF_COUNT')) {
+        throw new Error('SHELF_COUNT should not trigger when quantity is explicit (4 shelves)');
+    }
+    if (!tags4.includes('WALL_TYPE')) {
+        throw new Error('WALL_TYPE should still be asked when wall material not in text');
+    }
+    const vagueShelf = await runExtractionPipeline('put up some shelves');
+    const tagsV = vagueShelf.clarifiers.map((c: { tag: string }) => c.tag);
+    if (!tagsV.includes('SHELF_COUNT')) {
+        throw new Error('SHELF_COUNT should trigger when shelf quantity is missing');
+    }
+}
+
 async function main() {
     // Keep deterministic behavior while verifying mapping hardening.
     delete process.env.OPENAI_API_KEY;
@@ -121,6 +137,7 @@ async function main() {
     await verifyQuantityPricingSku();
     await verifyMultiJobCase();
     await verifyClarifyCase();
+    await verifyClarifierGating();
     console.log('SUCCESS: Intent hardening verification checks passed.');
 }
 
