@@ -28,6 +28,15 @@ const FLAG_LABELS: Record<string, string> = {
     highWall: 'Above 2.5m',
 };
 
+/** No priced visit should be shown or booked while these are present. */
+const BOOKING_BLOCK_WARNINGS = new Set([
+    'OUT_OF_SCOPE',
+    'NEEDS_CLARIFICATION',
+    'COMMERCIAL_QUOTE_REQUIRED',
+    'CONTRADICTION_CLARIFY',
+    'PARTIAL_PARSE_CLARIFY',
+]);
+
 function resolveJobLabel(jobId: string): string {
     return JOB_LABELS[jobId] || jobId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -190,8 +199,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         .filter(Boolean)
         .join(' • ');
     const displayPrice = Number(pricePreview?.display_price);
-    const hasDisplayPrice = Number.isFinite(displayPrice);
-    if (pricePreview && !hasDisplayPrice) {
+    const hasDisplayPrice = Number.isFinite(displayPrice) && displayPrice > 0;
+    const previewWarnings: string[] = Array.isArray(pricePreview?.warnings) ? pricePreview.warnings : [];
+    const blocksBookableQuote = previewWarnings.some((w) => BOOKING_BLOCK_WARNINGS.has(w));
+    const hasBookableVisits = Array.isArray(pricePreview?.visits) && pricePreview.visits.length > 0;
+    if (pricePreview && !hasDisplayPrice && !blocksBookableQuote) {
         console.error('Missing backend display_price', pricePreview);
     }
 
@@ -292,6 +304,37 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     </div>
 
+                    {/* Commercial / bulk — custom quote */}
+                    {previewWarnings.includes('COMMERCIAL_QUOTE_REQUIRED') && (
+                        <div className="bg-amber-500/20 border border-amber-500/35 rounded-[24px] p-4 text-amber-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                <span>📋</span>
+                                <span>Custom quote</span>
+                            </div>
+                            <div className="text-xs mb-2 text-amber-100/85">
+                                {pricePreview?.clarifyMessage ||
+                                    'Large or commercial-scale jobs need a tailored quote so pricing stays accurate.'}
+                            </div>
+                            <div className="text-[11px] text-amber-200/70">
+                                Contact DIFM with your full brief and we will follow up.
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Contradictory / impossible scope */}
+                    {previewWarnings.includes('CONTRADICTION_CLARIFY') && (
+                        <div className="bg-violet-500/20 border border-violet-500/35 rounded-[24px] p-4 text-violet-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                <span>💬</span>
+                                <span>Quick clarification</span>
+                            </div>
+                            <div className="text-xs text-violet-100/85">
+                                {pricePreview?.clarifyMessage ||
+                                    'Part of your message seems to conflict. Add a short note on the setup (e.g. wall type or mounting surface) so we can price it correctly.'}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Out of Scope Warning */}
                     {pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
                         <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-[24px] p-4 text-yellow-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -310,16 +353,18 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     )}
 
-                    {/* Needs Clarification Warning */}
-                    {pricePreview?.warnings?.includes('NEEDS_CLARIFICATION') && !pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
+                    {/* Needs clarification / partial parse */}
+                    {(previewWarnings.includes('NEEDS_CLARIFICATION') ||
+                        previewWarnings.includes('PARTIAL_PARSE_CLARIFY')) &&
+                        !previewWarnings.includes('OUT_OF_SCOPE') && (
                         <div className="bg-blue-500/20 border border-blue-500/30 rounded-[24px] p-4 text-blue-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="font-semibold text-sm mb-2 flex items-center gap-2">
                                 <span>ℹ️</span>
                                 <span>Need More Details</span>
                             </div>
                             <div className="text-xs mb-3 text-blue-100/80">
-                                We couldn't determine the exact service from your description. 
-                                Please provide more details about what needs to be done.
+                                {pricePreview?.clarifyMessage ||
+                                    "We couldn't determine the exact service from your description. Please provide more details about what needs to be done."}
                             </div>
                             <div className="text-xs">
                                 <strong className="text-blue-200">Examples:</strong>{' '}
@@ -329,7 +374,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     )}
 
                     {/* Upfront Price Card - Dynamic */}
-                    {(pricePreview || isPricingLoading) && !pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
+                    {(pricePreview || isPricingLoading) && !blocksBookableQuote && (
                         <div className="bg-[#D9D9D9] rounded-[24px] p-4 text-black relative overflow-hidden mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex flex-col max-w-[70%]">
@@ -367,8 +412,14 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 <div className="mt-8">
                     <Button
                         onClick={handleBookClick}
-                        disabled={isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || !hasDisplayPrice}
-                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || pricePreview?.warnings?.includes('OUT_OF_SCOPE') || !hasDisplayPrice
+                        disabled={
+                            isTooShortForExtraction ||
+                            !description.trim() ||
+                            blocksBookableQuote ||
+                            !hasDisplayPrice ||
+                            !hasBookableVisits
+                        }
+                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || blocksBookableQuote || !hasDisplayPrice || !hasBookableVisits
                             ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
                             : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
                             }`}

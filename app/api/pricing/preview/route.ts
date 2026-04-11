@@ -27,7 +27,8 @@ export async function POST(request: Request) {
             isOutOfScope: pricing.isOutOfScope || false,
             suggestedServices: pricing.suggestedServices || [],
             confidence: pricing.confidence,
-            primaryCategory: pricing.primaryCategory
+            primaryCategory: pricing.primaryCategory,
+            clarifyMessage: pricing.clarifyMessage,
         });
     } catch (error) {
         console.error('Price preview error', error);

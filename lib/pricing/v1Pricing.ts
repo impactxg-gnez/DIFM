@@ -1,5 +1,6 @@
 import { GeneratedVisit } from './visitEngine';
 import { runExtractionPipeline } from './extractionEngine';
+import { matchesExtendedOutOfScope } from './bookingGuards';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -9,7 +10,9 @@ export interface V1PricingResult {
     warnings: string[];
     isOutOfScope?: boolean;
     suggestedServices?: string[];
-    clarifiers?: any[]; // To be populated from ClarifierLibrary
+    clarifiers?: any[];
+    /** Human-readable detail when visits are empty (clarify / commercial / partial). */
+    clarifyMessage?: string;
 }
 
 // Out-of-scope keywords that indicate services we don't offer
@@ -32,9 +35,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     const lower = description.toLowerCase();
 
     // 1. Check for out-of-scope services
-    const isOutOfScope = OUT_OF_SCOPE_KEYWORDS.some(keyword =>
-        lower.includes(keyword.toLowerCase())
-    );
+    const isOutOfScope =
+        OUT_OF_SCOPE_KEYWORDS.some((keyword) => lower.includes(keyword.toLowerCase())) ||
+        matchesExtendedOutOfScope(lower);
 
     if (isOutOfScope) {
         return {
@@ -53,14 +56,17 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     const extraction = await runExtractionPipeline(description);
 
     if (extraction.jobs.length === 0) {
+        const fromPipeline = extraction.warnings?.length ? extraction.warnings : ['NEEDS_CLARIFICATION'];
         return {
             visits: [],
             totalPrice: 0,
             confidence: 0,
             primaryCategory: 'HANDYMAN',
-            warnings: ['NEEDS_CLARIFICATION'],
+            warnings: fromPipeline,
             isOutOfScope: false,
-            suggestedServices: SUPPORTED_SERVICES
+            suggestedServices: SUPPORTED_SERVICES,
+            clarifiers: extraction.clarifiers,
+            clarifyMessage: extraction.message,
         };
     }
 
@@ -86,12 +92,13 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
     }
 
     // 5. Clarifier Binding (Excel-Driven)
+    const mergedWarnings = [...(extraction.warnings ?? [])].filter(Boolean);
     return {
         visits,
         totalPrice,
         confidence: extraction.jobs.length > 0 ? 1 : 0,
         primaryCategory,
-        warnings: [],
-        clarifiers: extraction.clarifiers
+        warnings: mergedWarnings,
+        clarifiers: extraction.clarifiers,
     };
 }

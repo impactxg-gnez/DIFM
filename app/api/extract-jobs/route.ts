@@ -29,7 +29,8 @@ export async function POST(req: Request) {
       price: extraction.price,
       display_price: Number(extraction.price ?? 0),
       flags: extraction.flags,
-      message: extraction.message
+      message: extraction.message,
+      warnings: extraction.warnings ?? [],
     });
 
   } catch (err: any) {

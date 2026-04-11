@@ -5,7 +5,6 @@ import { attachClarifiersToVisits } from './clarifierEngine';
 import {
     enforceMappingOutputGuardrails,
     getClarifiers,
-    mapPartToJob,
     mapToJobs,
     normalizeInput,
     splitInput,
@@ -40,6 +39,8 @@ export interface ExtractionPipelineResult {
     aiResult: string[];
     fallbackResult: string[];
     message?: string;
+    /** UX / v1Pricing: clarify, commercial quote, partial parse, etc. */
+    warnings?: string[];
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -80,6 +81,45 @@ function deriveTierFromMinutes(totalMinutes: number): 'H1' | 'H2' | 'H3' {
     return 'H1';
 }
 
+function warningsForClarifyReason(reason: string): string[] {
+    if (reason === 'COMMERCIAL_BULK' || reason === 'HIGH_QUANTITY') {
+        return ['COMMERCIAL_QUOTE_REQUIRED'];
+    }
+    if (reason === 'CONTRADICTION') {
+        return ['CONTRADICTION_CLARIFY'];
+    }
+    return ['NEEDS_CLARIFICATION'];
+}
+
+function buildClarifyResult(
+    userInput: string,
+    parts: string[],
+    warnings: string[],
+    message: string,
+): ExtractionPipelineResult {
+    return {
+        jobs: [],
+        quantitiesList: [],
+        total_minutes: 0,
+        tier: 'H1',
+        jobDetails: [],
+        capabilities: [],
+        quantities: {},
+        visits: [],
+        price: 0,
+        clarifiers: [],
+        flags: {
+            usedDeterministicPipeline: true,
+            usedGenericFallback: false,
+            unresolvedPartCount: parts.length,
+        },
+        aiResult: [],
+        fallbackResult: [],
+        message,
+        warnings,
+    };
+}
+
 export async function runExtractionPipeline(userInput: string): Promise<ExtractionPipelineResult> {
     const cacheKey = normalizeCacheKey(userInput);
     const cached = extractionCache.get(cacheKey);
@@ -91,28 +131,42 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const allowedJobIds = jobItems.map((j) => j.job_item_id);
     const normalizedInput = normalizeInput(userInput);
     const parts = splitInput(normalizedInput);
-    const mappedIntentResult = mapToJobs(userInput, allowedJobIds);
+    let mappedIntentResult;
+    try {
+        mappedIntentResult = mapToJobs(userInput, allowedJobIds);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.startsWith('ERROR_UNREALISTIC_TIME')) {
+            const clarify = buildClarifyResult(
+                userInput,
+                parts,
+                ['COMMERCIAL_QUOTE_REQUIRED'],
+                'This looks larger than a standard residential visit. Contact us for a custom quote.',
+            );
+            extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: clarify });
+            return clarify;
+        }
+        throw err;
+    }
     if (mappedIntentResult.type === 'CLARIFY') {
-        const clarifyResult: ExtractionPipelineResult = {
-            jobs: [],
-            quantitiesList: [],
-            total_minutes: 0,
-            tier: 'H1',
-            jobDetails: [],
-            capabilities: [],
-            quantities: {},
-            visits: [],
-            price: 0,
-            clarifiers: [],
-            flags: {
-                usedDeterministicPipeline: true,
-                usedGenericFallback: false,
-                unresolvedPartCount: parts.length,
-            },
-            aiResult: [],
-            fallbackResult: [],
-            message: 'Please clarify the exact tasks so we can price accurately.',
+        const reason = mappedIntentResult.reason;
+        const warnings = warningsForClarifyReason(reason);
+        const clarifyMessages: Record<string, string> = {
+            VAGUE_INPUT: 'Please describe the specific task (for example what to mount, fix, or install).',
+            NO_STRONG_MATCH: 'We could not match that to a priced service. Please add more detail.',
+            EMPTY_INPUT: 'Please describe what you need done.',
+            GENERIC_FALLBACK: 'Please be more specific about the item and work so we can price it accurately.',
+            CONTRADICTION:
+                'Your message seems to conflict (for example mounting without a suitable wall). Please clarify how you want this done.',
+            COMMERCIAL_BULK: 'This looks like a commercial or large-scale job. We will need a custom quote.',
+            HIGH_QUANTITY: 'That quantity is outside standard residential pricing. Please contact us for a custom quote.',
         };
+        const clarifyResult = buildClarifyResult(
+            userInput,
+            parts,
+            warnings,
+            clarifyMessages[reason] ?? 'Please clarify the exact tasks so we can price accurately.',
+        );
         extractionCache.set(cacheKey, {
             expiresAt: Date.now() + CACHE_TTL_MS,
             result: clarifyResult,
@@ -121,6 +175,20 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     }
 
     enforceMappingOutputGuardrails(mappedIntentResult.matches);
+
+    const resolvedClauses = new Set(mappedIntentResult.matches.map((m) => m.clause.trim()));
+    const unresolvedClauses = parts.filter((p) => !resolvedClauses.has(p.trim()));
+    if (unresolvedClauses.length > 0) {
+        const clarify = buildClarifyResult(
+            userInput,
+            parts,
+            ['PARTIAL_PARSE_CLARIFY'],
+            `We understood part of your request. Please clarify: ${unresolvedClauses.join(', ')}`,
+        );
+        extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: clarify });
+        return clarify;
+    }
+
     const phraseMatches: PhraseMatch[] = mappedIntentResult.matches.map((match) => ({
         canonicalJob: match.job,
         ruleJob: match.ruleJob,
@@ -183,25 +251,16 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         normalizedInput,
         phraseMatches.map((match) => ({ job: match.ruleJob, quantity: match.quantity, part: match.clause })),
     );
-    const unresolvedClauses = parts.filter((part) => {
-        const mapped = mapPartToJob(part);
-        if (!mapped) return true;
-        return false;
-    });
     let message: string | undefined;
     if (finalJobs.length === 0) {
-        message = 'Please clarify the exact tasks so we can price accurately.';
-    } else if (unresolvedClauses.length > 0 && unresolvedClauses.length < parts.length) {
-        message = `Need a bit more detail for: ${unresolvedClauses.join(', ')}`;
-    } else if (unresolvedClauses.length === parts.length) {
         message = 'Please clarify the exact tasks so we can price accurately.';
     }
     const flags = {
         usedDeterministicPipeline: true,
         usedGenericFallback: phraseMatches.some((match) => match.resolutionSource === 'GENERIC'),
-        unresolvedPartCount: unresolvedClauses.length,
+        unresolvedPartCount: 0,
     };
-    const unresolvedDiagnostics = [...unresolvedClauses];
+    const unresolvedDiagnostics: string[] = [];
     const summedMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
     const multiJobOverhead = Math.max(0, finalJobs.length - 1) * 10;
     const totalMinutes = summedMinutes + multiJobOverhead;

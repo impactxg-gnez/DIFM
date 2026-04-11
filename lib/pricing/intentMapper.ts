@@ -5,6 +5,11 @@ import { planClarifiersForExtraction } from './dynamicClarifiers';
 import { extractQuantityFromPart } from './quantityParse';
 import { resolveQuantityClassification } from './quantityClassification';
 import { getMatrixTime } from './visitEngine';
+import {
+    detectCommercialBulkClarify,
+    detectScopeContradiction,
+    isVagueBookingRequest,
+} from './bookingGuards';
 
 export type IntentType = 'MOUNTING' | 'ELECTRICAL' | 'PLUMBING' | 'HEATING' | 'APPLIANCE' | 'UNKNOWN';
 
@@ -93,15 +98,6 @@ const RULE_JOB_ALIASES: Record<string, string[]> = {
     install_blinds: ['install_blinds'],
     furniture_assembly: ['assemble_flatpack_small', 'assemble_flatpack_large', 'assemble_install_furniture'],
 };
-
-const VAGUE_PATTERNS = [
-    'full house handyman',
-    'fix my house',
-    'fix house',
-    'everything',
-    'whole house',
-    'general handyman',
-];
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -336,10 +332,6 @@ export function detectIntent(input: string): IntentType {
     return deriveIntent(mapped.job);
 }
 
-function isVagueInput(input: string): boolean {
-    return VAGUE_PATTERNS.some((pattern) => input.includes(pattern));
-}
-
 export function mapToJobs(input: string, allowedJobIds: string[]): IntentMappingResult {
     if (!input || !input.trim()) {
         return { type: 'CLARIFY', reason: 'EMPTY_INPUT', matches: [] };
@@ -349,7 +341,7 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
     if (!normalized) {
         return { type: 'CLARIFY', reason: 'EMPTY_INPUT', matches: [] };
     }
-    if (isVagueInput(normalized)) {
+    if (isVagueBookingRequest(normalized)) {
         return { type: 'CLARIFY', reason: 'VAGUE_INPUT', matches: [] };
     }
 
@@ -410,6 +402,26 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
 
     if (matches.length === 0) {
         return { type: 'CLARIFY', reason: 'NO_STRONG_MATCH', matches: [] };
+    }
+
+    if (matches.some((m) => m.resolutionSource === 'GENERIC')) {
+        return { type: 'CLARIFY', reason: 'GENERIC_FALLBACK', matches: [] };
+    }
+
+    if (detectScopeContradiction(normalized)) {
+        return { type: 'CLARIFY', reason: 'CONTRADICTION', matches: [] };
+    }
+
+    const commercial = detectCommercialBulkClarify(
+        normalized,
+        matches.map((m) => ({
+            quantity: m.quantity,
+            clause: m.clause,
+            ruleJob: m.ruleJob,
+        })),
+    );
+    if (commercial) {
+        return { type: 'CLARIFY', reason: commercial.reason, matches: [] };
     }
 
     return { type: 'MAPPED', matches };
