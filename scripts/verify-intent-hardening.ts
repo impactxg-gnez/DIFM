@@ -9,11 +9,13 @@ interface VerificationCase {
 const CASES: VerificationCase[] = [
     { input: 'cabinet hang fix', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
     { input: 'tighten hinge', expectedJob: 'handyman_small_repair', expectedQuantity: 1 },
-    { input: 'replace five sockets', expectedJob: 'replace_socket_faceplate', expectedQuantity: 5 },
-    { input: 'replace 2 sockets', expectedJob: 'replace_socket_faceplate', expectedQuantity: 2 },
+    { input: 'replace five sockets', expectedJob: 'replace_socket', expectedQuantity: 5 },
+    { input: 'replace 2 sockets', expectedJob: 'replace_socket', expectedQuantity: 2 },
     { input: 'mount 55 inch tv', expectedJob: 'tv_mount_standard', expectedQuantity: 1 },
     { input: 'hang 2 mirrors', expectedJob: 'mirror_hang', expectedQuantity: 2 },
     { input: 'install 10 shelves', expectedJob: 'shelf_install_single', expectedQuantity: 10 },
+    { input: 'put up four shelves', expectedJob: 'shelf_install_single', expectedQuantity: 4 },
+    { input: 'put up twenty four shelves', expectedJob: 'shelf_install_single', expectedQuantity: 24 },
     { input: 'hang mirror', expectedJob: 'mirror_hang', expectedQuantity: 1 },
 ];
 
@@ -51,6 +53,25 @@ async function verifyClarifyCase() {
     }
 }
 
+async function verifyQuantityPricingSku() {
+    const four = await runExtractionPipeline('put up 4 shelves');
+    const sku4 = four.jobDetails[0]?.pricingJobId;
+    const twentyFour = await runExtractionPipeline('put up 24 shelves');
+    const sku24 = twentyFour.jobDetails[0]?.pricingJobId;
+    const ok = sku4 === 'install_shelves_set' && sku24 === 'install_shelves_set';
+    console.log('[QuantitySku]', { sku4, sku24, pass: ok });
+    if (!ok) {
+        throw new Error('Expected install_shelves_set for multi-quantity shelf installs');
+    }
+    const single = await runExtractionPipeline('install one shelf');
+    const sku1 = single.jobDetails[0]?.pricingJobId;
+    const okSingle = sku1 === 'shelf_install_single';
+    console.log('[QuantitySkuSingle]', { sku1, pass: okSingle });
+    if (!okSingle) {
+        throw new Error('Expected shelf_install_single for single shelf');
+    }
+}
+
 async function verifyMultiJobCase() {
     const result = await runExtractionPipeline('hang 2 mirrors and a shelf');
     const mirrorOk = result.jobs.includes('mirror_hang') && (result.quantities.mirror_hang || 0) === 2;
@@ -70,6 +91,7 @@ async function main() {
     // Keep deterministic behavior while verifying mapping hardening.
     delete process.env.OPENAI_API_KEY;
     await verifyMappedCases();
+    await verifyQuantityPricingSku();
     await verifyMultiJobCase();
     await verifyClarifyCase();
     console.log('SUCCESS: Intent hardening verification checks passed.');

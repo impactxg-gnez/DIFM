@@ -1,3 +1,4 @@
+import { extractQuantityFromPart } from './quantityParse';
 import { getMatrixTime } from './visitEngine';
 
 export type IntentType = 'MOUNTING' | 'ELECTRICAL' | 'PLUMBING' | 'HEATING' | 'APPLIANCE' | 'UNKNOWN';
@@ -35,6 +36,7 @@ export const RULES: DeterministicRule[] = [
     { match: ['picture', 'pictures', 'frame', 'frames'], job: 'pic_hang' },
     { match: ['mirror', 'mirrors'], job: 'mirror_hang' },
     { match: ['shelf', 'shelves'], job: 'shelf_install_single' },
+    { match: ['blind', 'blinds'], job: 'install_blinds' },
     { match: ['curtain', 'curtains'], job: 'curtain_rail_install' },
     { match: ['tv'], job: 'tv_mount_standard' },
     { match: ['socket', 'sockets', 'plug', 'plugs'], job: 'replace_socket' },
@@ -44,20 +46,53 @@ export const RULES: DeterministicRule[] = [
     { match: ['dishwasher', 'dishwashers'], job: 'appliance_install' },
 ];
 
-const NUMBER_WORDS: Record<string, number> = {
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
-    eight: 8,
-    nine: 9,
-    ten: 10,
-};
-
 const GENERIC_FALLBACK_JOB = 'mount_hang_install_wall';
+
+/**
+ * Quantity-driven SKU selection (matrix-backed ids). Duration uses durationBasisJobId + applyBulkEfficiency.
+ * Candidates are tried in order; falls back to the rule resolver output.
+ */
+interface QuantitySkuProfile {
+    ruleJob: string;
+    durationBasisJobId: string;
+    bands: Array<{ min: number; max: number; jobIdCandidates: string[] }>;
+}
+
+const QUANTITY_SKU_PROFILES: QuantitySkuProfile[] = [
+    {
+        ruleJob: 'shelf_install_single',
+        durationBasisJobId: 'shelf_install_single',
+        bands: [
+            { min: 1, max: 1, jobIdCandidates: ['shelf_install_single'] },
+            { min: 2, max: 5, jobIdCandidates: ['install_shelves_set', 'shelf_install_single'] },
+            { min: 6, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['install_shelves_set', 'shelf_install_single'] },
+        ],
+    },
+    {
+        ruleJob: 'pic_hang',
+        durationBasisJobId: 'pic_hang',
+        bands: [
+            { min: 1, max: 2, jobIdCandidates: ['pic_hang'] },
+            { min: 3, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['hang_frames_set', 'pic_hang'] },
+        ],
+    },
+    {
+        ruleJob: 'curtain_rail_install',
+        durationBasisJobId: 'curtain_rail_standard',
+        bands: [
+            { min: 1, max: 1, jobIdCandidates: ['curtain_rail_install', 'curtain_rail_standard', 'fit_curtain_rail'] },
+            { min: 2, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['fit_curtain_rail', 'curtain_rail_standard', 'curtain_rail_install'] },
+        ],
+    },
+    {
+        ruleJob: 'install_light_fitting',
+        durationBasisJobId: 'install_light_fitting',
+        bands: [
+            { min: 1, max: 1, jobIdCandidates: ['install_light_fitting', 'install_light_fitting_standard'] },
+            { min: 2, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['install_light_fitting_standard', 'install_light_fitting'] },
+        ],
+    },
+];
 
 const RULE_JOB_ALIASES: Record<string, string[]> = {
     replace_socket: ['replace_socket', 'socket_replace', 'replace_socket_faceplate'],
@@ -67,6 +102,7 @@ const RULE_JOB_ALIASES: Record<string, string[]> = {
     plumbing_diagnostic: ['plumbing_diagnostic', 'toilet_repair_simple', 'toilet_flush_repair', 'unblock_toilet_simple'],
     appliance_install: ['appliance_install', 'install_dishwasher', 'replace_dishwasher', 'install_dishwasher_integrated', 'appliance_install_plug_in'],
     handyman_small_repair: ['handyman_small_repair', 'general_handyman_repair', 'cabinet_hinge_fix'],
+    install_blinds: ['install_blinds'],
 };
 
 const VAGUE_PATTERNS = [
@@ -95,8 +131,10 @@ function fuzzyMapPartToJob(part: string): string | null {
         { needle: 'pict', job: 'pic_hang' },
         { needle: 'mirro', job: 'mirror_hang' },
         { needle: 'shelf', job: 'shelf_install_single' },
+        { needle: 'blind', job: 'install_blinds' },
         { needle: 'dish', job: 'appliance_install' },
         { needle: 'socket', job: 'replace_socket' },
+        { needle: 'hinge', job: 'handyman_small_repair' },
         { needle: 'cabinet', job: 'handyman_small_repair' },
         { needle: 'tv', job: 'tv_mount_standard' },
         { needle: 'mount', job: 'tv_mount_standard' },
@@ -118,7 +156,7 @@ function deriveIntent(jobId: string): IntentType {
     if (jobId.includes('plumbing') || jobId.includes('toilet')) return 'PLUMBING';
     if (jobId.includes('heating') || jobId.includes('radiator')) return 'HEATING';
     if (jobId.includes('appliance') || jobId.includes('dishwasher')) return 'APPLIANCE';
-    if (jobId.includes('mount') || jobId.includes('hang') || jobId.includes('shelf') || jobId.includes('curtain')) return 'MOUNTING';
+    if (jobId.includes('mount') || jobId.includes('hang') || jobId.includes('shelf') || jobId.includes('curtain') || jobId.includes('blind')) return 'MOUNTING';
     return 'UNKNOWN';
 }
 
@@ -138,6 +176,23 @@ function resolveAllowedJobId(ruleJob: string, allowedSet: Set<string>): string |
 
 function hasExplicitSpecializedSku(part: string): boolean {
     return includesAny(part, ['faceplate', 'concealed wiring', 'cable concealment', 'premium bracket', 'custom bracket']);
+}
+
+function applyQuantityAwareSku(
+    ruleJob: string,
+    quantity: number,
+    baseResolved: string,
+    allowedSet: Set<string>,
+): { pricingJobId: string; durationMatrixId: string } {
+    const profile = QUANTITY_SKU_PROFILES.find((p) => p.ruleJob === ruleJob);
+    if (!profile) {
+        return { pricingJobId: baseResolved, durationMatrixId: baseResolved };
+    }
+    const band =
+        profile.bands.find((b) => quantity >= b.min && quantity <= b.max) ?? profile.bands[profile.bands.length - 1];
+    const pricingJobId = band.jobIdCandidates.find((id) => allowedSet.has(id)) ?? baseResolved;
+    const durationMatrixId = allowedSet.has(profile.durationBasisJobId) ? profile.durationBasisJobId : baseResolved;
+    return { pricingJobId, durationMatrixId };
 }
 
 function resolveJobIdForPart(ruleJob: string, part: string, allowedSet: Set<string>): string | null {
@@ -246,17 +301,19 @@ export function splitInput(input: string): string[] {
 }
 
 export function extractQuantity(part: string): number {
-    const countNouns = '(?:mirrors?|pictures?|frames?|shelves?|sockets?|plugs?|lights?|radiators?|toilets?|dishwashers?|tvs?|televisions?)';
-    const explicitCountNumeric = part.match(new RegExp(`\\b(\\d+)\\s*${countNouns}\\b`, 'i'));
-    if (explicitCountNumeric) return Math.max(1, Number(explicitCountNumeric[1]));
+    return extractQuantityFromPart(part);
+}
 
-    const explicitCountWord = part.match(new RegExp(`\\b(one|two|three|four|five|six|seven|eight|nine|ten)\\s+${countNouns}\\b`, 'i'));
-    if (explicitCountWord) return NUMBER_WORDS[explicitCountWord[1].toLowerCase()] || 1;
-
-    const multiplier = part.match(/\b(\d+)\s*x\b/i) || part.match(/\bx\s*(\d+)\b/i);
-    if (multiplier) return Math.max(1, Number(multiplier[1]));
-
-    return 1;
+function hasExplicitQuantitySignal(part: string): boolean {
+    return (
+        /\b\d+\b/.test(part) ||
+        /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/i.test(
+            part
+        ) ||
+        /\bpair\s+of\b/i.test(part) ||
+        /\b\d+\s*x\b/i.test(part) ||
+        /\bx\s*\d+\b/i.test(part)
+    );
 }
 
 export function mapPartToJob(part: string): { job: string; resolutionSource: 'SPECIFIC' | 'GENERIC' } | null {
@@ -300,7 +357,7 @@ export function getClarifiers(
         }
 
         if (entry.job === 'shelf_install_single') {
-            const quantityUnclear = entry.quantity <= 1 && !/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(entry.part);
+            const quantityUnclear = entry.quantity <= 1 && !hasExplicitQuantitySignal(entry.part);
             if (quantityUnclear) {
                 addClarifier({ tag: 'SHELF_COUNT', question: 'How many shelves should be installed?', affects_time: true });
             }
@@ -369,20 +426,28 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         const mapped = mapPartToJob(part);
         if (!mapped) continue;
 
-        let resolvedJobId = resolveJobIdForPart(mapped.job, part, allowedSet);
-        if (!resolvedJobId) continue;
+        // Quantity is derived first so SKU bands, minutes, tier, and visit totals stay aligned.
+        const quantity = extractQuantityFromPart(part) || 1;
 
-        const quantity = extractQuantity(part) || 1;
-        const baseMinutes = getMatrixTime(resolvedJobId);
+        const baseResolved = resolveJobIdForPart(mapped.job, part, allowedSet);
+        if (!baseResolved) continue;
+
+        const { pricingJobId: quantitySku, durationMatrixId } = applyQuantityAwareSku(mapped.job, quantity, baseResolved, allowedSet);
+        let resolvedJobId = quantitySku;
+        let timeBasisId = durationMatrixId;
+
         const complexity = parseComplexity(part, mapped.job, tvDetails);
         if (complexity.overrideJobId && hasExplicitSpecializedSku(part) && allowedSet.has(complexity.overrideJobId)) {
             resolvedJobId = complexity.overrideJobId;
+            timeBasisId = complexity.overrideJobId;
         } else if (complexity.overrideJobId && mapped.job === 'tv_mount_standard' && allowedSet.has(complexity.overrideJobId)) {
             resolvedJobId = complexity.overrideJobId;
+            timeBasisId = complexity.overrideJobId;
         }
-        const adjustedBaseMinutes = getMatrixTime(resolvedJobId);
+        const adjustedBaseMinutes = getMatrixTime(timeBasisId);
         const computedMinutes = applyBulkEfficiency(adjustedBaseMinutes, quantity) + complexity.deltaMinutes;
-        if (computedMinutes > 300) {
+        const maxPhraseMinutes = 600;
+        if (computedMinutes > maxPhraseMinutes) {
             throw new Error(`ERROR_UNREALISTIC_TIME:${resolvedJobId}:${computedMinutes}`);
         }
 

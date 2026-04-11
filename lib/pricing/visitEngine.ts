@@ -80,6 +80,10 @@ const REQUIRED_HANDYMAN_MATRIX_KEYS = [
     'mirror_hang',
     'shelf_install_single',
     'install_shelves_set',
+    'install_blinds',
+    'hang_frames_set',
+    'fit_curtain_rail',
+    'curtain_rail_standard',
 ];
 let matrixCoverageValidated = false;
 
@@ -155,19 +159,26 @@ export function buildVisits(itemIds: string[]): GeneratedVisit[] {
     return buildVisitsWithQuantities(itemIds, {});
 }
 
-export function buildVisitsWithQuantities(itemIds: string[], quantities: Record<string, number>): GeneratedVisit[] {
+export function buildVisitsWithQuantities(
+    itemIds: string[],
+    quantities: Record<string, number>,
+    options?: { minuteTotalsByJob?: Record<string, number> },
+): GeneratedVisit[] {
     const visits: GeneratedVisit[] = [];
     verifyRequiredMatrixCoverage();
 
     // Map IDs to matrix-backed time rows with explicit quantity multiplication.
     const uniqueIds = [...new Set(itemIds)];
+    const minuteTotalsByJob = options?.minuteTotalsByJob || {};
     const items = uniqueIds
         .map((id) => {
             const item = excelSource.jobItems.get(id);
             if (!item) return null;
             const quantity = Math.max(1, Number(quantities[id] || 1));
             const matrixBaseTime = getMatrixTime(id);
-            const finalBaseTimeUsed = matrixBaseTime * quantity;
+            const minuteOverride = minuteTotalsByJob[id];
+            const finalBaseTimeUsed =
+                typeof minuteOverride === 'number' && minuteOverride > 0 ? minuteOverride : matrixBaseTime * quantity;
             const expectedUpperBound = getExpectedUpperBoundForCapability(item.capability_tag || 'HANDYMAN', item.pricing_ladder || item.capability_tag || 'HANDYMAN');
             const matrixLookupKey = String(id || '').trim();
 

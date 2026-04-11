@@ -121,12 +121,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const quantityByJob: Record<string, number> = {};
     const quantityByCanonicalJob: Record<string, number> = {};
     const adjustedMinutesByCanonicalJob: Record<string, number> = {};
+    const minuteTotalsByJob: Record<string, number> = {};
 
     for (const match of phraseMatches) {
         if (!allowedJobIds.includes(match.jobId)) continue;
         quantityByJob[match.jobId] = (quantityByJob[match.jobId] || 0) + Math.max(1, match.quantity);
         quantityByCanonicalJob[match.canonicalJob] = (quantityByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.quantity);
         adjustedMinutesByCanonicalJob[match.canonicalJob] = (adjustedMinutesByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.adjustedMinutes);
+        minuteTotalsByJob[match.jobId] = (minuteTotalsByJob[match.jobId] || 0) + Math.max(1, match.adjustedMinutes);
     }
 
     const finalJobs = Object.keys(quantityByCanonicalJob);
@@ -139,7 +141,9 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         adjustedMinutes: Math.max(1, match.adjustedMinutes),
         complexityTierDelta: Math.max(0, match.complexityTierDelta),
     }));
-    const visits = attachClarifiersToVisits(buildVisitsWithQuantities(pricingJobIds, quantityByJob));
+    const visits = attachClarifiersToVisits(
+        buildVisitsWithQuantities(pricingJobIds, quantityByJob, { minuteTotalsByJob }),
+    );
     const capabilities = Array.from(new Set(
         pricingJobIds
             .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)

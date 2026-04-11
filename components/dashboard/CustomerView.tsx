@@ -24,6 +24,7 @@ const JOB_LABELS: Record<string, string> = {
     pic_hang: 'Picture Hanging',
     shelf_install_single: 'Shelf Installation',
     install_shelves_set: 'Shelf Installation',
+    install_blinds: 'Blind Installation',
     tv_mount_standard: 'TV Mounting',
     handyman_small_repair: 'Minor Repair',
 };
