@@ -10,11 +10,13 @@ export interface Visit {
     job_item_id: string;
     display_name: string;
     time_weight_minutes: number;
+    classification_id?: string;
   };
   addon_job_items: {
     job_item_id: string;
     display_name: string;
     time_weight_minutes: number;
+    classification_id?: string;
   }[];
   required_capability_tags: string[];
   total_minutes: number;
@@ -61,9 +63,23 @@ export function VisitCard({ visit, index }: { visit: Visit; index: number }) {
             </div>
             <div className="text-sm font-semibold text-white">{jobSummary}</div>
             <div className="text-sm text-gray-300">
-              <div>• {visit.primary_job_item.display_name}</div>
+              <div>
+                • {visit.primary_job_item.display_name}
+                {visit.primary_job_item.classification_id ? (
+                  <span className="block text-xs text-gray-500 mt-0.5 font-normal">
+                    Class: {visit.primary_job_item.classification_id.replace(/_/g, ' ')}
+                  </span>
+                ) : null}
+              </div>
               {visit.addon_job_items.map((a) => (
-                <div key={a.job_item_id}>• {a.display_name}</div>
+                <div key={a.job_item_id}>
+                  • {a.display_name}
+                  {a.classification_id ? (
+                    <span className="block text-xs text-gray-500 mt-0.5 font-normal">
+                      Class: {a.classification_id.replace(/_/g, ' ')}
+                    </span>
+                  ) : null}
+                </div>
               ))}
             </div>
           </div>

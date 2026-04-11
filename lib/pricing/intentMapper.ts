@@ -1,10 +1,16 @@
+import { parseBookingClause, type ParsedBookingClause } from './bookingParse';
 import { extractQuantityFromPart } from './quantityParse';
+import { resolveQuantityClassification } from './quantityClassification';
 import { getMatrixTime } from './visitEngine';
 
 export type IntentType = 'MOUNTING' | 'ELECTRICAL' | 'PLUMBING' | 'HEATING' | 'APPLIANCE' | 'UNKNOWN';
 
 export interface MappedIntentJob {
+    /** Quantity-tier classification id (final_jobs / reporting). */
     job: string;
+    /** Deterministic rule family from RULES (clarifiers, complexity routing). */
+    ruleJob: string;
+    clauseParse: ParsedBookingClause;
     jobId: string;
     quantity: number;
     adjustedMinutes: number;
@@ -38,7 +44,7 @@ export const RULES: DeterministicRule[] = [
     { match: ['shelf', 'shelves'], job: 'shelf_install_single' },
     { match: ['blind', 'blinds'], job: 'install_blinds' },
     { match: ['curtain', 'curtains'], job: 'curtain_rail_install' },
-    { match: ['tv'], job: 'tv_mount_standard' },
+    { match: ['tv', 'tvs', 'television', 'televisions'], job: 'tv_mount_standard' },
     { match: ['socket', 'sockets', 'plug', 'plugs'], job: 'replace_socket' },
     { match: ['light', 'lights'], job: 'install_light_fitting' },
     { match: ['radiator', 'radiators'], job: 'heating_diagnostic' },
@@ -47,52 +53,6 @@ export const RULES: DeterministicRule[] = [
 ];
 
 const GENERIC_FALLBACK_JOB = 'mount_hang_install_wall';
-
-/**
- * Quantity-driven SKU selection (matrix-backed ids). Duration uses durationBasisJobId + applyBulkEfficiency.
- * Candidates are tried in order; falls back to the rule resolver output.
- */
-interface QuantitySkuProfile {
-    ruleJob: string;
-    durationBasisJobId: string;
-    bands: Array<{ min: number; max: number; jobIdCandidates: string[] }>;
-}
-
-const QUANTITY_SKU_PROFILES: QuantitySkuProfile[] = [
-    {
-        ruleJob: 'shelf_install_single',
-        durationBasisJobId: 'shelf_install_single',
-        bands: [
-            { min: 1, max: 1, jobIdCandidates: ['shelf_install_single'] },
-            { min: 2, max: 5, jobIdCandidates: ['install_shelves_set', 'shelf_install_single'] },
-            { min: 6, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['install_shelves_set', 'shelf_install_single'] },
-        ],
-    },
-    {
-        ruleJob: 'pic_hang',
-        durationBasisJobId: 'pic_hang',
-        bands: [
-            { min: 1, max: 2, jobIdCandidates: ['pic_hang'] },
-            { min: 3, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['hang_frames_set', 'pic_hang'] },
-        ],
-    },
-    {
-        ruleJob: 'curtain_rail_install',
-        durationBasisJobId: 'curtain_rail_standard',
-        bands: [
-            { min: 1, max: 1, jobIdCandidates: ['curtain_rail_install', 'curtain_rail_standard', 'fit_curtain_rail'] },
-            { min: 2, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['fit_curtain_rail', 'curtain_rail_standard', 'curtain_rail_install'] },
-        ],
-    },
-    {
-        ruleJob: 'install_light_fitting',
-        durationBasisJobId: 'install_light_fitting',
-        bands: [
-            { min: 1, max: 1, jobIdCandidates: ['install_light_fitting', 'install_light_fitting_standard'] },
-            { min: 2, max: Number.MAX_SAFE_INTEGER, jobIdCandidates: ['install_light_fitting_standard', 'install_light_fitting'] },
-        ],
-    },
-];
 
 const RULE_JOB_ALIASES: Record<string, string[]> = {
     replace_socket: ['replace_socket', 'socket_replace', 'replace_socket_faceplate'],
@@ -156,7 +116,19 @@ function deriveIntent(jobId: string): IntentType {
     if (jobId.includes('plumbing') || jobId.includes('toilet')) return 'PLUMBING';
     if (jobId.includes('heating') || jobId.includes('radiator')) return 'HEATING';
     if (jobId.includes('appliance') || jobId.includes('dishwasher')) return 'APPLIANCE';
-    if (jobId.includes('mount') || jobId.includes('hang') || jobId.includes('shelf') || jobId.includes('curtain') || jobId.includes('blind')) return 'MOUNTING';
+    if (
+        jobId.includes('mount') ||
+        jobId.includes('hang') ||
+        jobId.includes('shelf') ||
+        jobId.includes('curtain') ||
+        jobId.includes('blind') ||
+        jobId.includes('pic') ||
+        jobId.includes('frame') ||
+        jobId.includes('mirror') ||
+        jobId.includes('tv')
+    ) {
+        return 'MOUNTING';
+    }
     return 'UNKNOWN';
 }
 
@@ -176,23 +148,6 @@ function resolveAllowedJobId(ruleJob: string, allowedSet: Set<string>): string |
 
 function hasExplicitSpecializedSku(part: string): boolean {
     return includesAny(part, ['faceplate', 'concealed wiring', 'cable concealment', 'premium bracket', 'custom bracket']);
-}
-
-function applyQuantityAwareSku(
-    ruleJob: string,
-    quantity: number,
-    baseResolved: string,
-    allowedSet: Set<string>,
-): { pricingJobId: string; durationMatrixId: string } {
-    const profile = QUANTITY_SKU_PROFILES.find((p) => p.ruleJob === ruleJob);
-    if (!profile) {
-        return { pricingJobId: baseResolved, durationMatrixId: baseResolved };
-    }
-    const band =
-        profile.bands.find((b) => quantity >= b.min && quantity <= b.max) ?? profile.bands[profile.bands.length - 1];
-    const pricingJobId = band.jobIdCandidates.find((id) => allowedSet.has(id)) ?? baseResolved;
-    const durationMatrixId = allowedSet.has(profile.durationBasisJobId) ? profile.durationBasisJobId : baseResolved;
-    return { pricingJobId, durationMatrixId };
 }
 
 function resolveJobIdForPart(ruleJob: string, part: string, allowedSet: Set<string>): string | null {
@@ -423,16 +378,21 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
     const matches: MappedIntentJob[] = [];
 
     for (const part of parts) {
+        const clauseParse = parseBookingClause(part);
+        const quantity = clauseParse.quantity;
+
         const mapped = mapPartToJob(part);
         if (!mapped) continue;
-
-        // Quantity is derived first so SKU bands, minutes, tier, and visit totals stay aligned.
-        const quantity = extractQuantityFromPart(part) || 1;
 
         const baseResolved = resolveJobIdForPart(mapped.job, part, allowedSet);
         if (!baseResolved) continue;
 
-        const { pricingJobId: quantitySku, durationMatrixId } = applyQuantityAwareSku(mapped.job, quantity, baseResolved, allowedSet);
+        const { classificationId, pricingJobId: quantitySku, durationMatrixId } = resolveQuantityClassification(
+            mapped.job,
+            quantity,
+            baseResolved,
+            allowedSet,
+        );
         let resolvedJobId = quantitySku;
         let timeBasisId = durationMatrixId;
 
@@ -452,7 +412,9 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
         }
 
         matches.push({
-            job: mapped.job,
+            job: classificationId,
+            ruleJob: mapped.job,
+            clauseParse,
             jobId: resolvedJobId,
             quantity,
             adjustedMinutes: computedMinutes,

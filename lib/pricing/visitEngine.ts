@@ -12,11 +12,14 @@ export interface GeneratedVisit {
         job_item_id: string;
         display_name: string;
         time_weight_minutes: number;
+        /** Quantity-tier classification from extraction (e.g. shelf_install_multi). */
+        classification_id?: string;
     };
     addon_job_items: Array<{
         job_item_id: string;
         display_name: string;
         time_weight_minutes: number;
+        classification_id?: string;
     }>;
     required_capability_tags: string[];
     total_minutes: number;
@@ -65,6 +68,7 @@ interface MatrixTimedItem {
     quantity: number;
     matrixBaseTime: number;
     finalBaseTimeUsed: number;
+    classificationId?: string;
 }
 
 const FIXED_BASE_MINUTES: Record<string, number> = {
@@ -84,6 +88,8 @@ const REQUIRED_HANDYMAN_MATRIX_KEYS = [
     'hang_frames_set',
     'fit_curtain_rail',
     'curtain_rail_standard',
+    'tv_mount_standard',
+    'mount_tv_custom',
 ];
 let matrixCoverageValidated = false;
 
@@ -162,7 +168,10 @@ export function buildVisits(itemIds: string[]): GeneratedVisit[] {
 export function buildVisitsWithQuantities(
     itemIds: string[],
     quantities: Record<string, number>,
-    options?: { minuteTotalsByJob?: Record<string, number> },
+    options?: {
+        minuteTotalsByJob?: Record<string, number>;
+        classificationByJobId?: Record<string, string>;
+    },
 ): GeneratedVisit[] {
     const visits: GeneratedVisit[] = [];
     verifyRequiredMatrixCoverage();
@@ -170,6 +179,7 @@ export function buildVisitsWithQuantities(
     // Map IDs to matrix-backed time rows with explicit quantity multiplication.
     const uniqueIds = [...new Set(itemIds)];
     const minuteTotalsByJob = options?.minuteTotalsByJob || {};
+    const classificationByJobId = options?.classificationByJobId || {};
     const items = uniqueIds
         .map((id) => {
             const item = excelSource.jobItems.get(id);
@@ -218,7 +228,8 @@ export function buildVisitsWithQuantities(
                 item,
                 quantity,
                 matrixBaseTime,
-                finalBaseTimeUsed
+                finalBaseTimeUsed,
+                classificationId: classificationByJobId[id],
             };
         })
         .filter((i): i is MatrixTimedItem => !!i);
@@ -263,11 +274,13 @@ function createGroupVisit(capability: string, items: MatrixTimedItem[], minutes:
             job_item_id: primary.item.job_item_id,
             display_name: primary.quantity > 1 ? `${primary.item.display_name} x${primary.quantity}` : primary.item.display_name,
             time_weight_minutes: primary.finalBaseTimeUsed,
+            ...(primary.classificationId ? { classification_id: primary.classificationId } : {}),
         },
         addon_job_items: items.slice(1).map(i => ({
             job_item_id: i.item.job_item_id,
             display_name: i.quantity > 1 ? `${i.item.display_name} x${i.quantity}` : i.item.display_name,
             time_weight_minutes: i.finalBaseTimeUsed,
+            ...(i.classificationId ? { classification_id: i.classificationId } : {}),
         })),
         required_capability_tags: [capability],
         total_minutes: minutes,

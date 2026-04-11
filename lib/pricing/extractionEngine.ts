@@ -16,7 +16,17 @@ export interface ExtractionPipelineResult {
     quantitiesList: number[];
     total_minutes: number;
     tier: string;
-    jobDetails: Array<{ job: string; pricingJobId: string; quantity: number; adjustedMinutes: number; complexityTierDelta: number }>;
+    jobDetails: Array<{
+        job: string;
+        ruleJob: string;
+        pricingJobId: string;
+        quantity: number;
+        adjustedMinutes: number;
+        complexityTierDelta: number;
+        itemHint?: string | null;
+        actions?: string[];
+        contextModifiers?: string[];
+    }>;
     capabilities: string[];
     quantities: Record<string, number>;
     visits: GeneratedVisit[];
@@ -50,13 +60,18 @@ function validateAllowedJobs(candidateIds: string[], allowedJobIds: string[]) {
 }
 
 interface PhraseMatch {
+    /** Quantity-tier classification (final_jobs). */
     canonicalJob: string;
+    ruleJob: string;
     jobId: string;
     quantity: number;
     adjustedMinutes: number;
     complexityTierDelta: number;
     clause: string;
     resolutionSource: 'SPECIFIC' | 'GENERIC';
+    itemHint: string | null;
+    actions: string[];
+    contextModifiers: string[];
 }
 
 function deriveTierFromMinutes(totalMinutes: number): 'H1' | 'H2' | 'H3' {
@@ -108,12 +123,16 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     enforceMappingOutputGuardrails(mappedIntentResult.matches);
     const phraseMatches: PhraseMatch[] = mappedIntentResult.matches.map((match) => ({
         canonicalJob: match.job,
+        ruleJob: match.ruleJob,
         jobId: match.jobId,
         quantity: match.quantity,
         adjustedMinutes: match.adjustedMinutes,
         complexityTierDelta: match.complexityTierDelta,
         clause: match.clause,
-        resolutionSource: match.resolutionSource
+        resolutionSource: match.resolutionSource,
+        itemHint: match.clauseParse.itemHint,
+        actions: match.clauseParse.actions,
+        contextModifiers: match.clauseParse.contextModifiers,
     }));
     const phraseResult = validateAllowedJobs(phraseMatches.map((m) => m.jobId), allowedJobIds);
     const aiResult: string[] = phraseResult;
@@ -122,6 +141,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const quantityByCanonicalJob: Record<string, number> = {};
     const adjustedMinutesByCanonicalJob: Record<string, number> = {};
     const minuteTotalsByJob: Record<string, number> = {};
+    const classificationByJobId: Record<string, string> = {};
 
     for (const match of phraseMatches) {
         if (!allowedJobIds.includes(match.jobId)) continue;
@@ -129,6 +149,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         quantityByCanonicalJob[match.canonicalJob] = (quantityByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.quantity);
         adjustedMinutesByCanonicalJob[match.canonicalJob] = (adjustedMinutesByCanonicalJob[match.canonicalJob] || 0) + Math.max(1, match.adjustedMinutes);
         minuteTotalsByJob[match.jobId] = (minuteTotalsByJob[match.jobId] || 0) + Math.max(1, match.adjustedMinutes);
+        classificationByJobId[match.jobId] = match.canonicalJob;
     }
 
     const finalJobs = Object.keys(quantityByCanonicalJob);
@@ -136,13 +157,20 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const quantitiesList = finalJobs.map((job) => quantityByCanonicalJob[job] || 1);
     const jobDetails = phraseMatches.map((match) => ({
         job: match.canonicalJob,
+        ruleJob: match.ruleJob,
         pricingJobId: match.jobId,
         quantity: Math.max(1, match.quantity),
         adjustedMinutes: Math.max(1, match.adjustedMinutes),
         complexityTierDelta: Math.max(0, match.complexityTierDelta),
+        itemHint: match.itemHint,
+        actions: match.actions,
+        contextModifiers: match.contextModifiers,
     }));
     const visits = attachClarifiersToVisits(
-        buildVisitsWithQuantities(pricingJobIds, quantityByJob, { minuteTotalsByJob }),
+        buildVisitsWithQuantities(pricingJobIds, quantityByJob, {
+            minuteTotalsByJob,
+            classificationByJobId,
+        }),
     );
     const capabilities = Array.from(new Set(
         pricingJobIds
@@ -152,7 +180,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const legacyVisitPrice = visits.reduce((sum, v) => sum + v.price, 0);
     const clarifiers = getClarifiers(
         normalizedInput,
-        phraseMatches.map((match) => ({ job: match.canonicalJob, quantity: match.quantity, part: match.clause }))
+        phraseMatches.map((match) => ({ job: match.ruleJob, quantity: match.quantity, part: match.clause })),
     );
     const unresolvedClauses = parts.filter((part) => {
         const mapped = mapPartToJob(part);

@@ -6,10 +6,10 @@ interface RegressionCase {
 }
 
 const CASES: RegressionCase[] = [
-    { input: 'hang mirror', expectedJob: 'mirror_hang' },
-    { input: 'mount mirror', expectedJob: 'mirror_hang' },
-    { input: 'install mirror', expectedJob: 'mirror_hang' },
-    { input: 'hang picture', expectedJob: 'pic_hang' },
+    { input: 'hang mirror', expectedJob: 'mirror_hang_single' },
+    { input: 'mount mirror', expectedJob: 'mirror_hang_single' },
+    { input: 'install mirror', expectedJob: 'mirror_hang_single' },
+    { input: 'hang picture', expectedJob: 'pic_hang_single' },
     { input: 'install shelf', expectedJob: 'shelf_install_single' },
 ];
 

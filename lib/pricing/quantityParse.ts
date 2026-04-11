@@ -37,8 +37,8 @@ const TENS: Record<string, number> = {
     ninety: 90,
 };
 
-/** Nouns / phrases that imply a countable install unit (generic, not shelf-only). */
-export function buildCountableNounPattern(): string {
+/** Alternation body used for quantity + item detection (shared across parsers). */
+export function getCountableNounAlternation(): string {
     const parts = [
         'shelf|shelves',
         'mirror|mirrors',
@@ -63,7 +63,17 @@ export function buildCountableNounPattern(): string {
         'item|items',
         'piece|pieces',
     ];
-    return `(?:${parts.join('|')})`;
+    return parts.join('|');
+}
+
+/** Non-capturing noun group for quantity regexes. */
+export function buildCountableNounPattern(): string {
+    return `(?:${getCountableNounAlternation()})`;
+}
+
+/** Capturing noun group for extracting the matched object phrase. */
+export function buildCountableNounCapturePattern(): string {
+    return `(${getCountableNounAlternation()})`;
 }
 
 function normalizeWords(text: string): string {
