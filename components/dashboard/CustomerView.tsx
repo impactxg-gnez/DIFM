@@ -17,7 +17,16 @@ import { LocationPicker } from './LocationPicker';
 import { HomeSearchInterface } from './HomeSearchInterface';
 import { VisitCard, type Visit } from '@/components/booking/VisitCard';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) =>
+    fetch(url)
+        .then((res) => res.json())
+        .then((data) => {
+            if (url.startsWith('/api/jobs') && data != null && !Array.isArray(data)) {
+                console.error('Expected array from /api/jobs, got', typeof data, data);
+                return [];
+            }
+            return data;
+        });
 
 const JOB_LABELS: Record<string, string> = {
     mirror_hang: 'Mirror Hanging',
@@ -168,7 +177,9 @@ export function CustomerView({ user }: { user: any }) {
         const backendTaskCount = getBackendTaskCount(v);
         const uiTaskCount = getUiTaskCount(uiVisit);
         if (backendTaskCount !== uiTaskCount) {
-            throw new Error(`VISIT_TASK_COUNT_MISMATCH:${uiVisit.visit_id}:${backendTaskCount}:${uiTaskCount}`);
+            console.warn(
+                `[VisitRender] Task count mismatch (backend ${backendTaskCount} vs UI ${uiTaskCount}), visit ${uiVisit.visit_id} — rendering anyway`,
+            );
         }
 
         return uiVisit;

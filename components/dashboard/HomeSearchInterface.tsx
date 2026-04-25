@@ -232,11 +232,23 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const blocksBookableQuote = previewWarnings.some((w) => BOOKING_BLOCK_WARNINGS.has(w));
     const hasBookableVisits = Array.isArray(pricePreview?.visits) && pricePreview.visits.length > 0;
     const routing = pricePreview?.routing as string | undefined;
-    const showFixedPath = pricePreview?.bookable === true && routing === 'FIXED_PRICE';
+    const isOut = previewWarnings.includes('OUT_OF_SCOPE') || pricePreview?.isOutOfScope;
+    /** Book with fixed price: has quote + (API says bookable or legacy without `routing` field). */
+    const showFixedPath =
+        !isOut &&
+        hasDisplayPrice &&
+        hasBookableVisits &&
+        !blocksBookableQuote &&
+        (pricePreview?.bookable === true ||
+            routing === 'FIXED_PRICE' ||
+            (routing == null && hasDisplayPrice));
+    /** Review / quote: not OOS, not the fixed path, and server allows quote submission (or legacy unknown). */
     const showReviewPath =
-        pricePreview?.routing === 'REVIEW_QUOTE' &&
-        pricePreview?.canSubmitQuoteRequest === true &&
-        !previewWarnings.includes('OUT_OF_SCOPE');
+        !isOut &&
+        !showFixedPath &&
+        pricePreview != null &&
+        (pricePreview?.canSubmitQuoteRequest !== false) &&
+        (routing === 'REVIEW_QUOTE' || routing == null);
     const addressOk = Boolean(selectedAddress?.trim());
     const canAct = !isTooShortForExtraction && description.trim().length > 0;
     if (pricePreview && showFixedPath && !hasDisplayPrice) {

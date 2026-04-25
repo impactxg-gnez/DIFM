@@ -13,7 +13,14 @@ import { getNextStates } from '@/lib/jobStateMachine';
 import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2, Timer } from 'lucide-react';
 import { RemoteImage } from '@/components/ui/RemoteImage';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) =>
+    fetch(url).then((res) => res.json()).then((data) => {
+        if (url.startsWith('/api/jobs') && data != null && !Array.isArray(data)) {
+            console.error('Expected array from /api/jobs, got', typeof data, data);
+            return [];
+        }
+        return data;
+    });
 
 const tabs = [
     { id: 'jobs', label: 'Jobs', icon: ShieldAlert },
@@ -49,12 +56,14 @@ export function AdminView({ user }: { user: any }) {
     const [jobDetailDialog, setJobDetailDialog] = useState<{ open: boolean; job: any }>({ open: false, job: null });
 
     const filteredJobs = useMemo(() => {
-        if (!jobs) return [];
+        if (!Array.isArray(jobs)) return [];
         return jobs.filter((job: any) => {
             if (statusFilter !== 'ALL' && job.status !== statusFilter) return false;
             if (categoryFilter !== 'ALL' && job.category !== categoryFilter) return false;
             if (dateFilter) {
-                const jobDate = new Date(job.createdAt).toISOString().split('T')[0];
+                const t = new Date(job.createdAt).getTime();
+                if (Number.isNaN(t)) return true;
+                const jobDate = new Date(t).toISOString().split('T')[0];
                 if (jobDate !== dateFilter) return false;
             }
             return true;
@@ -288,7 +297,13 @@ export function AdminView({ user }: { user: any }) {
     };
 
     const jobsContent = useMemo(() => {
-        if (!jobs) return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
+        if (!Array.isArray(jobs)) {
+            if (jobs) console.error('Expected jobs array from /api/jobs, got', typeof jobs);
+            return <div className="p-6 text-center text-muted-foreground">Loading jobs...</div>;
+        }
+        if (jobs.length === 0) {
+            return <div className="p-6 text-center text-muted-foreground">No jobs yet.</div>;
+        }
         if (filteredJobs.length === 0) {
             return (
                 <div className="text-center py-16 bg-zinc-900/60 border-white/10">
@@ -358,6 +373,10 @@ export function AdminView({ user }: { user: any }) {
 
     const extractionContent = useMemo(() => {
         if (!extractionLogs) return <div className="p-6 text-center text-muted-foreground">Loading extraction logs...</div>;
+        if (!Array.isArray(extractionLogs)) {
+            console.error('extractionLogs is not an array', extractionLogs);
+            return <div className="p-6 text-center text-destructive">Failed to load extraction logs (invalid response).</div>;
+        }
         if (extractionLogs.length === 0) {
             return (
                 <div className="text-center py-16 bg-zinc-900/60 border-white/10">
@@ -406,6 +425,10 @@ export function AdminView({ user }: { user: any }) {
 
     const disputesContent = useMemo(() => {
         if (!disputes) return <div className="p-6 text-center text-muted-foreground">Loading disputes...</div>;
+        if (!Array.isArray(disputes)) {
+            console.error('disputes is not an array', disputes);
+            return <div className="p-6 text-center text-destructive">Failed to load disputes.</div>;
+        }
         if (disputes.length === 0) {
             return (
                 <div className="text-center py-16 bg-zinc-900/60 border-white/10">
@@ -479,6 +502,10 @@ export function AdminView({ user }: { user: any }) {
 
     const providersContent = useMemo(() => {
         if (!providers) return <div className="p-6 text-center text-muted-foreground">Loading providers...</div>;
+        if (!Array.isArray(providers)) {
+            console.error('providers is not an array', providers);
+            return <div className="p-6 text-center text-destructive">Failed to load providers.</div>;
+        }
         return (
             <div className="grid md:grid-cols-2 gap-4">
                 {providers.map((p: any) => (
@@ -677,7 +704,11 @@ export function AdminView({ user }: { user: any }) {
     const paymentsContent = useMemo(() => {
         if (!paymentsData) return <div className="p-6 text-center text-gray-400">Loading payments...</div>;
 
-        const { payments, totals } = paymentsData;
+        const { payments, totals } = paymentsData as { payments?: unknown; totals?: Record<string, number> };
+        if (!Array.isArray(payments) || !totals || typeof totals !== 'object') {
+            console.error('Invalid payments payload', paymentsData);
+            return <div className="p-6 text-center text-red-400">Could not load payments (invalid response).</div>;
+        }
 
         if (payments.length === 0) {
             return (
@@ -1594,11 +1625,15 @@ export function AdminView({ user }: { user: any }) {
                                         <div className="grid grid-cols-1 gap-3">
                                             <div className="p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
                                                 <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Customer Total</div>
-                                                <div className="text-2xl font-black text-white">£{jobDetailDialog.job.fixedPrice.toFixed(2)}</div>
+                                                <div className="text-2xl font-black text-white">£{Number(jobDetailDialog.job.fixedPrice ?? 0).toFixed(2)}</div>
                                             </div>
                                             <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
                                                 <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Provider Payout</div>
-                                                <div className="text-2xl font-black text-white">£{(jobDetailDialog.job.fixedPrice - (jobDetailDialog.job.platformFeeOverride ?? (jobDetailDialog.job.fixedPrice * PLATFORM_FEE_PERCENT))).toFixed(2)}</div>
+                                                <div className="text-2xl font-black text-white">£{(() => {
+                                                    const fp = Number(jobDetailDialog.job.fixedPrice ?? 0);
+                                                    const provider = fp - (jobDetailDialog.job.platformFeeOverride ?? (fp * PLATFORM_FEE_PERCENT));
+                                                    return Number.isFinite(provider) ? provider.toFixed(2) : '0.00';
+                                                })()}</div>
                                             </div>
                                         </div>
 
