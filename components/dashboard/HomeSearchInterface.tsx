@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
@@ -52,6 +52,9 @@ function resolveJobLabel(jobId: string): string {
 }
 
 export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', showLoginButton = false, onLoginClick }: HomeSearchInterfaceProps) {
+    const initialLocationRef = useRef(initialLocation);
+    initialLocationRef.current = initialLocation;
+
     const [locationText, setLocationText] = useState(initialLocation);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
@@ -106,14 +109,34 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         fetchPrice();
     }, [debouncedDesc]);
 
-    // Sync with initialLocation prop
+    const applyGeocodedAddress = (displayName: string) => {
+        const full = displayName
+            .split(',')
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(', ');
+        const short = displayName.split(',')[0].trim() || full;
+        setLocationText(short);
+        setSelectedAddress(full);
+        try {
+            if (full) localStorage.setItem('preferredLocation', full);
+        } catch {
+            // ignore
+        }
+    };
+
+    // Sync with initialLocation prop (e.g. dashboard after CustomerView geolocation / preferredLocation)
     useEffect(() => {
-        if (initialLocation && initialLocation !== 'Location') {
-            setLocationText(initialLocation);
+        const v = (initialLocation || '').trim();
+        if (v && v !== 'Location') {
+            setLocationText(v.split(',')[0].trim() || v);
+            setSelectedAddress(v);
         }
     }, [initialLocation]);
 
-    const fetchLocation = () => {
+    /** @param cancelIfParentHasAddress in-flight from auto-detect: skip if parent set preferredLocation after mount. Manual refresh always applies. */
+    const fetchLocation = (cancelIfParentHasAddress = true) => {
         setIsLoadingLocation(true);
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
@@ -123,9 +146,17 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                         if (res.ok) {
                             const data = await res.json();
-                            // Take first part (e.g. "Camden") or first 2 parts
-                            const address = data.display_name.split(',')[0];
-                            setLocationText(address);
+                            const name = data.display_name as string;
+                            if (name) {
+                                const fromParent = (initialLocationRef.current || '').trim();
+                                if (cancelIfParentHasAddress && fromParent && fromParent !== 'Location') {
+                                    // don't clobber a sync'd parent address with a stale geocode
+                                } else {
+                                    applyGeocodedAddress(name);
+                                }
+                            } else {
+                                setLocationText('Current Location');
+                            }
                         } else {
                             setLocationText('Current Location');
                         }
@@ -138,8 +169,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 },
                 (error) => {
                     console.error('Error getting location:', error);
-                    // If error, keep as is or specific error text? User just wants it to work.
-                    // If denied, we might just leave it.
                     setIsLoadingLocation(false);
                 }
             );
@@ -148,15 +177,17 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         }
     };
 
-    // Auto-fetch on mount if no location provided
+    // Geolocate only when the parent is not already supplying a saved address
     useEffect(() => {
-        if (!initialLocation || initialLocation === 'Location') {
-            fetchLocation();
+        const v = (initialLocation || '').trim();
+        if (v && v !== 'Location') {
+            return;
         }
-    }, []);
+        fetchLocation(true);
+    }, [initialLocation]);
 
     const handleLocationClick = () => {
-        fetchLocation();
+        fetchLocation(false);
     };
 
     const handleAddressClick = () => {
@@ -166,6 +197,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const handleAddressSave = (address: string, label?: string) => {
         setSelectedAddress(address);
         setSelectedLabel(label);
+        try {
+            if (address.trim()) localStorage.setItem('preferredLocation', address.trim());
+        } catch {
+            // ignore
+        }
     };
 
     const handleBookFixedClick = () => {
