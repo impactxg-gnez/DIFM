@@ -39,6 +39,51 @@ export function matchesExtendedOutOfScope(normalizedLower: string): boolean {
     return OUT_OF_SCOPE_BOOKING_PHRASES.some((phrase) => normalizedLower.includes(phrase));
 }
 
+/** Multiword — substring match is safe (no "syntax"/"tax" style issues). */
+const OUT_OF_SCOPE_PHRASE_HINTS: string[] = [
+    'dog walk',
+    'walk the dog',
+    'pet sitting',
+    'cat sitting',
+    'child care',
+    'personal train',
+    'food delivery',
+    'grocery delivery',
+    'car repair',
+    'vehicle repair',
+    'lawn mow',
+    'snow remov',
+    'dog grooming',
+];
+
+/**
+ * Additional home-services OOS (whole-word / patterns only — not naive substring
+ * of single tokens like "tax", "class", "pet" which false-positive in normal copy).
+ */
+export function matchesKeywordOutOfScope(normalizedLower: string): boolean {
+    const n = normalizedLower;
+    for (const phrase of OUT_OF_SCOPE_PHRASE_HINTS) {
+        if (n.includes(phrase)) return true;
+    }
+    const patterns: RegExp[] = [
+        /\b(babysit|babysitting|childcare)\b/,
+        /\b(tutors?|tutoring|teach(?:er|ing)?|homework help)\b/,
+        /\b(uber|taxi|lyft)\b.*\b(airport|station|ride|pick me|drive me|pickup)\b/i,
+        /\b(uber|taxi|lyft)\b.*\b(to|from)\b/i,
+        /\b(food|grocery|takeaway|take-out)\b.*\b(deliver|delivery)\b/i,
+        /\b(deliver|delivery|courier|errand)\b.*\b(food|grocer|parcel|package|shop)\b/i,
+        /\b(massage|reiki|acupuncture|chiroprac)\w*\b/,
+        /\b(therapist|counsell(?:or|ing)|psychiatr)\w*\b/,
+        /\b(legal|solicitor|attorney|accountant|tax return|vat return)\b/,
+        /\b(dog|cat|pet)\b.*\b(sit|sitting|walk|walking|groom)\w*\b/,
+        /\b(pet|dog|cat)\b.*\b(kennel|daycare|walkers?)\b/,
+        /\b(gardening|landscap(?:e|ing)|lawn care|grounds maintenance)\b/,
+        /\b(mow(ing|er)?\s+(lawn|grass)|cut(ting)?\s+the grass)\b/,
+        /\b(snow|path)\b.*\b(shovel|clear(ing|ance))\b/,
+    ];
+    return patterns.some((re) => re.test(n));
+}
+
 /** Vague / under-specified booking intent — clarify instead of guessing. */
 export const VAGUE_BOOKING_PATTERNS: string[] = [
     'full house handyman',
@@ -72,6 +117,11 @@ export const VAGUE_BOOKING_PATTERNS: string[] = [
     'couple of things',
     'stuff to fix',
     'things to fix',
+    'renovate the whole',
+    'full renovation',
+    'entire house refit',
+    'general renovation',
+    'any odd jobs',
 ];
 
 export function isVagueBookingRequest(normalizedInput: string): boolean {
@@ -113,10 +163,10 @@ export function detectCommercialBulkClarify(
 export function detectScopeContradiction(normalizedInput: string): boolean {
     const n = normalizedInput.toLowerCase();
     const tvMention = /\b(tv|television|telly)\b/i.test(n);
-    const mountMention = /\b(mount|hang|wall)\b/i.test(n);
-    if (!tvMention || !mountMention) return false;
+    const mountOrInstall = /\b(mount|hang|wall\s*mount|tv\s*mount)\b/i.test(n) || /\binstall\b.*\b(tv|television|telly)\b/i.test(n);
+    if (!tvMention || !mountOrInstall) return false;
     if (
-        /\b(no wall|without a wall|no suitable wall|nowhere to mount|can't drill|cannot drill|no drilling|rental.*?no holes|no holes allowed)\b/i.test(
+        /\b(no wall|without\s+a\s+wall|no suitable wall|nowhere to mount|no stud|no fixing|no anchor|can't drill|cannot drill|no drilling|rental.*?no holes|no holes allowed)\b/i.test(
             n,
         )
     ) {

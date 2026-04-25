@@ -281,6 +281,8 @@ export function normalizeInput(input: string): string {
     return preprocessBookingInput(input)
         .toLowerCase()
         .replace(/\+/g, ' and ')
+        .replace(/&/g, ' and ')
+        .replace(/;/g, ' and ')
         .replace(/,/g, ' and ')
         .replace(/\s+/g, ' ')
         .trim();

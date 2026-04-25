@@ -264,6 +264,19 @@ export function CustomerView({ user }: { user: any }) {
                     longitude: userCoords?.lng || -0.1278,
                 }),
             });
+            if (res.status === 422) {
+                let msg = 'This request cannot be booked with instant pricing. Add detail or contact us for a custom quote.';
+                try {
+                    const errBody = await res.json();
+                    if (errBody?.clarifyMessage) msg = errBody.clarifyMessage;
+                    else if (errBody?.message) msg = errBody.message;
+                } catch {
+                    // ignore
+                }
+                console.warn('Job create blocked:', msg);
+                alert(msg);
+                return;
+            }
             if (res.ok) {
                 const quote = await res.json();
                 setVisits(Array.isArray(quote.visits) ? quote.visits.map(normalizeBackendVisit) : []);

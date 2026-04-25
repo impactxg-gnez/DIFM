@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { ServiceCategory } from '@/lib/constants';
 import { calculateJobPrice } from '@/lib/pricing/calculator';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
+import { getV1JobCreateRejection, isV1PricingBookable } from '@/lib/pricing/bookingEligibility';
 import { computeStuck } from '@/lib/jobStateMachine';
 import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispatchTracker';
 import { normalizeTier, normalizeJobForUi } from '@/lib/pricing/tierNormalization';
@@ -26,8 +27,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        // V1 Pricing Engine
+        // V1 Pricing Engine — never persist a £0 / no-visit job from edge cases (OOS, clarify, commercial).
         const pricing = await calculateV1Pricing(description);
+        if (!isV1PricingBookable(pricing)) {
+            const rejection = getV1JobCreateRejection(pricing);
+            return NextResponse.json(rejection, { status: 422 });
+        }
+
         const category = pricing.primaryCategory;
         const now = new Date();
 

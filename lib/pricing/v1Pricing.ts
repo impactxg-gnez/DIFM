@@ -1,6 +1,6 @@
 import { GeneratedVisit } from './visitEngine';
 import { runExtractionPipeline } from './extractionEngine';
-import { matchesExtendedOutOfScope } from './bookingGuards';
+import { matchesExtendedOutOfScope, matchesKeywordOutOfScope } from './bookingGuards';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -15,16 +15,6 @@ export interface V1PricingResult {
     clarifyMessage?: string;
 }
 
-// Out-of-scope keywords that indicate services we don't offer
-const OUT_OF_SCOPE_KEYWORDS = [
-    'walk', 'dog', 'pet', 'animal', 'babysit', 'childcare', 'deliver',
-    'delivery', 'food', 'grocery', 'shopping', 'drive', 'taxi', 'uber',
-    'tutor', 'teach', 'lesson', 'class', 'coach', 'personal trainer',
-    'massage', 'therapy', 'counseling', 'legal', 'accountant', 'tax',
-    'gardening', 'landscaping', 'mow', 'lawn', 'snow', 'shovel',
-    'pet sitting', 'dog walking', 'cat sitting', 'pet care'
-];
-
 // Supported service categories for suggestions
 const SUPPORTED_SERVICES = [
     'Plumbing', 'Electrical', 'Handyman', 'Cleaning',
@@ -34,10 +24,8 @@ const SUPPORTED_SERVICES = [
 export async function calculateV1Pricing(description: string): Promise<V1PricingResult> {
     const lower = description.toLowerCase();
 
-    // 1. Check for out-of-scope services
-    const isOutOfScope =
-        OUT_OF_SCOPE_KEYWORDS.some((keyword) => lower.includes(keyword.toLowerCase())) ||
-        matchesExtendedOutOfScope(lower);
+    // 1. Out-of-scope: phrase list + heuristics (no naive single-substring "tax" / "class" / "pet" matching).
+    const isOutOfScope = matchesKeywordOutOfScope(lower) || matchesExtendedOutOfScope(lower);
 
     if (isOutOfScope) {
         return {
@@ -47,7 +35,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             primaryCategory: 'HANDYMAN',
             warnings: ['OUT_OF_SCOPE'],
             isOutOfScope: true,
-            suggestedServices: SUPPORTED_SERVICES
+            suggestedServices: SUPPORTED_SERVICES,
+            clarifyMessage:
+                'This looks outside the home handyman, installation, and cleaning work we can price in the app. For anything else, contact us for a custom quote or change the request to a specific task (e.g. fix a tap, mount a TV, clean a flat).',
         };
     }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
+import { isV1PricingBookable } from '@/lib/pricing/bookingEligibility';
 import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(request: Request) {
@@ -13,7 +14,8 @@ export async function POST(request: Request) {
 
         // V1 Pricing Engine returns visit-first format
         const pricing = await calculateV1Pricing(description);
-        
+        const bookable = isV1PricingBookable(pricing);
+
         // Return visit-first contract with warnings and metadata
         return NextResponse.json({
             visits: pricing.visits.map((visit: any) => ({
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
             confidence: pricing.confidence,
             primaryCategory: pricing.primaryCategory,
             clarifyMessage: pricing.clarifyMessage,
+            bookable,
         });
     } catch (error) {
         console.error('Price preview error', error);
