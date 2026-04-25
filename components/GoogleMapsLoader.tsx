@@ -14,7 +14,7 @@ export function GoogleMapsLoader() {
 
     return (
         <Script
-            src={`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`}
+            src={`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`}
             strategy="afterInteractive"
             onLoad={() => {
                 console.log('✅ Google Maps script loaded successfully');

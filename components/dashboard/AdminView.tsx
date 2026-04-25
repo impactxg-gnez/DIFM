@@ -14,10 +14,18 @@ import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, Credi
 import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const fetcher = (url: string) =>
-    fetch(url).then((res) => res.json()).then((data) => {
-        if (url.startsWith('/api/jobs') && data != null && !Array.isArray(data)) {
-            console.error('Expected array from /api/jobs, got', typeof data, data);
-            return [];
+    fetch(url).then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (url.startsWith('/api/jobs')) {
+            if (!res.ok) {
+                console.warn('/api/jobs failed:', res.status, data);
+                return [];
+            }
+            if (data != null && !Array.isArray(data)) {
+                console.error('Expected array from /api/jobs, got', typeof data, data);
+                return [];
+            }
+            return data;
         }
         return data;
     });

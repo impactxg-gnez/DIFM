@@ -204,7 +204,13 @@ export async function POST(request: Request) {
 
 
     } catch (error) {
-        console.error('Create job error', error);
+        const err = error as { code?: string; message?: string };
+        console.error('Create job error', err?.message ?? error, err?.code);
+        if (err?.code === 'P2022' || /column .+ does not exist/i.test(String(err?.message ?? ''))) {
+            console.error(
+                '[POST /api/jobs] Database schema may be behind Prisma. Run: npx prisma migrate deploy',
+            );
+        }
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -219,9 +225,17 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // ⏱️ Auto-advance dispatch timeouts before listing/fetching
-        await activateBookedJobs();
-        await ensureDispatchProgress();
+        // ⏱️ Auto-advance dispatch — must not fail the whole list if dispatch logic errors
+        try {
+            await activateBookedJobs();
+        } catch (e) {
+            console.error('[GET /api/jobs] activateBookedJobs failed', e);
+        }
+        try {
+            await ensureDispatchProgress();
+        } catch (e) {
+            console.error('[GET /api/jobs] ensureDispatchProgress failed', e);
+        }
 
         // Get User to check categories if Provider
         const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -358,7 +372,13 @@ export async function GET(request: Request) {
         return NextResponse.json(processedJobs);
 
     } catch (error) {
-        console.error('List jobs error', error);
+        const err = error as { code?: string; message?: string; meta?: unknown };
+        console.error('List jobs error', err?.message ?? error, err?.code, err?.meta);
+        if (err?.code === 'P2022' || /column .+ does not exist/i.test(String(err?.message ?? ''))) {
+            console.error(
+                '[GET /api/jobs] Database schema may be behind Prisma. Run: npx prisma migrate deploy (also added to npm run build).',
+            );
+        }
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
