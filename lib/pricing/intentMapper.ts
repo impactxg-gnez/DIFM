@@ -57,7 +57,26 @@ export const RULES: DeterministicRule[] = [
     { match: ['light', 'lights'], job: 'install_light_fitting' },
     { match: ['radiator', 'radiators'], job: 'heating_diagnostic' },
     { match: ['toilet', 'toilets'], job: 'plumbing_diagnostic' },
+    {
+        match: ['washing machine', 'laundry machine', 'washer', 'dryer', 'tumble dryer'],
+        job: 'appliance_install',
+    },
     { match: ['dishwasher', 'dishwashers'], job: 'appliance_install' },
+    {
+        match: [
+            'fill holes',
+            'holes in wall',
+            'hole in wall',
+            'patch wall',
+            'wall repair',
+            'wall holes',
+            'fix holes',
+            'small hole',
+            'plasterboard',
+            'plaster',
+        ],
+        job: 'handyman_small_repair',
+    },
     {
         match: [
             'chair',
@@ -118,6 +137,10 @@ function fuzzyMapPartToJob(part: string): string | null {
         { needle: 'shelf', job: 'shelf_install_single' },
         { needle: 'blind', job: 'install_blinds' },
         { needle: 'dish', job: 'appliance_install' },
+        { needle: 'washer', job: 'appliance_install' },
+        { needle: 'washing mach', job: 'appliance_install' },
+        { needle: 'wall hole', job: 'handyman_small_repair' },
+        { needle: 'fill hole', job: 'handyman_small_repair' },
         { needle: 'socket', job: 'replace_socket' },
         { needle: 'hinge', job: 'handyman_small_repair' },
         { needle: 'cabinet', job: 'handyman_small_repair' },

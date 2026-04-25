@@ -9,6 +9,7 @@ import {
     normalizeInput,
     splitInput,
 } from './intentMapper';
+import type { BookingMappingMeta } from './bookingRoutingTypes';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -41,6 +42,7 @@ export interface ExtractionPipelineResult {
     message?: string;
     /** UX / v1Pricing: clarify, commercial quote, partial parse, etc. */
     warnings?: string[];
+    mappingMeta?: BookingMappingMeta;
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -117,6 +119,7 @@ function buildClarifyResult(
         fallbackResult: [],
         message,
         warnings,
+        mappingMeta: undefined,
     };
 }
 
@@ -312,6 +315,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         console.error('[Extraction] Failed to persist extraction audit log:', err);
     }
 
+    const uniqueRuleJobs = new Set(phraseMatches.map((m) => m.ruleJob));
+    const mappingMeta: BookingMappingMeta = {
+        distinctRuleJobCount: uniqueRuleJobs.size,
+        allResolutionSpecific: phraseMatches.every((m) => m.resolutionSource === 'SPECIFIC'),
+        usedGenericFallback: flags.usedGenericFallback,
+        partClauseCount: parts.length,
+    };
+
     const result = {
         jobs: finalJobs,
         quantitiesList,
@@ -326,7 +337,8 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         flags,
         aiResult,
         fallbackResult,
-        message
+        message,
+        mappingMeta,
     };
 
     // Validation gate: enforce deterministic contract constraints before returning.

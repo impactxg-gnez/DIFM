@@ -14,6 +14,7 @@ export const Badge = ({ className, status, variant, ...props }: BadgeProps) => {
         switch (status) {
             case 'REQUESTED': colorClass = "bg-blue-100 text-blue-800"; break;
             case 'PRICED': colorClass = "bg-indigo-100 text-indigo-800"; break;
+            case 'REVIEW_REQUIRED': colorClass = "bg-teal-100 text-teal-900 font-semibold"; break;
             case 'BOOKED': colorClass = "bg-sky-100 text-sky-800"; break;
             case 'ASSIGNING': colorClass = "bg-yellow-100 text-yellow-800 animate-pulse"; break;
             case 'ASSIGNED': colorClass = "bg-blue-100 text-blue-800"; break;

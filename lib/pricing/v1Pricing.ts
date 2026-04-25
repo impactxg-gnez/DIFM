@@ -1,6 +1,8 @@
 import { GeneratedVisit } from './visitEngine';
 import { runExtractionPipeline } from './extractionEngine';
 import { matchesExtendedOutOfScope, matchesKeywordOutOfScope } from './bookingGuards';
+import { computeBookingRouting, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
+import type { BookingMappingMeta, BookingRouting } from './bookingRoutingTypes';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -13,6 +15,26 @@ export interface V1PricingResult {
     clarifiers?: any[];
     /** Human-readable detail when visits are empty (clarify / commercial / partial). */
     clarifyMessage?: string;
+    /** Hybrid booking: fixed matrix vs review/quote vs reject. */
+    routing: BookingRouting;
+    confidenceLevel: 'HIGH' | 'LOW';
+    /** Mapping statistics (set when extraction ran with at least one job). */
+    mappingMeta?: BookingMappingMeta | null;
+    /** True when customer may submit a review/quote request (not out of scope). */
+    canSubmitQuoteRequest: boolean;
+}
+
+function applyRoutingToPublicPricing(pricing: V1PricingResult, routing: BookingRouting): V1PricingResult {
+    if (routing === 'FIXED_PRICE' || routing === 'REJECT') {
+        return pricing;
+    }
+    return {
+        ...pricing,
+        visits: [],
+        totalPrice: 0,
+        confidence: 0,
+        clarifyMessage: pricing.clarifyMessage || REVIEW_QUOTE_MESSAGE,
+    };
 }
 
 // Supported service categories for suggestions
@@ -38,6 +60,10 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             suggestedServices: SUPPORTED_SERVICES,
             clarifyMessage:
                 'This looks outside the home handyman, installation, and cleaning work we can price in the app. For anything else, contact us for a custom quote or change the request to a specific task (e.g. fix a tap, mount a TV, clean a flat).',
+            routing: 'REJECT',
+            confidenceLevel: 'LOW',
+            mappingMeta: null,
+            canSubmitQuoteRequest: false,
         };
     }
 
@@ -47,7 +73,7 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
 
     if (extraction.jobs.length === 0) {
         const fromPipeline = extraction.warnings?.length ? extraction.warnings : ['NEEDS_CLARIFICATION'];
-        return {
+        const base: V1PricingResult = {
             visits: [],
             totalPrice: 0,
             confidence: 0,
@@ -56,8 +82,13 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             isOutOfScope: false,
             suggestedServices: SUPPORTED_SERVICES,
             clarifiers: extraction.clarifiers,
-            clarifyMessage: extraction.message,
+            clarifyMessage: extraction.message || REVIEW_QUOTE_MESSAGE,
+            routing: 'REVIEW_QUOTE',
+            confidenceLevel: 'LOW',
+            mappingMeta: extraction.mappingMeta ?? null,
+            canSubmitQuoteRequest: true,
         };
+        return base;
     }
 
     // 3. Build Visits (Capability-aware split for labels/tasks)
@@ -81,14 +112,26 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         else if (first.item_class === 'SPECIALIST') primaryCategory = 'SPECIALIST';
     }
 
-    // 5. Clarifier Binding (Excel-Driven)
+    // 5. Clarifier Binding (Excel-Driven) + hybrid routing
     const mergedWarnings = [...(extraction.warnings ?? [])].filter(Boolean);
-    return {
+    const raw: V1PricingResult = {
         visits,
         totalPrice,
         confidence: extraction.jobs.length > 0 ? 1 : 0,
         primaryCategory,
         warnings: mergedWarnings,
         clarifiers: extraction.clarifiers,
+        mappingMeta: extraction.mappingMeta ?? null,
+        routing: 'FIXED_PRICE',
+        confidenceLevel: 'HIGH',
+        canSubmitQuoteRequest: true,
     };
+
+    const { routing, confidenceLevel, reviewMessage } = computeBookingRouting(raw, extraction.mappingMeta ?? null);
+    raw.routing = routing;
+    raw.confidenceLevel = confidenceLevel;
+    if (reviewMessage && (routing === 'REVIEW_QUOTE' || !raw.clarifyMessage)) {
+        raw.clarifyMessage = reviewMessage;
+    }
+    return applyRoutingToPublicPricing(raw, routing);
 }

@@ -2,8 +2,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
-import { ServiceCategory } from '@/lib/constants';
-import { calculateJobPrice } from '@/lib/pricing/calculator';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { getV1JobCreateRejection, isV1PricingBookable } from '@/lib/pricing/bookingEligibility';
 import { computeStuck } from '@/lib/jobStateMachine';
@@ -21,14 +19,92 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { description, location, latitude, longitude, isSimulation, partsExpectedAtBooking } = body;
+        const {
+            description,
+            location,
+            latitude,
+            longitude,
+            isSimulation,
+            partsExpectedAtBooking,
+            flow,
+            quotePhotoUrls,
+        } = body as {
+            description?: string;
+            location?: string;
+            latitude?: string;
+            longitude?: string;
+            isSimulation?: boolean;
+            partsExpectedAtBooking?: string;
+            flow?: 'fixed' | 'quote';
+            quotePhotoUrls?: string[];
+        };
 
         if (!description || !location) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        // V1 Pricing Engine — never persist a £0 / no-visit job from edge cases (OOS, clarify, commercial).
         const pricing = await calculateV1Pricing(description);
+        const submissionFlow = flow === 'quote' ? 'quote' : 'fixed';
+
+        // Review / quote path: always persist a real job (no dead end), except out-of-scope.
+        if (submissionFlow === 'quote') {
+            if (pricing.isOutOfScope) {
+                return NextResponse.json(
+                    {
+                        error: 'OUT_OF_SCOPE',
+                        message: pricing.clarifyMessage,
+                        useQuoteFlow: false,
+                    },
+                    { status: 400 },
+                );
+            }
+            const photoList = Array.isArray(quotePhotoUrls) ? quotePhotoUrls.filter((u) => typeof u === 'string' && u.trim()) : [];
+            const now = new Date();
+            const created = await prisma.$transaction(async (tx) => {
+                const j = await tx.job.create({
+                    data: {
+                        description,
+                        location,
+                        latitude: latitude ? parseFloat(latitude) : null,
+                        longitude: longitude ? parseFloat(longitude) : null,
+                        category: 'HANDYMAN',
+                        fixedPrice: 0,
+                        isASAP: true,
+                        scheduledAt: null,
+                        customerId,
+                        status: 'REVIEW_REQUIRED',
+                        statusUpdatedAt: now,
+                        priceLockedAt: null,
+                        dispatchRadius: 5,
+                        isSimulation: isSimulation ?? false,
+                        needsReview: true,
+                        isParsed: true,
+                        reviewType: 'MANUAL_QUOTE',
+                        reviewPriority: 'MEDIUM',
+                        quoteRequestPhotos: photoList.length > 0 ? photoList.join(',') : null,
+                    },
+                });
+                await tx.jobStateChange.create({
+                    data: {
+                        jobId: j.id,
+                        fromStatus: 'REQUESTED',
+                        toStatus: 'REVIEW_REQUIRED',
+                        reason: 'Quote request — review before pricing',
+                        changedById: customerId,
+                        changedByRole: 'CUSTOMER',
+                    },
+                });
+                return j;
+            });
+            return NextResponse.json({
+                flow: 'quote',
+                jobId: created.id,
+                status: 'REVIEW_REQUIRED',
+                message:
+                    "We'll review your request and get back to you with a confirmed quote.",
+            });
+        }
+
         if (!isV1PricingBookable(pricing)) {
             const rejection = getV1JobCreateRejection(pricing);
             return NextResponse.json(rejection, { status: 422 });

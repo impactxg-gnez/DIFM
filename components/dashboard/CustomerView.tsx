@@ -249,11 +249,14 @@ export function CustomerView({ user }: { user: any }) {
         handleCreateJob({
             description: jobData.description,
             location: jobData.address || userLocation || 'Unknown Location',
+            flow: jobData.flow,
+            quotePhotoUrls: jobData.quotePhotoUrls,
         });
     };
 
     const handleCreateJob = async (details: any) => {
         try {
+            const flow = details.flow === 'quote' ? 'quote' : 'fixed';
             const res = await fetch('/api/jobs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -262,25 +265,63 @@ export function CustomerView({ user }: { user: any }) {
                     location: details.location,
                     latitude: userCoords?.lat || 51.5074, // Default to London if missing for now
                     longitude: userCoords?.lng || -0.1278,
+                    flow,
+                    quotePhotoUrls: details.quotePhotoUrls,
                 }),
             });
-            if (res.status === 422) {
-                let msg = 'This request cannot be booked with instant pricing. Add detail or contact us for a custom quote.';
-                try {
-                    const errBody = await res.json();
-                    if (errBody?.clarifyMessage) msg = errBody.clarifyMessage;
-                    else if (errBody?.message) msg = errBody.message;
-                } catch {
-                    // ignore
+            if (res.status === 400) {
+                const err = await res.json();
+                if (err?.error === 'OUT_OF_SCOPE') {
+                    alert(err?.message || 'This request is not available through DIFM.');
                 }
-                console.warn('Job create blocked:', msg);
+                return;
+            }
+            if (res.status === 422) {
+                const errBody = await res.json();
+                if (errBody?.useQuoteFlow && flow === 'fixed') {
+                    const r2 = await fetch('/api/jobs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            description: details.description,
+                            location: details.location,
+                            latitude: userCoords?.lat || 51.5074,
+                            longitude: userCoords?.lng || -0.1278,
+                            flow: 'quote',
+                            quotePhotoUrls: details.quotePhotoUrls,
+                        }),
+                    });
+                    if (r2.ok) {
+                        const q = await r2.json();
+                        alert(
+                            q?.message ||
+                                "We’ll review your request and get back to you with a confirmed quote."
+                        );
+                        setStep('LIST');
+                        setActiveTab('STATUS');
+                        mutate();
+                        return;
+                    }
+                }
+                const msg =
+                    errBody?.clarifyMessage ||
+                    errBody?.message ||
+                    'This request could not be booked with an instant price. Use Submit for quote on the home screen.';
+                console.warn('Job create blocked:', errBody);
                 alert(msg);
                 return;
             }
             if (res.ok) {
                 const quote = await res.json();
+                if (quote.flow === 'quote' && quote.status === 'REVIEW_REQUIRED') {
+                    setVisits([]);
+                    setStep('LIST');
+                    setActiveTab('STATUS');
+                    alert(quote.message || "Thanks — we’ll get back to you with a quote.");
+                    mutate();
+                    return;
+                }
                 setVisits(Array.isArray(quote.visits) ? quote.visits.map(normalizeBackendVisit) : []);
-                // totalPrice is now derived from visits, no need to set it
                 setStep('SCOPE_LOCK');
                 mutate();
             }
@@ -614,6 +655,15 @@ export function CustomerView({ user }: { user: any }) {
                                         </Badge>
                                     </div>
                                     <div className="grid gap-4">
+                                        {job.status === 'REVIEW_REQUIRED' && jobVisits.length === 0 ? (
+                                            <Card className="bg-emerald-500/10 border-emerald-500/30 p-4 text-sm text-gray-200">
+                                                <p className="font-semibold text-emerald-300 mb-2">Quote request</p>
+                                                <p className="text-gray-300">
+                                                    We&apos;ll review your request and get back to you with a confirmed quote.
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-3 border-t border-white/10 pt-2">{job.description}</p>
+                                            </Card>
+                                        ) : null}
                                         {jobVisits.map((v: Visit, idx: number) => (
                                             <div key={v.visit_id || `${job.id}-${idx}`} className="space-y-4">
                                                 <VisitCard visit={v} index={idx} />
@@ -827,10 +877,14 @@ export function CustomerView({ user }: { user: any }) {
                 return (
                     <div className="-mt-[100px]">
                         <HomeSearchInterface
-                            onBookNow={(data) => handleCreateJob({
-                                description: data.description,
-                                location: data.address || userLocation || 'Unknown',
-                            })}
+                            onBookNow={(data) =>
+                                handleCreateJob({
+                                    description: data.description,
+                                    location: data.address || userLocation || 'Unknown',
+                                    flow: data.flow,
+                                    quotePhotoUrls: data.quotePhotoUrls,
+                                })
+                            }
                             initialLocation={userLocation}
                         />
                     </div>

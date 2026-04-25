@@ -74,9 +74,14 @@ model Job {
   // Cancellation
   cancellationReason String?
   
+  // Optional photos submitted with a review/quote request (comma-separated paths or URLs)
+  quoteRequestPhotos String?
+  
   // Pricing flags for intelligent pricing
   isParsed    Boolean  @default(false)  // Whether AI parsed the description
   needsReview Boolean  @default(false)  // Admin review required
+  reviewType String? // "PRICING_OVERFLOW", "MANUAL_QUOTE", etc.
+  reviewPriority String? // "LOW", "MEDIUM", "HIGH"
   priceOverride Float? // Manual admin override
   platformFeeOverride Float? // Manual admin override for platform fee
   isRefunded Boolean @default(false)
@@ -158,6 +163,7 @@ model Job {
   adminReview    AdminReview?
   items       JobItem[]
   visits      Visit[]
+  reviewQueueItems ReviewQueue[]
   stateChanges JobStateChange[]
   priceOverrides PriceOverride[]
   visitPhotos VisitPhoto[]
@@ -342,9 +348,45 @@ model Visit {
   
   scopeSummary    ScopeSummary?
   visitPhotos     VisitPhoto[]
+  reviewQueueItem ReviewQueue?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model ReviewQueue {
+  id                String   @id @default(uuid())
+
+  visitId            String   @unique
+  visit              Visit    @relation(fields: [visitId], references: [id])
+
+  jobId              String
+  job                Job      @relation(fields: [jobId], references: [id])
+
+  reviewType         String   @default("PRICING_OVERFLOW")
+  reviewPriority     String   @default("HIGH")
+  status             String   @default("PENDING") // "PENDING", "APPROVED_WITH_CHANGES", "REJECTED"
+
+  capability         String
+  calculatedTime     Int
+  ladderMaxTime      Int
+  overflowDelta      Int
+  selectedClarifiers Json
+  slaDeadline        DateTime
+  slaStatus          String   @default("PENDING") // "PENDING", "BREACHED"
+
+  customPrice        Float?
+  customTime         Int?
+  reviewerId         String?
+  reviewedAt         DateTime?
+  resolutionNotes    String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([slaStatus, slaDeadline])
+  @@index([jobId])
 }
 
 model ScopeSummary {

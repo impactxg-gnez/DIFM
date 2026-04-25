@@ -32,6 +32,9 @@ export async function POST(request: Request) {
             primaryCategory: pricing.primaryCategory,
             clarifyMessage: pricing.clarifyMessage,
             bookable,
+            routing: pricing.routing,
+            confidenceLevel: pricing.confidenceLevel,
+            canSubmitQuoteRequest: pricing.canSubmitQuoteRequest,
         });
     } catch (error) {
         console.error('Price preview error', error);

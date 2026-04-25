@@ -5,8 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
 
+export type HomeBookingFlow = 'fixed' | 'quote';
+
 interface HomeSearchInterfaceProps {
-    onBookNow: (data: { description: string; address: string; label?: string; pricePrediction?: any }) => void;
+    onBookNow: (data: {
+        description: string;
+        address: string;
+        label?: string;
+        pricePrediction?: any;
+        flow?: HomeBookingFlow;
+        quotePhotoUrls?: string[];
+    }) => void;
     initialLocation?: string;
     showLoginButton?: boolean;
     onLoginClick?: () => void;
@@ -20,6 +29,7 @@ const JOB_LABELS: Record<string, string> = {
     mirror_hang: 'Mirror Hang',
     pic_hang: 'Picture Hang',
     handyman_small_repair: 'Minor Repair',
+    appliance_install: 'Appliance Install',
 };
 
 const FLAG_LABELS: Record<string, string> = {
@@ -28,7 +38,7 @@ const FLAG_LABELS: Record<string, string> = {
     highWall: 'Above 2.5m',
 };
 
-/** No priced visit should be shown or booked while these are present. */
+/** Warnings that block instant fixed price display (routed to review/quote in API). */
 const BOOKING_BLOCK_WARNINGS = new Set([
     'OUT_OF_SCOPE',
     'NEEDS_CLARIFICATION',
@@ -55,6 +65,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState('');
     const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
+    const [optionalPhotoUrls, setOptionalPhotoUrls] = useState('');
 
     // Debounce description input
     useEffect(() => {
@@ -157,13 +168,30 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         setSelectedLabel(label);
     };
 
-    const handleBookClick = () => {
+    const handleBookFixedClick = () => {
         if (!description) return;
         onBookNow({
             description,
             address: selectedAddress,
             label: selectedLabel,
-            pricePrediction: pricePreview
+            pricePrediction: pricePreview,
+            flow: 'fixed',
+        });
+    };
+
+    const handleQuoteSubmitClick = () => {
+        if (!description) return;
+        const urls = optionalPhotoUrls
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        onBookNow({
+            description,
+            address: selectedAddress,
+            label: selectedLabel,
+            pricePrediction: pricePreview,
+            flow: 'quote',
+            quotePhotoUrls: urls,
         });
     };
 
@@ -203,7 +231,15 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const previewWarnings: string[] = Array.isArray(pricePreview?.warnings) ? pricePreview.warnings : [];
     const blocksBookableQuote = previewWarnings.some((w) => BOOKING_BLOCK_WARNINGS.has(w));
     const hasBookableVisits = Array.isArray(pricePreview?.visits) && pricePreview.visits.length > 0;
-    if (pricePreview && !hasDisplayPrice && !blocksBookableQuote) {
+    const routing = pricePreview?.routing as string | undefined;
+    const showFixedPath = pricePreview?.bookable === true && routing === 'FIXED_PRICE';
+    const showReviewPath =
+        pricePreview?.routing === 'REVIEW_QUOTE' &&
+        pricePreview?.canSubmitQuoteRequest === true &&
+        !previewWarnings.includes('OUT_OF_SCOPE');
+    const addressOk = Boolean(selectedAddress?.trim());
+    const canAct = !isTooShortForExtraction && description.trim().length > 0;
+    if (pricePreview && showFixedPath && !hasDisplayPrice) {
         console.error('Missing backend display_price', pricePreview);
     }
 
@@ -304,37 +340,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     </div>
 
-                    {/* Commercial / bulk — custom quote */}
-                    {previewWarnings.includes('COMMERCIAL_QUOTE_REQUIRED') && (
-                        <div className="bg-amber-500/20 border border-amber-500/35 rounded-[24px] p-4 text-amber-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
-                                <span>📋</span>
-                                <span>Custom quote</span>
-                            </div>
-                            <div className="text-xs mb-2 text-amber-100/85">
-                                {pricePreview?.clarifyMessage ||
-                                    'Large or commercial-scale jobs need a tailored quote so pricing stays accurate.'}
-                            </div>
-                            <div className="text-[11px] text-amber-200/70">
-                                Contact DIFM with your full brief and we will follow up.
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Contradictory / impossible scope */}
-                    {previewWarnings.includes('CONTRADICTION_CLARIFY') && (
-                        <div className="bg-violet-500/20 border border-violet-500/35 rounded-[24px] p-4 text-violet-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
-                                <span>💬</span>
-                                <span>Quick clarification</span>
-                            </div>
-                            <div className="text-xs text-violet-100/85">
-                                {pricePreview?.clarifyMessage ||
-                                    'Part of your message seems to conflict. Add a short note on the setup (e.g. wall type or mounting surface) so we can price it correctly.'}
-                            </div>
-                        </div>
-                    )}
-
                     {/* Out of Scope Warning */}
                     {pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
                         <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-[24px] p-4 text-yellow-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -353,28 +358,43 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     )}
 
-                    {/* Needs clarification / partial parse */}
-                    {(previewWarnings.includes('NEEDS_CLARIFICATION') ||
-                        previewWarnings.includes('PARTIAL_PARSE_CLARIFY')) &&
-                        !previewWarnings.includes('OUT_OF_SCOPE') && (
-                        <div className="bg-blue-500/20 border border-blue-500/30 rounded-[24px] p-4 text-blue-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
-                                <span>ℹ️</span>
-                                <span>Need More Details</span>
+                    {/* Review / quote path (low confidence, commercial, multi-service, vague, etc.) */}
+                    {(pricePreview || isPricingLoading) && showReviewPath && (
+                        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-[24px] p-4 text-emerald-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
+                            <div className="font-semibold text-sm flex items-center gap-2">
+                                <span>✉️</span>
+                                <span>Confirm & submit</span>
                             </div>
-                            <div className="text-xs mb-3 text-blue-100/80">
+                            <p className="text-xs text-emerald-100/90 leading-relaxed">
                                 {pricePreview?.clarifyMessage ||
-                                    "We couldn't determine the exact service from your description. Please provide more details about what needs to be done."}
+                                    "We’ll review your request and get back to you with a confirmed quote."}
+                            </p>
+                            <p className="text-[10px] text-emerald-200/70">
+                                No upfront price is shown for this request — our team or a pro will follow up.
+                            </p>
+                            <div>
+                                <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
+                                    Optional: photo links (comma-separated URLs)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={optionalPhotoUrls}
+                                    onChange={(e) => setOptionalPhotoUrls(e.target.value)}
+                                    placeholder="https://..."
+                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                />
                             </div>
-                            <div className="text-xs">
-                                <strong className="text-blue-200">Examples:</strong>{' '}
-                                "Fix leaking tap", "Mount TV on wall", "Deep clean apartment", "Replace socket"
+                            <div
+                                onClick={handleAddressClick}
+                                className={`w-full h-[44px] rounded-[16px] flex items-center justify-center cursor-pointer text-sm font-semibold transition-colors ${selectedAddress ? 'bg-emerald-600 text-white' : 'bg-white/10 text-white/70'}`}
+                            >
+                                {selectedAddress || 'Add your address (required)'}
                             </div>
                         </div>
                     )}
 
-                    {/* Upfront Price Card - Dynamic */}
-                    {(pricePreview || isPricingLoading) && !blocksBookableQuote && (
+                    {/* Upfront Price Card — high-confidence fixed path only */}
+                    {(pricePreview || isPricingLoading) && showFixedPath && !blocksBookableQuote && (
                         <div className="bg-[#D9D9D9] rounded-[24px] p-4 text-black relative overflow-hidden mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex flex-col max-w-[70%]">
@@ -408,25 +428,30 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     )}
                 </div>
 
-                {/* Floating Action Button */}
-                <div className="mt-8">
-                    <Button
-                        onClick={handleBookClick}
-                        disabled={
-                            isTooShortForExtraction ||
-                            !description.trim() ||
-                            blocksBookableQuote ||
-                            !hasDisplayPrice ||
-                            !hasBookableVisits
-                        }
-                        className={`px-8 h-[56px] rounded-full shadow-[0px_8px_30px_rgba(0,122,255,0.4)] flex items-center gap-2 transition-all ${isTooShortForExtraction || !description.trim() || blocksBookableQuote || !hasDisplayPrice || !hasBookableVisits
-                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-                            : 'bg-[#007AFF] hover:bg-[#006ee6] text-white opacity-100'
-                            }`}
-                    >
-                        <CheckCircle className="w-5 h-5" />
-                        <span className="text-base font-bold">Book Now</span>
-                    </Button>
+                {/* Primary actions — no dead end: always offer quote when review path applies */}
+                <div className="mt-8 flex flex-col items-center gap-3 w-full max-w-[400px] px-4">
+                    {showFixedPath && (
+                        <Button
+                            onClick={handleBookFixedClick}
+                            disabled={!canAct || !hasDisplayPrice || !hasBookableVisits || !addressOk}
+                            className={`w-full max-w-sm px-8 h-[56px] rounded-full flex items-center justify-center gap-2 transition-all ${!canAct || !hasDisplayPrice || !hasBookableVisits || !addressOk
+                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+                                : 'bg-[#007AFF] hover:bg-[#006ee6] text-white shadow-[0px_8px_30px_rgba(0,122,255,0.4)]'
+                                }`}
+                        >
+                            <CheckCircle className="w-5 h-5" />
+                            <span className="text-base font-bold">Book with fixed price</span>
+                        </Button>
+                    )}
+                    {showReviewPath && (
+                        <Button
+                            onClick={handleQuoteSubmitClick}
+                            disabled={!canAct || !addressOk}
+                            className="w-full max-w-sm px-8 h-[56px] rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span className="text-base font-bold">Submit for quote</span>
+                        </Button>
+                    )}
                 </div>
 
                 {/* Footer Info */}
