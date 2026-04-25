@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // App can use the Supabase pooler; migrations need a direct session (port 5432, db.*.supabase.co).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Valid Roles: CUSTOMER, PROVIDER, ADMIN
