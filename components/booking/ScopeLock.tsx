@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { inferScopeAnswersFromDescription } from '@/lib/pricing/scopeAnswerInference';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,8 @@ const MIN_SCOPE_DESCRIPTION_CHARS = 10;
 
 interface ScopeLockProps {
     visits: any[];
+    /** Original text from the booking flow — used to prefill clarifiers where we can infer answers. */
+    jobDescription?: string;
     onComplete: (visitId: string, answers: any, scopePhotos: string[], customerScopeDescription: string) => void;
     onCancel: () => void;
 }
@@ -49,7 +52,7 @@ function buildQuestionsFromVisit(visit: any): Question[] {
     }));
 }
 
-export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
+export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: ScopeLockProps) {
     const [currentVisitIndex, setCurrentVisitIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [scopePhotos, setScopePhotos] = useState<string[]>([]);
@@ -73,13 +76,32 @@ export function ScopeLock({ visits, onComplete, onCancel }: ScopeLockProps) {
     });
 
     const currentVisit = visits[currentVisitIndex] ?? null;
+    const prefilledVisitIdsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         setClarifierPhaseDone(false);
         setAnswers({});
         setScopePhotos([]);
-        setScopeDescription('');
-    }, [currentVisitIndex]);
+        setScopeDescription((jobDescription || '').trim());
+    }, [currentVisitIndex, jobDescription]);
+
+    /** One-time per visit: seed answers from job text (still editable). */
+    useEffect(() => {
+        if (!currentVisit || !jobDescription?.trim()) return;
+        const vid = String(currentVisit.visit_id || currentVisit.id || '');
+        if (!vid || prefilledVisitIdsRef.current.has(vid)) return;
+        const qs = buildQuestionsFromVisit(currentVisit);
+        const visitCapability = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();
+        const scoped = qs.filter((q: Question) => {
+            if (!q.capability_tag || !visitCapability) return true;
+            return String(q.capability_tag).toUpperCase() === visitCapability;
+        });
+        const inferred = inferScopeAnswersFromDescription(jobDescription, scoped);
+        if (Object.keys(inferred).length > 0) {
+            setAnswers((prev) => ({ ...inferred, ...prev }));
+        }
+        prefilledVisitIdsRef.current.add(vid);
+    }, [currentVisit, jobDescription]);
 
     const questions = currentVisit ? buildQuestionsFromVisit(currentVisit) : [];
     const visitCapability = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();

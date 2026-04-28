@@ -7,15 +7,31 @@ export function parseTvDetails(input: string): {
     wall: string | null;
     concealed: boolean | null;
 } {
-    const sizeMatch = input.match(/\b(\d{2,3})\s*(?:inch|inches|")\b/i) || input.match(/\b(\d{2,3})\b(?=\s*tv)/i);
-    const wallMatch = input.match(/\b(concrete|brick|drywall|plaster|wood|stud)\b/i);
+    const lower = input.toLowerCase();
+    const sizeMatch =
+        input.match(/\b(\d{2,3})\s*(?:inch|inches|"|″|′′)\b/i) ||
+        input.match(/\b(\d{2,3})\s*['′]\s*(?:tv|inch|inches)\b/i) ||
+        input.match(/\b(\d{2,3})\s*tv\b/i) ||
+        input.match(/\btv[^\d]{0,8}(\d{2,3})\s*(?:inch|inches|"|′|')?/i);
+    const wallMatch = input.match(
+        /\b(concrete|brick|drywall|plaster(?:board)?|wood|stud|tile|tiled)\b/i,
+    );
     const concealment =
-        /\b(conceal(?:ed)?|hide|hidden)\b.*\b(cable|cables|wire|wires)\b/i.test(input) ||
-        /\b(cable|cables|wire|wires)\b.*\b(conceal(?:ed)?|hide|hidden)\b/i.test(input);
+        /\b(conceal(?:ed)?|hide|hidden)\b.*\b(cable|cables|wire|wires)\b/i.test(lower) ||
+        /\b(cable|cables|wire|wires)\b.*\b(conceal(?:ed)?|hide|hidden)\b/i.test(lower);
+    const explicitExposed =
+        /\b(exposed|surface|on[\s-]*wall)\s+(cable|cables|wiring)\b/i.test(lower) ||
+        /\bno(?:t)?\s+(cable\s+)?conceal/i.test(lower);
+    let concealed: boolean | null = concealment ? true : null;
+    if (explicitExposed) concealed = false;
+
+    let wallRaw = wallMatch ? wallMatch[1].toLowerCase() : null;
+    if (wallRaw === 'tiled') wallRaw = 'tile';
+
     return {
         size: sizeMatch ? Number(sizeMatch[1]) : null,
-        wall: wallMatch ? wallMatch[1].toLowerCase() : null,
-        concealed: concealment ? true : null,
+        wall: wallRaw,
+        concealed,
     };
 }
 
@@ -40,7 +56,7 @@ export function hasExplicitQuantitySignal(part: string): boolean {
 }
 
 export function wallMaterialMentioned(text: string): boolean {
-    return /\b(concrete|brick|drywall|plaster|wood|stud)\b/i.test(text);
+    return /\b(concrete|brick|drywall|plaster(?:board)?|wood|stud|tile|tiled)\b/i.test(text);
 }
 
 export function shelfQuantityProvidedInDescription(normalizedInput: string): boolean {

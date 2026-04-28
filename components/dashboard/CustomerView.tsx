@@ -106,6 +106,8 @@ export function CustomerView({ user }: { user: any }) {
     const [step, setStep] = useState<'LIST' | 'CREATE' | 'SCOPE_LOCK' | 'WAITING'>('LIST');
     // 🔒 Visit-first state (no job/price assumptions)
     const [visits, setVisits] = useState<Visit[]>([]);
+    /** Passes booking search text into Scope Lock for inferred clarifiers + description prefill */
+    const [scopeLockJobDescription, setScopeLockJobDescription] = useState('');
 
     const totalMinutes = useMemo(
         () => visits.reduce((sum, v) => sum + Number(v.total_minutes || 0), 0),
@@ -338,6 +340,7 @@ export function CustomerView({ user }: { user: any }) {
                     mutate();
                     return;
                 }
+                setScopeLockJobDescription(details.description || '');
                 setVisits(Array.isArray(quote.visits) ? quote.visits.map(normalizeBackendVisit) : []);
                 setStep('SCOPE_LOCK');
                 mutate();
@@ -809,6 +812,7 @@ export function CustomerView({ user }: { user: any }) {
             return (
                 <ScopeLock
                     visits={visits}
+                    jobDescription={scopeLockJobDescription}
                     onComplete={async (visitId, answers, scopePhotos, customerScopeDescription) => {
                         try {
                             const res = await fetch(`/api/visits/${visitId}/scope-lock`, {
@@ -863,6 +867,7 @@ export function CustomerView({ user }: { user: any }) {
                     onCancel={() => {
                         setStep('LIST');
                         setVisits([]);
+                        setScopeLockJobDescription('');
                         // totalPrice is now derived from visits, no need to reset it
                     }}
                 />
