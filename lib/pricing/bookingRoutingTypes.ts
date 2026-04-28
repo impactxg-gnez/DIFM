@@ -5,8 +5,12 @@ export interface BookingMappingMeta {
     allResolutionSpecific: boolean;
     usedGenericFallback: boolean;
     partClauseCount: number;
-    /** Distinct matrix pricing job IDs in this request (>1 ⇒ multi-job, review-only). */
+    /** Distinct matrix pricing job IDs in this request. */
     distinctPricingJobCount: number;
     /** Per job_item_id aggregated quantity — used for commercial / bulk thresholds. */
     quantityByJob: Record<string, number>;
+    /** Sum of task minutes + multi-job overhead (same formula as tier pricing). */
+    estimatedTotalMinutes: number;
+    /** Distinct routing buckets (trade/category); >1 ⇒ cross-trade bundle. */
+    distinctRoutingBucketCount: number;
 }

@@ -1,4 +1,5 @@
 import type { BookingMappingMeta, BookingRouting } from './bookingRoutingTypes';
+import { isComplexBundle } from './bundleRouting';
 
 export type { BookingRouting, BookingMappingMeta } from './bookingRoutingTypes';
 
@@ -11,7 +12,7 @@ export const REVIEW_ONLY_WARNINGS = new Set([
     'COMMERCIAL_QUOTE_REQUIRED',
     'CONTRADICTION_CLARIFY',
     'PARTIAL_PARSE_CLARIFY',
-    'MULTI_JOB_QUOTE_REQUIRED',
+    'BUNDLE_COMPLEX_QUOTE_REQUIRED',
 ]);
 
 /**
@@ -69,17 +70,8 @@ export function evaluateBookingConfidence(meta: BookingMappingMeta | null): Conf
     }
 
     const qtyMap = meta.quantityByJob || {};
-    const distinctPricing =
-        typeof meta.distinctPricingJobCount === 'number'
-            ? meta.distinctPricingJobCount
-            : Object.keys(qtyMap).length;
 
     const warnings: string[] = [];
-
-    const multiJob = distinctPricing > 1 || meta.distinctRuleJobCount >= 2;
-    if (multiJob) {
-        warnings.push('MULTI_JOB_QUOTE_REQUIRED');
-    }
 
     if (exceedsResidentialQuantityLimits(qtyMap)) {
         warnings.push('COMMERCIAL_QUOTE_REQUIRED');
@@ -90,8 +82,14 @@ export function evaluateBookingConfidence(meta: BookingMappingMeta | null): Conf
         warnings.push('NEEDS_CLARIFICATION');
     }
 
+    /** Multi-job alone does not force review — only complex bundles (multi-trade or high effort). */
+    const bundleNeedsReview = isComplexBundle(meta);
+    if (bundleNeedsReview) {
+        warnings.push('BUNDLE_COMPLEX_QUOTE_REQUIRED');
+    }
+
     const forceReview =
-        multiJob || exceedsResidentialQuantityLimits(qtyMap) || lowConfidence;
+        exceedsResidentialQuantityLimits(qtyMap) || lowConfidence || bundleNeedsReview;
 
     if (forceReview) {
         return {

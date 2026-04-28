@@ -11,6 +11,7 @@ import {
 } from './intentMapper';
 import type { BookingMappingMeta } from './bookingRoutingTypes';
 import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
+import { computeBundleSignals } from './bundleRouting';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -246,6 +247,12 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     };
 
     const uniqueRuleJobs = new Set(phraseMatches.map((m) => m.ruleJob));
+    const { estimatedTotalMinutes, distinctRoutingBucketCount } = computeBundleSignals(
+        pricingJobIds,
+        adjustedMinutesByCanonicalJob,
+        finalJobs.length,
+    );
+
     const mappingMeta: BookingMappingMeta = {
         distinctRuleJobCount: uniqueRuleJobs.size,
         allResolutionSpecific: phraseMatches.every((m) => m.resolutionSource === 'SPECIFIC'),
@@ -253,6 +260,8 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         partClauseCount: parts.length,
         distinctPricingJobCount: Object.keys(quantityByJob).length,
         quantityByJob: { ...quantityByJob },
+        estimatedTotalMinutes,
+        distinctRoutingBucketCount,
     };
 
     const confidenceGate = evaluateBookingConfidence(mappingMeta);
