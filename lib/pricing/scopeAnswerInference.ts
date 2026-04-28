@@ -1,5 +1,17 @@
 import { parseTvDetails } from './bookingSignals';
-import { normalizeInput } from './intentMapper';
+import { preprocessBookingInput } from './inputPreprocess';
+
+/** Browser-safe mirror of intentMapper.normalizeInput (avoid importing intentMapper → visitEngine → excel fs). */
+function normalizeInputForInference(input: string): string {
+    return preprocessBookingInput(input)
+        .toLowerCase()
+        .replace(/\+/g, ' and ')
+        .replace(/&/g, ' and ')
+        .replace(/;/g, ' and ')
+        .replace(/,/g, ' and ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
 export type InferenceQuestion = {
     id: string;
@@ -60,7 +72,7 @@ export function inferScopeAnswersFromDescription(
     rawDescription: string,
     questions: InferenceQuestion[],
 ): Record<string, string> {
-    const textNorm = normalizeInput(rawDescription || '');
+    const textNorm = normalizeInputForInference(rawDescription || '');
     const plain = rawDescription || '';
     const tv = parseTvDetails(plain);
     const out: Record<string, string> = {};
