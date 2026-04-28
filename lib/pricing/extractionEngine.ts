@@ -10,6 +10,7 @@ import {
     splitInput,
 } from './intentMapper';
 import type { BookingMappingMeta } from './bookingRoutingTypes';
+import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -237,6 +238,65 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         actions: match.actions,
         contextModifiers: match.contextModifiers,
     }));
+
+    const flags = {
+        usedDeterministicPipeline: true,
+        usedGenericFallback: phraseMatches.some((match) => match.resolutionSource === 'GENERIC'),
+        unresolvedPartCount: 0,
+    };
+
+    const uniqueRuleJobs = new Set(phraseMatches.map((m) => m.ruleJob));
+    const mappingMeta: BookingMappingMeta = {
+        distinctRuleJobCount: uniqueRuleJobs.size,
+        allResolutionSpecific: phraseMatches.every((m) => m.resolutionSource === 'SPECIFIC'),
+        usedGenericFallback: flags.usedGenericFallback,
+        partClauseCount: parts.length,
+        distinctPricingJobCount: Object.keys(quantityByJob).length,
+        quantityByJob: { ...quantityByJob },
+    };
+
+    const confidenceGate = evaluateBookingConfidence(mappingMeta);
+    if (confidenceGate.routing === 'REVIEW_QUOTE') {
+        const clarifiersEarly = getClarifiers(
+            normalizedInput,
+            phraseMatches.map((match) => ({ job: match.ruleJob, quantity: match.quantity, part: match.clause })),
+        );
+        const capabilitiesEarly = Array.from(
+            new Set(
+                pricingJobIds
+                    .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)
+                    .filter(Boolean),
+            ),
+        );
+        const gatedResult: ExtractionPipelineResult = {
+            jobs: finalJobs,
+            quantitiesList,
+            total_minutes: 0,
+            tier: 'H1',
+            jobDetails,
+            capabilities: capabilitiesEarly,
+            quantities: quantityByCanonicalJob,
+            visits: [],
+            price: 0,
+            clarifiers: clarifiersEarly,
+            flags,
+            aiResult,
+            fallbackResult,
+            message: confidenceGate.reviewMessage ?? REVIEW_QUOTE_MESSAGE,
+            warnings: confidenceGate.warnings,
+            mappingMeta,
+        };
+        extractionCache.set(cacheKey, {
+            expiresAt: Date.now() + CACHE_TTL_MS,
+            result: gatedResult,
+        });
+        console.log('[Extraction] Confidence gate → REVIEW_QUOTE (tier pricing skipped)', {
+            warnings: confidenceGate.warnings,
+            mappingMeta,
+        });
+        return gatedResult;
+    }
+
     const visits = attachClarifiersToVisits(
         buildVisitsWithQuantities(pricingJobIds, quantityByJob, {
             minuteTotalsByJob,
@@ -258,11 +318,6 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     if (finalJobs.length === 0) {
         message = 'Please clarify the exact tasks so we can price accurately.';
     }
-    const flags = {
-        usedDeterministicPipeline: true,
-        usedGenericFallback: phraseMatches.some((match) => match.resolutionSource === 'GENERIC'),
-        unresolvedPartCount: 0,
-    };
     const unresolvedDiagnostics: string[] = [];
     const summedMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
     const multiJobOverhead = Math.max(0, finalJobs.length - 1) * 10;
@@ -315,14 +370,6 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         console.error('[Extraction] Failed to persist extraction audit log:', err);
     }
 
-    const uniqueRuleJobs = new Set(phraseMatches.map((m) => m.ruleJob));
-    const mappingMeta: BookingMappingMeta = {
-        distinctRuleJobCount: uniqueRuleJobs.size,
-        allResolutionSpecific: phraseMatches.every((m) => m.resolutionSource === 'SPECIFIC'),
-        usedGenericFallback: flags.usedGenericFallback,
-        partClauseCount: parts.length,
-    };
-
     const result = {
         jobs: finalJobs,
         quantitiesList,
@@ -341,7 +388,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         mappingMeta,
     };
 
-    // Validation gate: enforce deterministic contract constraints before returning.
+    // Tier pricing path only — confidence gate returned earlier otherwise.
     const fallbackUsedUnnecessarily = flags.usedGenericFallback && phraseMatches.some((m) => m.resolutionSource === 'SPECIFIC');
     if (![59, 109, 159].includes(finalPrice)) {
         throw new Error(`INVALID_TIER_PRICE:${finalPrice}`);
