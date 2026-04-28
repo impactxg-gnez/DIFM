@@ -186,10 +186,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         fetchLocation(true);
     }, [initialLocation]);
 
-    const handleLocationClick = () => {
-        fetchLocation(false);
-    };
-
     const handleAddressClick = () => {
         setIsAddressModalOpen(true);
     };
@@ -294,13 +290,21 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
 
-            {/* Header: Location (Top Left) & Login (Top Right) */}
-            <div className="absolute top-8 left-6 z-20">
+            {/* Header: Auto-detected location (top left); tap opens address modal */}
+            <div className="absolute top-8 left-4 sm:left-6 z-20 max-w-[min(85vw,280px)]">
                 <button
-                    onClick={handleLocationClick}
-                    className="flex items-center justify-center px-6 py-2 h-[44px] bg-white/5 border border-white/10 rounded-full backdrop-blur-md hover:bg-white/10 transition-all font-semibold text-sm text-white/80 tracking-wide"
+                    type="button"
+                    onClick={handleAddressClick}
+                    title="Add or edit address"
+                    className="flex items-start justify-start text-left px-4 py-2.5 min-h-[44px] bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md hover:bg-white/10 transition-all font-semibold text-xs sm:text-sm text-white/90 tracking-wide leading-snug"
                 >
-                    {isLoadingLocation ? 'Locating...' : locationText}
+                    <span className="line-clamp-3">
+                        {isLoadingLocation && !(selectedAddress || locationText)?.trim()
+                            ? 'Locating…'
+                            : (selectedAddress?.trim() ||
+                                  locationText?.trim() ||
+                                  'Tap to add address')}
+                    </span>
                 </button>
             </div>
 
@@ -463,13 +467,10 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 </div>
                             </div>
 
-                            {/* Enter Address Button (Inside the card bottom) */}
-                            <div
-                                onClick={handleAddressClick}
-                                className={`w-full h-[48px] rounded-[16px] flex items-center justify-center cursor-pointer transition-colors ${selectedAddress ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black/10 hover:bg-black/15'}`}
-                            >
-                                <span className={`font-bold text-sm ${selectedAddress ? 'text-white' : 'text-black'}`}>
-                                    {selectedAddress || 'Enter address...'}
+                            {/* Pricing note — address lives on the top-left of the screen */}
+                            <div className="w-full min-h-[48px] rounded-[16px] flex items-center justify-center px-3 bg-black/[0.06] border border-black/10">
+                                <span className="font-bold text-sm text-black/80 text-center leading-snug">
+                                    Final price after Scope Lock
                                 </span>
                             </div>
                         </div>
