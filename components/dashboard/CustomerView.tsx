@@ -269,7 +269,8 @@ export function CustomerView({ user }: { user: any }) {
             description: jobData.description,
             location: jobData.address || userLocation || 'Unknown Location',
             flow: jobData.flow,
-            quotePhotoUrls: jobData.quotePhotoUrls,
+            quoteContactEmail: jobData.quoteContactEmail,
+            quoteContactPhone: jobData.quoteContactPhone,
         });
     };
 
@@ -285,13 +286,16 @@ export function CustomerView({ user }: { user: any }) {
                     latitude: userCoords?.lat || 51.5074, // Default to London if missing for now
                     longitude: userCoords?.lng || -0.1278,
                     flow,
-                    quotePhotoUrls: details.quotePhotoUrls,
+                    quoteContactEmail: details.quoteContactEmail,
+                    quoteContactPhone: details.quoteContactPhone,
                 }),
             });
             if (res.status === 400) {
                 const err = await res.json();
                 if (err?.error === 'OUT_OF_SCOPE') {
                     alert(err?.message || 'This request is not available through DIFM.');
+                } else {
+                    alert(typeof err?.error === 'string' ? err.error : err?.message || 'Could not submit this request.');
                 }
                 return;
             }
@@ -307,7 +311,8 @@ export function CustomerView({ user }: { user: any }) {
                             latitude: userCoords?.lat || 51.5074,
                             longitude: userCoords?.lng || -0.1278,
                             flow: 'quote',
-                            quotePhotoUrls: details.quotePhotoUrls,
+                            quoteContactEmail: details.quoteContactEmail,
+                            quoteContactPhone: details.quoteContactPhone,
                         }),
                     });
                     if (r2.ok) {
@@ -904,7 +909,8 @@ export function CustomerView({ user }: { user: any }) {
                                     description: data.description,
                                     location: data.address || userLocation || 'Unknown',
                                     flow: data.flow,
-                                    quotePhotoUrls: data.quotePhotoUrls,
+                                    quoteContactEmail: data.quoteContactEmail,
+                                    quoteContactPhone: data.quoteContactPhone,
                                 })
                             }
                             initialLocation={userLocation}

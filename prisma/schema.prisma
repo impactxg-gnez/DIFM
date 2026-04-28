@@ -78,6 +78,9 @@ model Job {
   
   // Optional photos submitted with a review/quote request (comma-separated paths or URLs)
   quoteRequestPhotos String?
+  // Customer contact for MANUAL_QUOTE / REVIEW_REQUIRED follow-up (quote flow)
+  quoteContactEmail String?
+  quoteContactPhone String?
   
   // Pricing flags for intelligent pricing
   isParsed    Boolean  @default(false)  // Whether AI parsed the description

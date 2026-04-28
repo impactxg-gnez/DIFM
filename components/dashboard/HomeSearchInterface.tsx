@@ -14,7 +14,9 @@ interface HomeSearchInterfaceProps {
         label?: string;
         pricePrediction?: any;
         flow?: HomeBookingFlow;
-        quotePhotoUrls?: string[];
+        /** For review/quote flow — used to follow up with a custom quote */
+        quoteContactEmail?: string;
+        quoteContactPhone?: string;
     }) => void;
     initialLocation?: string;
     showLoginButton?: boolean;
@@ -69,7 +71,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState('');
     const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
-    const [optionalPhotoUrls, setOptionalPhotoUrls] = useState('');
+    const [quoteContactEmail, setQuoteContactEmail] = useState('');
+    const [quoteContactPhone, setQuoteContactPhone] = useState('');
 
     // Debounce description input
     useEffect(() => {
@@ -213,18 +216,15 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     };
 
     const handleQuoteSubmitClick = () => {
-        if (!description) return;
-        const urls = optionalPhotoUrls
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0);
+        if (!description || !quoteContactOk) return;
         onBookNow({
             description,
             address: selectedAddress,
             label: selectedLabel,
             pricePrediction: pricePreview,
             flow: 'quote',
-            quotePhotoUrls: urls,
+            quoteContactEmail: quoteContactEmail.trim(),
+            quoteContactPhone: quoteContactPhone.trim(),
         });
     };
 
@@ -283,6 +283,10 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         (pricePreview?.canSubmitQuoteRequest !== false) &&
         (routing === 'REVIEW_QUOTE' || routing == null);
     const addressOk = Boolean(selectedAddress?.trim());
+    const quoteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quoteContactEmail.trim());
+    const quotePhoneDigits = quoteContactPhone.replace(/\D/g, '');
+    const quotePhoneOk = quotePhoneDigits.length >= 8 && quotePhoneDigits.length <= 15;
+    const quoteContactOk = quoteEmailOk && quotePhoneOk;
     const canAct = !isTooShortForExtraction && description.trim().length > 0;
     if (pricePreview && showFixedPath && !hasDisplayPrice) {
         console.error('Missing backend display_price', pricePreview);
@@ -425,17 +429,36 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             <p className="text-[10px] text-emerald-200/70">
                                 No upfront price is shown for this request — our team or a pro will follow up.
                             </p>
-                            <div>
-                                <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
-                                    Optional: photo links (comma-separated URLs)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={optionalPhotoUrls}
-                                    onChange={(e) => setOptionalPhotoUrls(e.target.value)}
-                                    placeholder="https://..."
-                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
-                                />
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
+                                        Email <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        autoComplete="email"
+                                        inputMode="email"
+                                        value={quoteContactEmail}
+                                        onChange={(e) => setQuoteContactEmail(e.target.value)}
+                                        placeholder="you@example.com"
+                                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
+                                        Phone number <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        autoComplete="tel"
+                                        inputMode="tel"
+                                        value={quoteContactPhone}
+                                        onChange={(e) => setQuoteContactPhone(e.target.value)}
+                                        placeholder="+44 … or local number"
+                                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                    />
+                                    <p className="text-[9px] text-emerald-200/50 mt-1">We’ll use this to reach you with your quote.</p>
+                                </div>
                             </div>
                             <div
                                 onClick={handleAddressClick}
@@ -496,7 +519,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     {showReviewPath && (
                         <Button
                             onClick={handleQuoteSubmitClick}
-                            disabled={!canAct || !addressOk}
+                            disabled={!canAct || !addressOk || !quoteContactOk}
                             className="w-full max-w-sm px-8 h-[56px] rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <span className="text-base font-bold">Submit for quote</span>

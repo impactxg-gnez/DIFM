@@ -28,6 +28,8 @@ export async function POST(request: Request) {
             partsExpectedAtBooking,
             flow,
             quotePhotoUrls,
+            quoteContactEmail,
+            quoteContactPhone,
         } = body as {
             description?: string;
             location?: string;
@@ -37,6 +39,8 @@ export async function POST(request: Request) {
             partsExpectedAtBooking?: string;
             flow?: 'fixed' | 'quote';
             quotePhotoUrls?: string[];
+            quoteContactEmail?: string;
+            quoteContactPhone?: string;
         };
 
         if (!description || !location) {
@@ -59,6 +63,23 @@ export async function POST(request: Request) {
                 );
             }
             const photoList = Array.isArray(quotePhotoUrls) ? quotePhotoUrls.filter((u) => typeof u === 'string' && u.trim()) : [];
+            const emailRaw = typeof quoteContactEmail === 'string' ? quoteContactEmail.trim() : '';
+            const phoneRaw = typeof quoteContactPhone === 'string' ? quoteContactPhone.trim() : '';
+            const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw);
+            const phoneDigits = phoneRaw.replace(/\D/g, '');
+            const phoneOk = phoneDigits.length >= 8 && phoneDigits.length <= 15;
+            if (!emailOk) {
+                return NextResponse.json(
+                    { error: 'Please provide a valid email address so we can send your quote.' },
+                    { status: 400 },
+                );
+            }
+            if (!phoneOk) {
+                return NextResponse.json(
+                    { error: 'Please provide a valid phone number so we can reach you.' },
+                    { status: 400 },
+                );
+            }
             const now = new Date();
             const created = await prisma.$transaction(async (tx) => {
                 const j = await tx.job.create({
@@ -82,6 +103,8 @@ export async function POST(request: Request) {
                         reviewType: 'MANUAL_QUOTE',
                         reviewPriority: 'MEDIUM',
                         quoteRequestPhotos: photoList.length > 0 ? photoList.join(',') : null,
+                        quoteContactEmail: emailRaw,
+                        quoteContactPhone: phoneRaw,
                     },
                 });
                 await tx.jobStateChange.create({
