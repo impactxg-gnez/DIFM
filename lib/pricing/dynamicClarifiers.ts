@@ -10,6 +10,7 @@ import {
     shelfQuantityProvidedInDescription,
     wallMaterialMentioned,
 } from './bookingSignals';
+import { cleaningTypeNeedsClarifier, mentionsPropertySize } from './cleaningIntent';
 
 export type PlannedClarifierInputType = 'number' | 'select' | 'boolean' | 'text';
 
@@ -57,6 +58,15 @@ function isMirrorOrPicJobId(id: string): boolean {
 
 function isSocketJobId(id: string): boolean {
     return id.includes('socket') && id.includes('replace');
+}
+
+function isCleaningPricingJobId(id: string): boolean {
+    return (
+        id === 'home_cleaning_standard' ||
+        id === 'home_cleaning_deep' ||
+        id === 'bathroom_cleaning' ||
+        id === 'kitchen_cleaning'
+    );
 }
 
 function addPlanned(map: Map<string, PlannedClarifier>, item: PlannedClarifier) {
@@ -222,6 +232,50 @@ export function planClarifiersForExtraction(
         );
     }
 
+    const anyHomeClean = jobs.some(
+        (j) => j.job === 'home_cleaning_standard' || j.job === 'home_cleaning_deep',
+    );
+    const anyCleaningJob = jobs.some((j) =>
+        [
+            'home_cleaning_standard',
+            'home_cleaning_deep',
+            'bathroom_cleaning',
+            'kitchen_cleaning',
+        ].includes(j.job),
+    );
+
+    if (anyHomeClean) {
+        const needsPropertySize = jobs.some(
+            (j) =>
+                (j.job === 'home_cleaning_standard' || j.job === 'home_cleaning_deep') &&
+                !mentionsPropertySize(j.part),
+        );
+        if (needsPropertySize) {
+            addPlanned(
+                map,
+                basePlanItem(
+                    'PROPERTY_SIZE',
+                    'What is the property size?',
+                    'select',
+                    ['1 BHK / Studio', '2 BHK', '3 BHK', 'Larger / custom'],
+                ),
+            );
+        }
+    }
+
+    if (anyCleaningJob) {
+        const needsCleaningType = jobs.some((j) => cleaningTypeNeedsClarifier(j.job, j.part));
+        if (needsCleaningType) {
+            addPlanned(
+                map,
+                basePlanItem('CLEANING_TYPE', 'What type of cleaning do you need?', 'select', [
+                    'Standard',
+                    'Deep',
+                ]),
+            );
+        }
+    }
+
     return [...map.values()];
 }
 
@@ -362,6 +416,33 @@ export function planClarifiersForVisitJobIds(
         );
     }
 
+    const anyHomeCleanId = ids.some(
+        (id) => id === 'home_cleaning_standard' || id === 'home_cleaning_deep',
+    );
+    const anyCleaningId = ids.some(isCleaningPricingJobId);
+
+    if (anyHomeCleanId && !mentionsPropertySize(text)) {
+        addPlanned(
+            map,
+            basePlanItem(
+                'PROPERTY_SIZE',
+                'What is the property size?',
+                'select',
+                ['1 BHK / Studio', '2 BHK', '3 BHK', 'Larger / custom'],
+            ),
+        );
+    }
+
+    if (anyCleaningId && ids.some((id) => cleaningTypeNeedsClarifier(id, text))) {
+        addPlanned(
+            map,
+            basePlanItem('CLEANING_TYPE', 'What type of cleaning do you need?', 'select', [
+                'Standard',
+                'Deep',
+            ]),
+        );
+    }
+
     return [...map.values()];
 }
 
@@ -497,8 +578,22 @@ export function computeClarifierPricingEffects(
         const flat = String(answers.FLATPACK_STATUS ?? '').toLowerCase();
         if (flat.includes('boxed') || flat.includes('still')) {
             extraMinutes += 15;
-        } else if (flat.includes('part')) {
+        } else         if (flat.includes('part')) {
             extraMinutes += 8;
+        }
+    }
+
+    const anyCleaning = ids.some(isCleaningPricingJobId);
+    if (anyCleaning) {
+        const psz = String(answers.PROPERTY_SIZE ?? answers.property_size ?? '').toLowerCase();
+        if (psz.includes('2 bhk')) bumpTier(1);
+        else if (psz.includes('3 bhk')) bumpTier(2);
+        else if (psz.includes('larger') || psz.includes('custom')) bumpTier(2);
+
+        const ct = String(answers.CLEANING_TYPE ?? answers.cleaning_type ?? '').toLowerCase();
+        const primaryIsDeepHome = primaryJobItemId === 'home_cleaning_deep';
+        if (ct.includes('deep') && !primaryIsDeepHome) {
+            bumpTier(1);
         }
     }
 

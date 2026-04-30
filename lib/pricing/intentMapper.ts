@@ -10,6 +10,11 @@ import {
     detectScopeContradiction,
     isVagueBookingRequest,
 } from './bookingGuards';
+import {
+    detectCommercialCleaningContext,
+    isCleaningRuleJob,
+    tryMapCleaningRuleJob,
+} from './cleaningIntent';
 
 export type IntentType = 'MOUNTING' | 'ELECTRICAL' | 'PLUMBING' | 'HEATING' | 'APPLIANCE' | 'UNKNOWN';
 
@@ -182,6 +187,7 @@ function deriveIntent(jobId: string): IntentType {
     if (jobId.includes('plumbing') || jobId.includes('toilet')) return 'PLUMBING';
     if (jobId.includes('heating') || jobId.includes('radiator')) return 'HEATING';
     if (jobId.includes('appliance') || jobId.includes('dishwasher')) return 'APPLIANCE';
+    if (isCleaningRuleJob(jobId)) return 'UNKNOWN';
     if (
         jobId.includes('mount') ||
         jobId.includes('hang') ||
@@ -320,6 +326,12 @@ export function extractQuantity(part: string): number {
 }
 
 export function mapPartToJob(part: string): { job: string; resolutionSource: 'SPECIFIC' | 'GENERIC' } | null {
+    const pl = part.trim().toLowerCase();
+    const cleaningJob = tryMapCleaningRuleJob(pl);
+    if (cleaningJob) {
+        return { job: cleaningJob, resolutionSource: 'SPECIFIC' };
+    }
+
     for (const rule of RULES) {
         if (includesAny(part, rule.match)) {
             return { job: rule.job, resolutionSource: 'SPECIFIC' };
@@ -426,7 +438,18 @@ export function mapToJobs(input: string, allowedJobIds: string[]): IntentMapping
     }
 
     if (matches.length === 0) {
+        if (
+            /\b(clean|cleaning|maid|housekeep)\w*\b/i.test(normalized) &&
+            detectCommercialCleaningContext(normalized)
+        ) {
+            return { type: 'CLARIFY', reason: 'COMMERCIAL_BULK', matches: [] };
+        }
         return { type: 'CLARIFY', reason: 'NO_STRONG_MATCH', matches: [] };
+    }
+
+    const anyCleaning = matches.some((m) => isCleaningRuleJob(m.ruleJob));
+    if (anyCleaning && detectCommercialCleaningContext(normalized)) {
+        return { type: 'CLARIFY', reason: 'COMMERCIAL_BULK', matches: [] };
     }
 
     if (matches.some((m) => m.resolutionSource === 'GENERIC')) {

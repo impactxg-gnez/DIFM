@@ -3,8 +3,7 @@ import { isComplexBundle } from './bundleRouting';
 
 export type { BookingRouting, BookingMappingMeta } from './bookingRoutingTypes';
 
-export const REVIEW_QUOTE_MESSAGE =
-    "We'll review your request and get back to you with a confirmed quote.";
+export const REVIEW_QUOTE_MESSAGE = "We'll review your request and get back with a quote.";
 
 /** Warnings that always block fixed matrix price (defence in depth with confidence layer). */
 export const REVIEW_ONLY_WARNINGS = new Set([
@@ -116,11 +115,37 @@ export function computeBookingRouting(
     meta: BookingMappingMeta | null,
 ): { routing: BookingRouting; confidenceLevel: 'HIGH' | 'LOW'; reviewMessage?: string } {
     if (pricing.isOutOfScope) {
-        return { routing: 'REJECT', confidenceLevel: 'LOW' };
+        return {
+            routing: 'REVIEW_QUOTE',
+            confidenceLevel: 'LOW',
+            reviewMessage: REVIEW_QUOTE_MESSAGE,
+        };
     }
 
     const extractionWarnings = pricing.warnings ?? [];
     const forcedLowByWarning = extractionWarnings.some((w) => REVIEW_ONLY_WARNINGS.has(w));
+
+    if (meta?.matrixV2?.routing === 'REVIEW_QUOTE') {
+        return {
+            routing: 'REVIEW_QUOTE',
+            confidenceLevel: 'LOW',
+            reviewMessage: REVIEW_QUOTE_MESSAGE,
+        };
+    }
+
+    if (meta?.matrixV2?.routing === 'FIXED_PRICE') {
+        const hasVisits = Array.isArray(pricing.visits) && pricing.visits.length > 0;
+        const total = Number(pricing.totalPrice);
+        const hasPrice = Number.isFinite(total) && total > 0;
+        if (hasVisits && hasPrice && !forcedLowByWarning) {
+            return { routing: 'FIXED_PRICE', confidenceLevel: 'HIGH' };
+        }
+        return {
+            routing: 'REVIEW_QUOTE',
+            confidenceLevel: 'LOW',
+            reviewMessage: REVIEW_QUOTE_MESSAGE,
+        };
+    }
 
     const conf = evaluateBookingConfidence(meta);
     if (conf.routing !== 'FIXED_PRICE') {

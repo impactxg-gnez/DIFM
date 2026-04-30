@@ -13,4 +13,9 @@ export interface BookingMappingMeta {
     estimatedTotalMinutes: number;
     /** Distinct routing buckets (trade/category); >1 ⇒ cross-trade bundle. */
     distinctRoutingBucketCount: number;
+    /** When set, V2 matrix routing overrides legacy confidence gates. */
+    matrixV2?: {
+        routing: 'FIXED_PRICE' | 'REVIEW_QUOTE';
+        reviewReason?: string;
+    };
 }

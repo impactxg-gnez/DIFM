@@ -46,10 +46,10 @@ export function getV1JobCreateRejection(pricing: V1PricingResult): V1JobCreateRe
             code: 'OUT_OF_SCOPE',
             message:
                 pricing.clarifyMessage ||
-                'This request is not something we can price in the app. Choose a home repair, installation, or cleaning task, or contact us for special projects.',
+                'This request needs a manual review. Submit the details so we can get back with a quote.',
             warnings,
             clarifyMessage: pricing.clarifyMessage,
-            useQuoteFlow: false,
+            useQuoteFlow: true,
         };
     }
     if (warnings.includes('COMMERCIAL_QUOTE_REQUIRED')) {

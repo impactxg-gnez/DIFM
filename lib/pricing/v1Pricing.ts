@@ -59,11 +59,11 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             isOutOfScope: true,
             suggestedServices: SUPPORTED_SERVICES,
             clarifyMessage:
-                'This looks outside the home handyman, installation, and cleaning work we can price in the app. For anything else, contact us for a custom quote or change the request to a specific task (e.g. fix a tap, mount a TV, clean a flat).',
-            routing: 'REJECT',
+                'This looks outside the home handyman, installation, and cleaning work we can price in the app. Submit a review request and we will get back with a quote, or change your request to a specific task.',
+            routing: 'REVIEW_QUOTE',
             confidenceLevel: 'LOW',
             mappingMeta: null,
-            canSubmitQuoteRequest: false,
+            canSubmitQuoteRequest: true,
         };
     }
 

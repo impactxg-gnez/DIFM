@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
 import { getV1JobCreateRejection, isV1PricingBookable } from '@/lib/pricing/bookingEligibility';
+import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingRouter';
 import { computeStuck } from '@/lib/jobStateMachine';
 import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispatchTracker';
 import { normalizeTier, normalizeJobForUi } from '@/lib/pricing/tierNormalization';
@@ -123,8 +124,7 @@ export async function POST(request: Request) {
                 flow: 'quote',
                 jobId: created.id,
                 status: 'REVIEW_REQUIRED',
-                message:
-                    "We'll review your request and get back to you with a confirmed quote.",
+                message: REVIEW_QUOTE_MESSAGE,
             });
         }
 

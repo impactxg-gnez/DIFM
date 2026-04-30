@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { routeAndPriceMatrixV2 } from './matrixV2/engine';
 import { excelSource } from './excelLoader';
 import { buildVisitsWithQuantities, GeneratedVisit } from './visitEngine';
 import { attachClarifiersToVisits } from './clarifierEngine';
@@ -9,6 +10,7 @@ import {
     normalizeInput,
     splitInput,
 } from './intentMapper';
+import { aggregateCleaningTier, isCleaningRuleJob } from './cleaningIntent';
 import type { BookingMappingMeta } from './bookingRoutingTypes';
 import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 import { computeBundleSignals } from './bundleRouting';
@@ -130,6 +132,14 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const cached = extractionCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
         return cached.result;
+    }
+
+    excelSource.ensureLoaded();
+    const v2 = excelSource.getMatrixV2Model();
+    if (v2 && excelSource.isMatrixV2()) {
+        const v2Result = routeAndPriceMatrixV2(v2, userInput);
+        extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: v2Result });
+        return v2Result;
     }
 
     const jobItems = Array.from(excelSource.jobItems.values());
@@ -306,7 +316,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
         return gatedResult;
     }
 
-    const visits = attachClarifiersToVisits(
+    const visitsBuilt = attachClarifiersToVisits(
         buildVisitsWithQuantities(pricingJobIds, quantityByJob, {
             minuteTotalsByJob,
             classificationByJobId,
@@ -318,7 +328,7 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
             .map((jobId) => excelSource.jobItems.get(jobId)?.capability_tag || jobId)
             .filter(Boolean)
     ));
-    const legacyVisitPrice = visits.reduce((sum, v) => sum + v.price, 0);
+    const legacyVisitPrice = visitsBuilt.reduce((sum, v) => sum + v.price, 0);
     const clarifiers = getClarifiers(
         normalizedInput,
         phraseMatches.map((match) => ({ job: match.ruleJob, quantity: match.quantity, part: match.clause })),
@@ -331,9 +341,28 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const summedMinutes = Object.values(adjustedMinutesByCanonicalJob).reduce((sum, minutes) => sum + minutes, 0);
     const multiJobOverhead = Math.max(0, finalJobs.length - 1) * 10;
     const totalMinutes = summedMinutes + multiJobOverhead;
-    const minuteTier = deriveTierFromMinutes(totalMinutes);
-    const finalTier: 'H1' | 'H2' | 'H3' = minuteTier;
-    const finalPrice = TIER_PRICING[finalTier as 'H1' | 'H2' | 'H3'];
+
+    const cleaningBundle =
+        phraseMatches.length > 0 && phraseMatches.every((m) => isCleaningRuleJob(m.ruleJob));
+    let finalTier: 'H1' | 'H2' | 'H3';
+    let finalPrice: number;
+    let visits = visitsBuilt;
+    if (cleaningBundle) {
+        finalTier = aggregateCleaningTier(
+            phraseMatches.map((m) => ({ ruleJob: m.ruleJob, clause: m.clause })),
+        );
+        finalPrice = TIER_PRICING[finalTier];
+        visits = visits.map((v) => ({
+            ...v,
+            tier: finalTier,
+            price: visitsBuilt.length === 1 ? finalPrice : v.price,
+            item_prices: visitsBuilt.length === 1 ? [finalPrice] : v.item_prices,
+        }));
+    } else {
+        finalTier = deriveTierFromMinutes(totalMinutes);
+        finalPrice = TIER_PRICING[finalTier as 'H1' | 'H2' | 'H3'];
+        visits = visitsBuilt;
+    }
 
     const minutesBefore = visits.reduce((sum, v) => sum + (v.total_minutes || 0), 0);
     const tierBefore = visits.map((v) => v.tier).join(',');
@@ -399,8 +428,10 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
 
     // Tier pricing path only — confidence gate returned earlier otherwise.
     const fallbackUsedUnnecessarily = flags.usedGenericFallback && phraseMatches.some((m) => m.resolutionSource === 'SPECIFIC');
-    if (![59, 109, 159].includes(finalPrice)) {
-        throw new Error(`INVALID_TIER_PRICE:${finalPrice}`);
+    if (!excelSource.isMatrixV2()) {
+        if (![59, 109, 159].includes(finalPrice)) {
+            throw new Error(`INVALID_TIER_PRICE:${finalPrice}`);
+        }
     }
     if (fallbackUsedUnnecessarily) {
         throw new Error('INVALID_FALLBACK_USAGE');

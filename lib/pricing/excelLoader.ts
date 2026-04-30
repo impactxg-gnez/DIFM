@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import path from 'path';
 import fs from 'fs';
+import type { MatrixV2Model } from './matrixV2/types';
+import { parseMatrixV2Workbook } from './matrixV2/loadFromWorkbook';
 
 export interface PhraseMappingExcel {
     pattern_id?: number;
@@ -74,14 +76,16 @@ class ExcelSource {
     private _clarifierLibrary: Map<string, string> = new Map(); // id -> question
     private _clarifierDefinitions: Map<string, ClarifierExcel> = new Map(); // id -> full schema
     private _jobItemRules: Map<string, JobItemRuleExcel> = new Map();
+    private _matrixV2Model: MatrixV2Model | null = null;
 
     private loaded = false;
 
     private resolveMatrixFilePath(): string {
         const candidates = [
+            'DIFM_PRICING_MATRIX_V2-30042026.xlsx',
             'DIFM_COMPLETE_FIXED_MATRIX.xlsx',
             'DIFM_Pilot_Matrix_v2_Layered.xlsx',
-            'DIFM_Pilot_Matrix_v1_Baseline.xlsx'
+            'DIFM_Pilot_Matrix_v1_Baseline.xlsx',
         ];
 
         for (const filename of candidates) {
@@ -142,6 +146,16 @@ class ExcelSource {
         return this._jobItemRules;
     }
 
+    public isMatrixV2(): boolean {
+        this.ensureLoaded();
+        return this._matrixV2Model !== null;
+    }
+
+    public getMatrixV2Model(): MatrixV2Model | null {
+        this.ensureLoaded();
+        return this._matrixV2Model;
+    }
+
     public getCapabilityGuardrail(capability: string, ladderHint?: string): CapabilityGuardrailExcel | null {
         this.ensureLoaded();
         const normalizedCapability = String(capability || '').trim().toUpperCase();
@@ -175,7 +189,56 @@ class ExcelSource {
 
     public reload() {
         this.loaded = false;
+        this._matrixV2Model = null;
         this.load();
+    }
+
+    private populateLegacyCachesFromV2(): void {
+        if (!this._matrixV2Model) return;
+        this._phraseMappings = [];
+        this._jobItemRules.clear();
+        this._jobItems.clear();
+        this._capabilityGuardrails.clear();
+        this._pricingTiers.clear();
+
+        for (const [id, row] of this._matrixV2Model.jobs) {
+            const cap = row.category === 'CLEANING' ? 'CLEANING' : 'HANDYMAN';
+            this._jobItems.set(id, {
+                job_item_id: id,
+                display_name: id.replace(/_/g, ' '),
+                capability_tag: cap,
+                default_time_weight_minutes: row.max_minutes,
+                pricing_ladder: 'MATRIX_V2_HANDYMAN',
+                clarifier_ids: row.clarifierIds,
+                uncertainty_prone: false,
+                uncertainty_handling: 'IGNORE',
+                risk_buffer_minutes: 0,
+                ai_extractable: true,
+            });
+        }
+
+        const ladder = 'MATRIX_V2_HANDYMAN';
+        const handymanTierRows = this._matrixV2Model.handymanTiers.map((t) => ({
+            tier: t.tier,
+            ladder,
+            max_minutes: t.max_minutes,
+            price_gbp: t.price_gbp,
+        }));
+        handymanTierRows.sort((a, b) => a.max_minutes - b.max_minutes);
+        this._pricingTiers.set(ladder, handymanTierRows);
+
+        this._clarifierLibrary.clear();
+        this._clarifierDefinitions.clear();
+        for (const [id, c] of this._matrixV2Model.clarifiers) {
+            this._clarifierLibrary.set(id, c.question);
+            this._clarifierDefinitions.set(id, {
+                clarifier_id: id,
+                question: c.question,
+                input_type: c.type,
+                type: c.type,
+                options: [],
+            });
+        }
     }
 
     private load() {
@@ -191,6 +254,23 @@ class ExcelSource {
             console.log(`[ExcelSource] Reading file: ${this.filePath}`);
             const buffer = fs.readFileSync(this.filePath);
             const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+            if (workbook.Sheets['JOB_ITEMS'] && workbook.Sheets['PHRASE_MAPPING']) {
+                try {
+                    this._matrixV2Model = parseMatrixV2Workbook(workbook);
+                    this.populateLegacyCachesFromV2();
+                    console.log(
+                        `[ExcelSource] MATRIX V2 loaded: ${this._matrixV2Model.jobs.size} jobs, ${this._matrixV2Model.phrases.length} phrase rows`,
+                    );
+                    this.loaded = true;
+                    return;
+                } catch (e) {
+                    console.error('[ExcelSource] MATRIX V2 parse failed, falling back to legacy sheets if present:', e);
+                    this._matrixV2Model = null;
+                }
+            } else {
+                this._matrixV2Model = null;
+            }
 
             // 1. Phrase_Mapping (Legacy/Keep for now)
             const phraseSheet = workbook.Sheets['Phrase_Mapping'];
@@ -244,6 +324,62 @@ class ExcelSource {
                         risk_buffer_minutes: 0,
                         ai_extractable: true
                     });
+                }
+                /** Core residential cleaning SKUs — merged if missing from matrix workbook. */
+                const synthCleaning: JobItemExcel[] = [
+                    {
+                        job_item_id: 'home_cleaning_standard',
+                        display_name: 'Home cleaning (standard)',
+                        capability_tag: 'CLEANING',
+                        default_time_weight_minutes: 90,
+                        pricing_ladder: 'HANDYMAN',
+                        clarifier_ids: [],
+                        uncertainty_prone: false,
+                        uncertainty_handling: 'IGNORE',
+                        risk_buffer_minutes: 0,
+                        ai_extractable: true,
+                    },
+                    {
+                        job_item_id: 'home_cleaning_deep',
+                        display_name: 'Home cleaning (deep)',
+                        capability_tag: 'CLEANING',
+                        default_time_weight_minutes: 150,
+                        pricing_ladder: 'HANDYMAN',
+                        clarifier_ids: [],
+                        uncertainty_prone: false,
+                        uncertainty_handling: 'IGNORE',
+                        risk_buffer_minutes: 0,
+                        ai_extractable: true,
+                    },
+                    {
+                        job_item_id: 'bathroom_cleaning',
+                        display_name: 'Bathroom cleaning',
+                        capability_tag: 'CLEANING',
+                        default_time_weight_minutes: 55,
+                        pricing_ladder: 'HANDYMAN',
+                        clarifier_ids: [],
+                        uncertainty_prone: false,
+                        uncertainty_handling: 'IGNORE',
+                        risk_buffer_minutes: 0,
+                        ai_extractable: true,
+                    },
+                    {
+                        job_item_id: 'kitchen_cleaning',
+                        display_name: 'Kitchen cleaning',
+                        capability_tag: 'CLEANING',
+                        default_time_weight_minutes: 55,
+                        pricing_ladder: 'HANDYMAN',
+                        clarifier_ids: [],
+                        uncertainty_prone: false,
+                        uncertainty_handling: 'IGNORE',
+                        risk_buffer_minutes: 0,
+                        ai_extractable: true,
+                    },
+                ];
+                for (const row of synthCleaning) {
+                    if (!this._jobItems.has(row.job_item_id)) {
+                        this._jobItems.set(row.job_item_id, row);
+                    }
                 }
                 console.log(`[ExcelSource] Loaded ${this._jobItems.size} job items`);
             }

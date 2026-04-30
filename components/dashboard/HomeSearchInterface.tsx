@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
+import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingRouter';
 
 export type HomeBookingFlow = 'fixed' | 'quote';
 
@@ -423,8 +424,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 <span>Confirm & submit</span>
                             </div>
                             <p className="text-xs text-emerald-100/90 leading-relaxed">
-                                {pricePreview?.clarifyMessage ||
-                                    "We’ll review your request and get back to you with a confirmed quote."}
+                                {pricePreview?.clarifyMessage || REVIEW_QUOTE_MESSAGE}
                             </p>
                             <p className="text-[10px] text-emerald-200/70">
                                 No upfront price is shown for this request — our team or a pro will follow up.
