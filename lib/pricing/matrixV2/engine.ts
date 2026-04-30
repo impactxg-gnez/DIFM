@@ -17,6 +17,7 @@ import {
 } from './clarifierHydration';
 import { buildFlexibleMatchingText, collapsedForPhraseMatch } from './flexText';
 import { inferJobsByKeywords } from './keywordJobInference';
+import { quantityForJob } from './itemQuantity';
 
 export const MATRIX_V2_REVIEW_MESSAGE = "We'll review your request and get back with a quote.";
 
@@ -91,91 +92,6 @@ function inferCleaningUnits(normalized: string): number {
     return 1;
 }
 
-const NUM_WORDS: Record<string, number> = {
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
-    eight: 8,
-    nine: 9,
-    ten: 10,
-};
-
-/** Parse qty from `3 things` or `three things`. */
-function qtyFromDigitOrWordMatch(n: string, re: RegExp): number | null {
-    const m = n.match(re);
-    if (!m) return null;
-    const g = m[1];
-    if (!g) return null;
-    if (/^\d+$/.test(g)) return Math.max(1, parseInt(g, 10));
-    const w = NUM_WORDS[g.toLowerCase()];
-    return w !== undefined ? w : null;
-}
-
-function isTvMountQuantityJob(jobId: string): boolean {
-    return (
-        jobId === 'tv_mount' ||
-        /tv.?mount|mount.?tv/i.test(jobId) ||
-        (jobId.includes('tv') && jobId.includes('mount'))
-    );
-}
-
-export function quantityForJob(jobId: string, normalized: string): number {
-    const n = normalized.toLowerCase();
-    const pick = (re: RegExp, hay: string = n) => {
-        const m = hay.match(re);
-        if (!m) return null;
-        const v = parseInt(m[1] || m[2], 10);
-        return Number.isFinite(v) ? Math.max(1, v) : null;
-    };
-
-    if (isTvMountQuantityJob(jobId)) {
-        const stripped = n.replace(/\b\d{1,3}\s*-?\s*(inch|inches|"|″|cm)\b/gi, ' ');
-        const multiTvs = pick(/\b(\d+)\s*tvs\b/i, stripped);
-        if (multiTvs) return multiTvs;
-        const numTv = stripped.match(/\b(\d+)\s+tv\b/i);
-        if (numTv) {
-            const idx = stripped.indexOf(numTv[0]);
-            const tail = stripped.slice(idx + numTv[0].length, idx + numTv[0].length + 16);
-            if (!/\b(inch|inches|"|″)\b/i.test(tail)) {
-                return Math.max(1, parseInt(numTv[1], 10));
-            }
-        }
-        return pick(/\bmount\s+(\d+)\s*tvs?\b/i, stripped) ?? 1;
-    }
-    if (jobId === 'shelf_install') {
-        return (
-            qtyFromDigitOrWordMatch(n, /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(shelves|shelf)\b/i) ??
-            pick(/\b(\d+)\s*(shelves|shelf)\b/i) ??
-            1
-        );
-    }
-    if (jobId === 'blind_install') {
-        return (
-            qtyFromDigitOrWordMatch(n, /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+blinds?\b/i) ??
-            qtyFromDigitOrWordMatch(n, /\bblinds?\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i) ??
-            pick(/\b(\d+)\s*blinds?\b/i) ??
-            1
-        );
-    }
-    if (jobId === 'curtain_rail') {
-        return pick(/\b(\d+)\s*(rails?|curtains?)\b/i) ?? 1;
-    }
-    if (jobId === 'furniture_assembly') {
-        return pick(/\b(\d+)\s*(desks?|chairs?|tables?|items?|units?|pieces?)\b/i) ?? 1;
-    }
-    if (jobId === 'wall_repair' || jobId === 'mirror_hang' || jobId === 'picture_hang') {
-        return pick(/\b(\d+)\s*(holes?|mirrors?|pictures?|frames?|photos?)\b/i) ?? 1;
-    }
-    if (jobId === 'washing_machine_install' || jobId === 'dishwasher_install') {
-        return pick(/\b(\d+)\s*(machines?|dishwashers?|washers?)\b/i) ?? 1;
-    }
-    return 1;
-}
-
 /** Combined handyman tier from total minutes ceiling. */
 function handymanTierForMinutes(
     totalMin: number,
@@ -222,10 +138,24 @@ function mergeClarifiers(
     return out;
 }
 
+/** Show prefills from text hydration + explicit client answers only (no pricing defaults). */
+function clarifierUiValue(
+    tag: string,
+    hydrated: Record<string, string | number>,
+    client: Record<string, string | number>,
+): string | number | undefined {
+    const c = client[tag];
+    if (c !== undefined && c !== '') return c;
+    const h = hydrated[tag];
+    if (h !== undefined && h !== '') return h;
+    return undefined;
+}
+
 function formatMatrixV2Clarifiers(
     model: MatrixV2Model,
     jobIds: string[],
-    merged: Record<string, string | number>,
+    hydratedFromText: Record<string, string | number>,
+    clientAnswers: Record<string, string | number>,
 ): Array<{
     tag: string;
     question: string;
@@ -235,15 +165,18 @@ function formatMatrixV2Clarifiers(
     affects_time: boolean;
     affects_safety: boolean;
 }> {
-    return mergeClarifiers(model, jobIds).map((c) => ({
-        tag: c.tag,
-        question: c.question,
-        ...(c.inputType ? { inputType: c.inputType } : {}),
-        ...(c.options?.length ? { options: c.options } : {}),
-        ...(merged[c.tag] !== undefined ? { value: merged[c.tag] } : {}),
-        affects_time: true,
-        affects_safety: false,
-    }));
+    return mergeClarifiers(model, jobIds).map((c) => {
+        const dv = clarifierUiValue(c.tag, hydratedFromText, clientAnswers);
+        return {
+            tag: c.tag,
+            question: c.question,
+            ...(c.inputType ? { inputType: c.inputType } : {}),
+            ...(c.options?.length ? { options: c.options } : {}),
+            ...(dv !== undefined ? { value: dv } : {}),
+            affects_time: true,
+            affects_safety: false,
+        };
+    });
 }
 
 function mergeKnownJobIds(model: MatrixV2Model, lists: string[][]): string[] {
@@ -317,8 +250,6 @@ function resolveMatrixV2JobIds(model: MatrixV2Model, normalized: string): {
 function enrichParserEntitiesFromAnswers(
     parser: MatrixV2ParserTrace,
     merged: Record<string, string | number>,
-    jobIds: string[],
-    qtyMap: Record<string, number>,
 ): void {
     const e = { ...parser.entities };
     for (const [k, val] of Object.entries(merged)) {
@@ -332,9 +263,6 @@ function enrichParserEntitiesFromAnswers(
         if (/(WALL.?TYPE|SURFACE|SUBSTRATE|INSTALL.?SURFACE)/i.test(up)) {
             e.WALL_TYPE = val;
         }
-    }
-    if (jobIds.length === 1 && e.ITEM_COUNT === undefined && qtyMap[jobIds[0]]) {
-        e.ITEM_COUNT = qtyMap[jobIds[0]];
     }
     parser.entities = e;
 }
@@ -372,11 +300,11 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         qtyMap[id] = Math.max(1, quantityForJob(id, normalized));
     }
 
-    const hydratedFromText = hydrateClarifiersFromText(model, jobIds, normalized, quantityForJob);
+    const hydratedFromText = hydrateClarifiersFromText(model, jobIds, normalized);
     const clientAnswers = normalizeClientClarifierAnswers(opts?.clarifierAnswers);
     const clarifierAnswersMerged = mergeClarifierAnswerLayers(hydratedFromText, clientAnswers);
     applyClarifierAnswersToQuantityMap(model, jobIds, qtyMap, clarifierAnswersMerged);
-    enrichParserEntitiesFromAnswers(parserTrace, clarifierAnswersMerged, jobIds, qtyMap);
+    enrichParserEntitiesFromAnswers(parserTrace, clarifierAnswersMerged);
 
     const cleaningUnits = inferCleaningUnits(normalized);
 
@@ -392,7 +320,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                 parts,
                 MATRIX_V2_REVIEW_MESSAGE,
                 ['MATRIX_V2_QUANTITY_REVIEW'],
-                formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
+                formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
                 {
                     detectedJobIds: [...jobIds],
                     quantityByJob: { ...qtyMap },
@@ -418,7 +346,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_COMMERCIAL_CLEAN'],
-            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
+            formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
             {
                 detectedJobIds: [...jobIds],
                 quantityByJob: { ...qtyMap },
@@ -440,7 +368,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_CROSS_CATEGORY'],
-            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
+            formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
             {
                 detectedJobIds: [...jobIds],
                 quantityByJob: { ...qtyMap },
@@ -486,7 +414,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_PRICE_FAIL'],
-            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
+            formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
             {
                 detectedJobIds: [...jobIds],
                 quantityByJob: { ...qtyMap },
@@ -500,7 +428,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         );
     }
 
-    const clarifiers = formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged);
+    const clarifiers = formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers);
 
     const visits = buildVisits(jobIds, qtyMap, model, category, displayTier, totalPrice, totalMinutes);
 

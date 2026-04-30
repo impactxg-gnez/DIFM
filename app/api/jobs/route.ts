@@ -206,8 +206,8 @@ export async function POST(request: Request) {
 
         // Attach clarifier schema + silent MATRIX prefill for scope lock (not shown on landing page)
         const quoteVisitsHydrated = attachClarifiersToVisits(pricing.visits as any, description);
-        const clarifierPrefill = pricing.clarifier_answers && typeof pricing.clarifier_answers === 'object'
-            ? pricing.clarifier_answers
+        const clarifierPrefill = pricing.clarifier_hydration && typeof pricing.clarifier_hydration === 'object'
+            ? pricing.clarifier_hydration
             : {};
 
         const quoteVisits = quoteVisitsHydrated.map((v, idx) => ({

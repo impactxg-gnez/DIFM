@@ -1,4 +1,5 @@
 import { parseTvDetails } from './bookingSignals';
+import { inferTvScreenInches } from './matrixV2/clarifierHydration';
 import { preprocessBookingInput } from './inputPreprocess';
 
 /** Browser-safe mirror of intentMapper.normalizeInput (avoid importing intentMapper → visitEngine → excel fs). */
@@ -75,6 +76,7 @@ export function inferScopeAnswersFromDescription(
     const textNorm = normalizeInputForInference(rawDescription || '');
     const plain = rawDescription || '';
     const tv = parseTvDetails(plain);
+    const inchFromText = inferTvScreenInches(textNorm) ?? inferTvScreenInches(plain);
     const out: Record<string, string> = {};
 
     for (const q of questions) {
@@ -82,11 +84,41 @@ export function inferScopeAnswersFromDescription(
         const qt = norm(q.text);
 
         if (q.type === 'number') {
-            if ((id.includes('TV') && id.includes('INCH')) || (qt.includes('tv') && qt.includes('inch'))) {
-                if (tv.size != null) out[q.id] = String(tv.size);
+            const tvSizeQ =
+                (id.includes('TV') && id.includes('SIZE')) ||
+                id.includes('TV_SIZE') ||
+                id.includes('SCREEN_SIZE') ||
+                (qt.includes('tv') && (qt.includes('inch') || qt.includes('size') || qt.includes('diagonal')));
+            if (tvSizeQ) {
+                if (inchFromText !== undefined) out[q.id] = String(inchFromText);
             } else if (id.includes('SHELF') && (id.includes('COUNT') || qt.includes('how many'))) {
                 const m = plain.match(/\b(\d+)\s*(?:shelf|shelves)\b/i);
                 if (m) out[q.id] = String(Number(m[1]));
+            } else if (
+                /ITEM|COUNT|QUANTITY|NUM_BLIND|HOW_MANY|N_ITEMS/i.test(id) ||
+                (qt.includes('how many') && /blind|item/i.test(qt))
+            ) {
+                const digits = plain.match(/\b(\d+)\s+blinds?\b/i);
+                if (digits) out[q.id] = String(Number(digits[1]));
+                const worded = plain.match(
+                    /\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+blinds?\b/i,
+                );
+                if (worded) {
+                    const w = worded[1].toLowerCase();
+                    const map: Record<string, string> = {
+                        one: '1',
+                        two: '2',
+                        three: '3',
+                        four: '4',
+                        five: '5',
+                        six: '6',
+                        seven: '7',
+                        eight: '8',
+                        nine: '9',
+                        ten: '10',
+                    };
+                    if (map[w]) out[q.id] = map[w];
+                }
             }
             continue;
         }

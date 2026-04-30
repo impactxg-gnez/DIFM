@@ -113,11 +113,21 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             for (const [k, v] of Object.entries(pre)) {
                 const key = String(k).trim();
                 if (!key) continue;
-                preStr[key] =
-                    typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v ?? '').trim();
+                const s =
+                    typeof v === 'number' && Number.isFinite(v)
+                        ? String(v)
+                        : typeof v === 'string'
+                          ? v.trim()
+                          : String(v ?? '').trim();
+                if (s === '') continue;
+                preStr[key] = s;
             }
         }
-        const merged = { ...inferred, ...preStr };
+        const merged: Record<string, string> = { ...preStr };
+        for (const [k, v] of Object.entries(inferred)) {
+            const existing = merged[k];
+            if (existing === undefined || String(existing).trim() === '') merged[k] = v;
+        }
         if (Object.keys(merged).length > 0) {
             setAnswers((prev) => ({ ...merged, ...prev }));
         }

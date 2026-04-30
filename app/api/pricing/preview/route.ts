@@ -43,6 +43,7 @@ export async function POST(request: Request) {
             pipeline: pricing.pipeline,
             clarifier_answers: pricing.clarifier_answers ?? {},
             clarifier_hydration: pricing.clarifier_hydration ?? {},
+            inferred_values: pricing.clarifier_hydration ?? {},
         });
     } catch (error) {
         console.error('Price preview error', error);

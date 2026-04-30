@@ -2,7 +2,8 @@
  * MATRIX V2: extract structured clarifier answers from raw user text and merge UI overrides.
  */
 
-import type { MatrixV2Model, MatrixV2QuantityResolver } from './types';
+import type { MatrixV2Model } from './types';
+import { explicitItemQuantityFromText } from './itemQuantity';
 
 /** Semantic keys recognized for hydration from free text */
 const ITEM_KEYS = /^ITEM_COUNT|QUANTITY|NUM_ITEMS|HOW_MANY_ITEMS|HOW_MANY|COUNT$/i;
@@ -52,9 +53,13 @@ export function inferTvScreenInches(normalized: string): number | undefined {
     return n;
 }
 
-function matchesTvSizeClarifierId(clarifierId: string): boolean {
+export function isTvOrDisplaySizeClarifierId(clarifierId: string): boolean {
     const low = clarifierId.trim().toLowerCase();
     return /\b(tv.?size|screen.?size|display.?size|diagonal|panel|screen.?diag)\b/i.test(low);
+}
+
+function matchesTvSizeClarifierId(clarifierId: string): boolean {
+    return isTvOrDisplaySizeClarifierId(clarifierId);
 }
 
 function matchesItemCountKey(clarifierId: string): boolean {
@@ -70,6 +75,7 @@ function clarifierRowType(model: MatrixV2Model, clarifierId: string): string {
 }
 
 function ctypeIsCount(type: string, id: string): boolean {
+    if (matchesTvSizeClarifierId(id)) return false;
     if (!type) return false;
     if (/number|numeric|quantity|integer|count|spinner/i.test(type)) return true;
     const low = id.toLowerCase();
@@ -77,13 +83,12 @@ function ctypeIsCount(type: string, id: string): boolean {
 }
 
 /**
- * From parsed jobs + text, produce initial clarifier_answers (before user overrides).
+ * Text-only hydration: wall / TV size / item count — only values explicitly inferable from the string.
  */
 export function hydrateClarifiersFromText(
     model: MatrixV2Model,
     jobIds: string[],
     normalized: string,
-    quantityForJob: MatrixV2QuantityResolver,
 ): Record<string, string | number> {
     const out: Record<string, string | number> = {};
     if (jobIds.length === 0) return out;
@@ -108,17 +113,24 @@ export function hydrateClarifiersFromText(
     }
 
     const itemCids = [...allCids].filter(
-        (cid) => matchesItemCountKey(cid) || ctypeIsCount(clarifierRowType(model, cid), cid),
+        (cid) =>
+            !matchesTvSizeClarifierId(cid) &&
+            (matchesItemCountKey(cid) || ctypeIsCount(clarifierRowType(model, cid), cid)),
     );
     if (itemCids.length > 0) {
-        let maxQ = 1;
+        let explicitMax: number | undefined;
         for (const jid of jobIds) {
             const row = model.jobs.get(jid);
             if (!row?.clarifierIds.some((c) => itemCids.includes(c))) continue;
-            maxQ = Math.max(maxQ, quantityForJob(jid, normalized));
+            const ex = explicitItemQuantityFromText(jid, normalized);
+            if (ex !== undefined) {
+                explicitMax = explicitMax === undefined ? ex : Math.max(explicitMax, ex);
+            }
         }
-        for (const cid of itemCids) {
-            out[cid] = maxQ;
+        if (explicitMax !== undefined) {
+            for (const cid of itemCids) {
+                out[cid] = explicitMax;
+            }
         }
     }
 
@@ -197,6 +209,7 @@ export function applyClarifierAnswersToQuantityMap(
         const row = model.jobs.get(jid);
         if (!row) continue;
         for (const cid of row.clarifierIds) {
+            if (matchesTvSizeClarifierId(cid)) continue;
             if (!matchesItemCountKey(cid) && !ctypeIsCount(clarifierRowType(model, cid), cid)) continue;
             const v = merged[cid];
             if (v === undefined || v === '') continue;
