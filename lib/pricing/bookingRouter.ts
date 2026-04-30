@@ -1,9 +1,10 @@
 import type { BookingMappingMeta, BookingRouting } from './bookingRoutingTypes';
+import { REVIEW_QUOTE_MESSAGE } from './bookingCopy';
 import { isComplexBundle } from './bundleRouting';
 
 export type { BookingRouting, BookingMappingMeta } from './bookingRoutingTypes';
 
-export const REVIEW_QUOTE_MESSAGE = "We'll review your request and get back with a quote.";
+export { REVIEW_QUOTE_MESSAGE };
 
 /** Warnings that always block fixed matrix price (defence in depth with confidence layer). */
 export const REVIEW_ONLY_WARNINGS = new Set([

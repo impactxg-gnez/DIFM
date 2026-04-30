@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
-import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingRouter';
+import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingCopy';
 
 export type HomeBookingFlow = 'fixed' | 'quote';
 
