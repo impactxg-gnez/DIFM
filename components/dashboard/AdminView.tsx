@@ -401,16 +401,32 @@ export function AdminView({ user }: { user: any }) {
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="font-mono">{String(log.id).slice(0, 8)}</Badge>
-                                    <Badge variant="secondary">AI_EXTRACTION</Badge>
+                                    <Badge variant="secondary">
+                                        {log.audit_action === 'BOOKING_PIPELINE' ? 'BOOKING_PIPELINE' : String(log.audit_action || 'LOG')}
+                                    </Badge>
                                 </div>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Input:</span> {log.userInput || '-'}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">AI:</span> {JSON.stringify(log.ai_result || [])}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Fallback:</span> {JSON.stringify(log.fallback_result || [])}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Final Jobs:</span> {JSON.stringify(log.final_jobs || [])}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Clarifiers:</span> {JSON.stringify(log.clarifiers_loaded || [])}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Answers:</span> {JSON.stringify(log.clarifier_answers || {})}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Minutes:</span> {String(log.minutes_before ?? '-')} → {String(log.minutes_after ?? '-')}</p>
-                                <p className="text-sm text-gray-300"><span className="text-gray-500">Tier:</span> {String(log.tier_before ?? '-')} → {String(log.tier_after ?? '-')}</p>
+                                <p className="text-sm text-gray-300"><span className="text-gray-500">Input:</span>{' '}{log.input || log.userInput || '-'}</p>
+                                {log.audit_action === 'BOOKING_PIPELINE' ? (
+                                    <>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Parsed:</span>{' '}{JSON.stringify(log.parsed ?? {}, null, 0)}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Routing:</span>{' '}{String(log.routing ?? log.routing_detail ?? '-')}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Clarifiers (answers):</span>{' '}{JSON.stringify(log.clarifier_answers ?? {})}</p>
+                                        {log.clarifier_hydration && Object.keys(log.clarifier_hydration || {}).length > 0 ? (
+                                            <p className="text-sm text-gray-300"><span className="text-gray-500">Clarifiers (text):</span>{' '}{JSON.stringify(log.clarifier_hydration)}</p>
+                                        ) : null}
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Pricing:</span>{' '}{JSON.stringify(log.pricing ?? {})}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">AI:</span>{' '}{JSON.stringify(log.ai_result || [])}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Fallback:</span>{' '}{JSON.stringify(log.fallback_result || [])}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Final Jobs:</span>{' '}{JSON.stringify(log.final_jobs || [])}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Clarifiers:</span>{' '}{JSON.stringify(log.clarifiers_loaded || [])}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Answers:</span>{' '}{JSON.stringify(log.clarifier_answers || {})}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Minutes:</span>{' '}{String(log.minutes_before ?? '-')} → {String(log.minutes_after ?? '-')}</p>
+                                        <p className="text-sm text-gray-300"><span className="text-gray-500">Tier:</span>{' '}{String(log.tier_before ?? '-')} → {String(log.tier_after ?? '-')}</p>
+                                    </>
+                                )}
                             </div>
                             <div className="text-right">
                                 {(() => {
@@ -421,7 +437,9 @@ export function AdminView({ user }: { user: any }) {
                                     }
                                     return <div className="text-lg font-black text-foreground">£{displayPrice.toFixed(2)}</div>;
                                 })()}
-                                <div className="text-[10px] text-gray-500">Tier {String(log?.tier_after ?? log?.tier_before ?? '-')}</div>
+                                <div className="text-[10px] text-gray-500">
+                                    Tier {String(log?.tier_after ?? log?.pricing?.tier ?? log?.tier_before ?? log?.tier ?? '-')}
+                                </div>
                                 <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
                             </div>
                         </div>

@@ -12,8 +12,12 @@ export async function GET() {
 
     const logs = await prisma.auditLog.findMany({
         where: {
-            action: 'AI_EXTRACTION',
-            entityType: 'EXTRACTION',
+            OR: [
+                { action: 'BOOKING_PIPELINE' },
+                // Legacy paths (historical)
+                { action: 'AI_EXTRACTION', entityType: 'EXTRACTION' },
+                { action: 'MATRIX_V2_PIPELINE', entityType: 'MATRIX_V2_EXTRACTION' },
+            ],
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
@@ -29,15 +33,23 @@ export async function GET() {
         return {
             id: log.id,
             createdAt: log.createdAt,
+            audit_action: log.action,
             ...details,
-            tier: details?.tier !== undefined ? normalizeTier(details.tier) : details?.tier,
+            tier:
+                details?.pricing?.tier !== undefined
+                    ? normalizeTier(details.pricing.tier)
+                    : details?.tier !== undefined
+                      ? normalizeTier(details.tier)
+                      : details?.tier,
             tier_before: details?.tier_before !== undefined ? normalizeTier(details.tier_before) : details?.tier_before,
             tier_after: details?.tier_after !== undefined ? normalizeTier(details.tier_after) : details?.tier_after,
             display_price: Number(
                 details?.display_price ??
+                details?.pricing?.price ??
                 details?.final_price ??
                 details?.price_after ??
                 details?.price ??
+                details?.totalPrice ??
                 0
             ),
         };

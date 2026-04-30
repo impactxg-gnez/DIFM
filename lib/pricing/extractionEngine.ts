@@ -1,6 +1,3 @@
-import { prisma } from '@/lib/prisma';
-import { persistMatrixV2AuditLog } from './matrixV2/audit';
-import { routeAndPriceMatrixV2, normalizeV2Input } from './matrixV2/engine';
 import { excelSource } from './excelLoader';
 import { buildVisitsWithQuantities, GeneratedVisit } from './visitEngine';
 import { attachClarifiersToVisits } from './clarifierEngine';
@@ -15,6 +12,7 @@ import { aggregateCleaningTier, isCleaningRuleJob } from './cleaningIntent';
 import type { BookingMappingMeta } from './bookingRoutingTypes';
 import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 import { computeBundleSignals } from './bundleRouting';
+import { routeAndPriceMatrixV2 } from './matrixV2/engine';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -163,22 +161,6 @@ export async function runExtractionPipeline(
         const v2Result = routeAndPriceMatrixV2(v2, userInput, { clarifierAnswers: options?.clarifierAnswers });
         const result: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };
         extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
-        const qty = result.mappingMeta?.quantityByJob ?? result.quantities ?? {};
-        await persistMatrixV2AuditLog({
-            rawInput: userInput,
-            normalizedInput: normalizeV2Input(userInput),
-            detectedJobIds: result.jobs.length > 0 ? result.jobs : Object.keys(qty),
-            quantityByJob: qty as Record<string, number>,
-            routing: result.mappingMeta?.matrixV2?.routing ?? 'REVIEW_QUOTE',
-            routingWarnings: result.warnings ?? [],
-            reviewReason: result.mappingMeta?.matrixV2?.reviewReason,
-            totalPrice: result.price,
-            tier: result.tier,
-            clarifierIds: (result.clarifiers ?? []).map((c) => c.tag),
-            clarifierHydrationFromText: result.clarifier_hydration ?? result.mappingMeta?.clarifierHydration,
-            clarifierAnswersEffective: result.clarifier_answers ?? result.mappingMeta?.clarifierAnswers,
-            minutesEstimated: result.mappingMeta?.estimatedTotalMinutes ?? result.total_minutes,
-        });
         return result;
     }
 
@@ -439,20 +421,6 @@ export async function runExtractionPipeline(
     };
 
     console.log('[Extraction]', logPayload);
-
-    try {
-        await prisma.auditLog.create({
-            data: {
-                action: 'AI_EXTRACTION',
-                entityType: 'EXTRACTION',
-                entityId: 'N/A',
-                details: JSON.stringify(logPayload),
-                actorId: 'SYSTEM',
-            },
-        });
-    } catch (err) {
-        console.error('[Extraction] Failed to persist extraction audit log:', err);
-    }
 
     const result = {
         jobs: finalJobs,

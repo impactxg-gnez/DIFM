@@ -3,6 +3,7 @@ import { runExtractionPipeline } from './extractionEngine';
 import { matchesExtendedOutOfScope, matchesKeywordOutOfScope } from './bookingGuards';
 import { computeBookingRouting, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 import type { BookingMappingMeta, BookingRouting } from './bookingRoutingTypes';
+import { persistBookingPipelineLog } from './bookingPipelineLog';
 
 export interface V1PricingResult {
     visits: GeneratedVisit[];
@@ -57,6 +58,15 @@ export interface CalculateV1PricingOptions {
     clarifierAnswers?: Record<string, unknown>;
 }
 
+async function finalizePipelineLog(
+    description: string,
+    extraction: Awaited<ReturnType<typeof runExtractionPipeline>> | undefined,
+    pricing: V1PricingResult,
+): Promise<V1PricingResult> {
+    await persistBookingPipelineLog({ description, extraction, result: pricing });
+    return pricing;
+}
+
 export async function calculateV1Pricing(
     description: string,
     options?: CalculateV1PricingOptions,
@@ -67,7 +77,7 @@ export async function calculateV1Pricing(
     const isOutOfScope = matchesKeywordOutOfScope(lower) || matchesExtendedOutOfScope(lower);
 
     if (isOutOfScope) {
-        return {
+        return finalizePipelineLog(description, undefined, {
             visits: [],
             totalPrice: 0,
             confidence: 0,
@@ -84,7 +94,7 @@ export async function calculateV1Pricing(
             finalJobs: [],
             quantitiesByJob: {},
             pipeline: 'LEGACY',
-        };
+        });
     }
 
     // 2. Extraction Pipeline:
@@ -118,7 +128,7 @@ export async function calculateV1Pricing(
             clarifier_answers: extraction.clarifier_answers ?? extraction.mappingMeta?.clarifierAnswers,
             clarifier_hydration: extraction.clarifier_hydration ?? extraction.mappingMeta?.clarifierHydration,
         };
-        return base;
+        return finalizePipelineLog(description, extraction, base);
     }
 
     // 3. Build Visits (Capability-aware split for labels/tasks)
@@ -171,5 +181,5 @@ export async function calculateV1Pricing(
     if (reviewMessage && (routing === 'REVIEW_QUOTE' || !raw.clarifyMessage)) {
         raw.clarifyMessage = reviewMessage;
     }
-    return applyRoutingToPublicPricing(raw, routing);
+    return finalizePipelineLog(description, extraction, applyRoutingToPublicPricing(raw, routing));
 }

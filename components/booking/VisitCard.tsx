@@ -41,6 +41,8 @@ export interface Visit {
     capability_tag?: string;
   }>;
   detected_tasks?: string[];
+  /** Silent hydration from pricing — prefill scope-lock fields only */
+  clarifier_prefill?: Record<string, string | number>;
 }
 
 export function VisitCard({ visit, index }: { visit: Visit; index: number }) {

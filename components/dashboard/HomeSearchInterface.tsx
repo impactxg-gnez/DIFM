@@ -57,47 +57,6 @@ const FLAG_LABELS: Record<string, string> = {
     highWall: 'Above 2.5m',
 };
 
-const FALLBACK_WALL_OPTIONS = ['stud', 'brick', 'concrete', 'tile', 'unsure'];
-
-/** Map workbook input_type + id to UX control shape */
-function clarifyControlShape(
-    row: { tag?: string; inputType?: string; options?: string[] },
-): 'number' | 'select' | 'text' {
-    const t = (row.inputType || '').toLowerCase();
-    const tag = row.tag || '';
-    if (/^select|^dropdown|^choice|^list/i.test(t) || /\b(one_of|pick)\b/i.test(t)) return 'select';
-    if (/wall|substrate|surface|mounting/i.test(tag) && !/number|quantity|qty|count|how many/i.test(t)) return 'select';
-    if (/number|quantity|qty|integer|count|numeric|spinner/i.test(t) || /^item|^qty|^num|^how_many/i.test(tag))
-        return 'number';
-    return 'text';
-}
-
-function clarifySelectOptions(row: {
-    tag?: string;
-    inputType?: string;
-    options?: string[];
-}): string[] {
-    if (Array.isArray(row.options) && row.options.length > 0) return row.options;
-    const shape = clarifyControlShape(row);
-    const tag = row.tag || '';
-    if (shape === 'select' && /wall|substrate|surface|mount/i.test(tag)) return FALLBACK_WALL_OPTIONS;
-    return [];
-}
-
-/** Convert draft strings to scalar payload for MATRIX V2 API */
-function draftToAnswerPayload(draft: Record<string, string>): Record<string, string | number> {
-    const out: Record<string, string | number> = {};
-    for (const [k, raw] of Object.entries(draft)) {
-        const key = k.trim();
-        if (!key) continue;
-        const v = raw.trim();
-        if (!v) continue;
-        if (/^\d+$/.test(v)) out[key] = parseInt(v, 10);
-        else out[key] = v;
-    }
-    return out;
-}
-
 /** Warnings that block instant fixed price display (routed to review/quote in API). */
 const BOOKING_BLOCK_WARNINGS = new Set([
     'OUT_OF_SCOPE',
@@ -125,10 +84,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const [pricePreview, setPricePreview] = useState<any>(null);
     const [isPricingLoading, setIsPricingLoading] = useState(false);
 
-    /** Editable MATRIX V2 clarifiers — keys are workbook clarifier IDs */
-    const [clarifierDraft, setClarifierDraft] = useState<Record<string, string>>({});
-    const [debouncedAnswerPayload, setDebouncedAnswerPayload] = useState<Record<string, string | number>>({});
-
     // Modal State
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState('');
@@ -146,33 +101,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         return () => clearTimeout(timer);
     }, [description]);
 
-    useEffect(() => {
-        const t = setTimeout(() => {
-            setDebouncedAnswerPayload(draftToAnswerPayload(clarifierDraft));
-        }, 280);
-        return () => clearTimeout(t);
-    }, [clarifierDraft]);
-
-    useEffect(() => {
-        setClarifierDraft({});
-        setDebouncedAnswerPayload({});
-    }, [debouncedDesc]);
-
-    /** Seed editable fields from backend hydration once per description (avoid clobbering user edits). */
-    useEffect(() => {
-        const ca = pricePreview?.clarifier_answers as Record<string, string | number> | undefined;
-        if (!ca || !debouncedDesc) return;
-        setClarifierDraft((prev) => {
-            if (Object.keys(prev).length > 0) return prev;
-            const seeded: Record<string, string> = {};
-            for (const [k, v] of Object.entries(ca)) {
-                seeded[k] = typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v ?? '');
-            }
-            return seeded;
-        });
-    }, [debouncedDesc, pricePreview?.clarifier_answers]);
-
-    // Fetch Price Prediction
+    // Fetch Price Prediction (silent clarifier hydration — no inputs on landing page)
     useEffect(() => {
         const fetchPrice = async () => {
             if (!debouncedDesc.trim()) {
@@ -185,12 +114,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 const res = await fetch('/api/pricing/preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        category: 'HANDYMAN',
-                        description: debouncedDesc,
-                        clarifierAnswers:
-                            Object.keys(debouncedAnswerPayload).length > 0 ? debouncedAnswerPayload : undefined,
-                    }),
+                    body: JSON.stringify({ category: 'HANDYMAN', description: debouncedDesc }),
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -204,7 +128,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         };
 
         fetchPrice();
-    }, [debouncedDesc, debouncedAnswerPayload]);
+    }, [debouncedDesc]);
 
     const applyGeocodedAddress = (displayName: string) => {
         const full = displayName
@@ -340,21 +264,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                   })
                 : [];
     const jobLabels = previewJobs.map(resolveJobLabel);
-    const quantitiesMap = ((pricePreview?.quantitiesByJob || {}) as Record<string, number>) || {};
-    const qtySubtitle =
-        previewJobs.length > 0
-            ? previewJobs
-                  .map((id) => {
-                      const q = quantitiesMap[id];
-                      const label = resolveJobLabel(id);
-                      return typeof q === 'number' && q > 1 ? `${label} × ${q}` : label;
-                  })
-                  .join(' • ')
-            : '';
-    const matrixClarifiers: Array<{ tag?: string; question?: string }> = Array.isArray(pricePreview?.clarifiers)
-        ? pricePreview.clarifiers
-        : [];
-    const showMatrixClarifiers = matrixClarifiers.length > 0 && !isPricingLoading;
     const displayTitle =
         jobLabels.length === 1
             ? jobLabels[0]
@@ -524,107 +433,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     )}
 
-                    {showMatrixClarifiers && (
-                        <div className="bg-white/[0.06] border border-white/15 rounded-[20px] p-4 text-white/90 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
-                            <div>
-                                <p className="text-[11px] font-semibold text-white tracking-wide">Scope details</p>
-                                <p className="text-[10px] text-white/50 mt-0.5">
-                                    Pre-filled where we could read them from your message — edit anytime. Price updates
-                                    automatically.
-                                </p>
-                            </div>
-                            <div className="space-y-3">
-                                {matrixClarifiers.map((row: any) => {
-                                    const id = String(row.tag || '').trim();
-                                    if (!id) return null;
-                                    const label =
-                                        typeof row.question === 'string' && row.question.trim()
-                                            ? row.question
-                                            : id.replace(/_/g, ' ');
-                                    const shape = clarifyControlShape(row);
-                                    const selectOpts = clarifySelectOptions(row);
-                                    const dv =
-                                        clarifierDraft[id] ??
-                                        (row.value !== undefined ? String(row.value) : '');
-                                    return (
-                                        <div key={id} className="space-y-1.5">
-                                            <label
-                                                htmlFor={`cl-${id}`}
-                                                className="text-[11px] font-medium text-white/85 block tracking-wide"
-                                            >
-                                                {label}
-                                            </label>
-                                            {shape === 'number' && (
-                                                <input
-                                                    id={`cl-${id}`}
-                                                    type="number"
-                                                    min={1}
-                                                    step={1}
-                                                    inputMode="numeric"
-                                                    value={dv}
-                                                    onChange={(e) =>
-                                                        setClarifierDraft((prev) => ({
-                                                            ...prev,
-                                                            [id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    className="w-full bg-black/35 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-blue-500/50 min-h-[44px]"
-                                                    placeholder="e.g. 2"
-                                                />
-                                            )}
-                                            {shape === 'select' && (
-                                                <select
-                                                    id={`cl-${id}`}
-                                                    value={dv}
-                                                    onChange={(e) =>
-                                                        setClarifierDraft((prev) => ({
-                                                            ...prev,
-                                                            [id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    className="w-full bg-black/35 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 min-h-[44px]"
-                                                >
-                                                    <option value="" className="bg-[#1a1a1a] text-white/70">
-                                                        Select…
-                                                    </option>
-                                                    {selectOpts.map((opt) => (
-                                                        <option
-                                                            key={opt}
-                                                            value={opt}
-                                                            className="bg-[#1a1a1a] text-white"
-                                                        >
-                                                            {opt}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            )}
-                                            {shape === 'text' && (
-                                                <input
-                                                    id={`cl-${id}`}
-                                                    type="text"
-                                                    value={dv}
-                                                    onChange={(e) =>
-                                                        setClarifierDraft((prev) => ({
-                                                            ...prev,
-                                                            [id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    className="w-full bg-black/35 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-blue-500/50 min-h-[44px]"
-                                                    placeholder="Your answer"
-                                                />
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            {showFixedPath ? (
-                                <p className="text-[10px] text-white/45 pt-1">
-                                    Price reflects these answers — final lock when you book.
-                                </p>
-                            ) : null}
-                        </div>
-                    )}
-
                     {/* Review / quote path (low confidence, commercial, multi-service, vague, etc.) */}
                     {(pricePreview || isPricingLoading) && showReviewPath && (
                         <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-[24px] p-4 text-emerald-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
@@ -689,9 +497,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                     </span>
                                     {!isPricingLoading && subtitle && (
                                         <span className="text-[10px] text-black/65 mt-1">{subtitle}</span>
-                                    )}
-                                    {!isPricingLoading && qtySubtitle && (
-                                        <span className="text-[10px] text-black/65 mt-1 font-medium">{qtySubtitle}</span>
                                     )}
                                     <span className="text-[10px] text-black/50">Price locked when you book</span>
                                 </div>

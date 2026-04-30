@@ -8,6 +8,7 @@ import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingRouter';
 import { computeStuck } from '@/lib/jobStateMachine';
 import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispatchTracker';
 import { normalizeTier, normalizeJobForUi } from '@/lib/pricing/tierNormalization';
+import { attachClarifiersToVisits } from '@/lib/pricing/clarifierEngine';
 
 export async function POST(request: Request) {
     try {
@@ -203,12 +204,18 @@ export async function POST(request: Request) {
             orderBy: { createdAt: 'asc' }
         });
 
-        // Attach visit_id to the pricing visits in order
-        const quoteVisits = pricing.visits.map((v, idx) => ({
+        // Attach clarifier schema + silent MATRIX prefill for scope lock (not shown on landing page)
+        const quoteVisitsHydrated = attachClarifiersToVisits(pricing.visits as any, description);
+        const clarifierPrefill = pricing.clarifier_answers && typeof pricing.clarifier_answers === 'object'
+            ? pricing.clarifier_answers
+            : {};
+
+        const quoteVisits = quoteVisitsHydrated.map((v, idx) => ({
             ...v,
             tier: normalizeTier(v?.tier),
             display_price: Number(v?.price ?? 0),
-            visit_id: persistedVisits[idx]?.id || ''
+            visit_id: persistedVisits[idx]?.id || '',
+            clarifier_prefill: { ...clarifierPrefill },
         }));
 
         if (isSimulation) {

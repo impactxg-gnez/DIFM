@@ -236,7 +236,7 @@ class ExcelSource {
                 question: c.question,
                 input_type: c.type,
                 type: c.type,
-                options: [],
+                options: c.options && c.options.length > 0 ? c.options : [],
             });
         }
     }

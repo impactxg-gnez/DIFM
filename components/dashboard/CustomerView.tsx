@@ -169,6 +169,10 @@ export function CustomerView({ user }: { user: any }) {
             parts_notes: v.partsNotes || v.parts_notes,
             clarifiers: Array.isArray(v.clarifiers) ? v.clarifiers : undefined,
             detected_tasks: Array.isArray(v.detected_tasks) ? v.detected_tasks : undefined,
+            clarifier_prefill:
+                v.clarifier_prefill && typeof v.clarifier_prefill === 'object'
+                    ? v.clarifier_prefill
+                    : undefined,
         };
 
         console.log('[VisitRender]', {

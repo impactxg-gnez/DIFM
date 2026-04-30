@@ -32,24 +32,28 @@ interface Question {
 
 function normalizeInputType(raw: unknown): Question['type'] {
     const t = String(raw || 'text').toLowerCase();
-    if (t === 'boolean' || t === 'select' || t === 'number' || t === 'text') return t;
+    if (t === 'boolean' || t === 'number' || t === 'select' || t === 'text') return t;
+    if (/dropdown/.test(t) || /\b(select|choice|list)\b/.test(t)) return 'select';
+    if (/number|quantity|count|integer|numeric/.test(t)) return 'number';
     return 'text';
 }
 
 function buildQuestionsFromVisit(visit: any): Question[] {
     const matrixQuestions = Array.isArray(visit?.clarifiers) ? visit.clarifiers : [];
     if (matrixQuestions.length === 0) return [];
-    return matrixQuestions.map((q: any) => ({
-        id: q.id,
-        text: q.question,
-        type: normalizeInputType(q.inputType),
-        required: !!q.required,
-        options: Array.isArray(q.options) ? q.options : [],
-        affects_time: q.affects_time !== false,
-        affects_safety: q.affects_safety === true,
-        clarifier_type: q.clarifier_type || (q.affects_time === false ? 'SAFETY' : 'PRICING'),
-        capability_tag: q.capability_tag,
-    }));
+    return matrixQuestions
+        .map((q: any) => ({
+            id: String(q.id || q.tag || '').trim(),
+            text: q.question,
+            type: normalizeInputType(q.inputType),
+            required: !!q.required,
+            options: Array.isArray(q.options) ? q.options : [],
+            affects_time: q.affects_time !== false,
+            affects_safety: q.affects_safety === true,
+            clarifier_type: q.clarifier_type || (q.affects_time === false ? 'SAFETY' : 'PRICING'),
+            capability_tag: q.capability_tag,
+        }))
+        .filter((row: Question) => row.id.length > 0);
 }
 
 export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: ScopeLockProps) {
@@ -60,6 +64,12 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
     const [isSubmitting, setIsSubmitting] = useState(false);
     /** When visits have clarifiers: collect answers first, then show price + photos. */
     const [clarifierPhaseDone, setClarifierPhaseDone] = useState(false);
+    const prefilledVisitIdsRef = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        prefilledVisitIdsRef.current = new Set();
+    }, [visits]);
+
     const [preview, setPreview] = useState({
         status: 'OK' as 'OK' | 'OVERFLOW',
         bookingAllowed: true,
@@ -76,7 +86,6 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
     });
 
     const currentVisit = visits[currentVisitIndex] ?? null;
-    const prefilledVisitIdsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         setClarifierPhaseDone(false);
@@ -85,9 +94,9 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
         setScopeDescription((jobDescription || '').trim());
     }, [currentVisitIndex, jobDescription]);
 
-    /** One-time per visit: seed answers from job text (still editable). */
+    /** One-time per visit: seed answers from job text + silent MATRIX prefill (editable). */
     useEffect(() => {
-        if (!currentVisit || !jobDescription?.trim()) return;
+        if (!currentVisit) return;
         const vid = String(currentVisit.visit_id || currentVisit.id || '');
         if (!vid || prefilledVisitIdsRef.current.has(vid)) return;
         const qs = buildQuestionsFromVisit(currentVisit);
@@ -96,9 +105,21 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             if (!q.capability_tag || !visitCapability) return true;
             return String(q.capability_tag).toUpperCase() === visitCapability;
         });
-        const inferred = inferScopeAnswersFromDescription(jobDescription, scoped);
-        if (Object.keys(inferred).length > 0) {
-            setAnswers((prev) => ({ ...inferred, ...prev }));
+        const inferred =
+            jobDescription?.trim() ? inferScopeAnswersFromDescription(jobDescription.trim(), scoped) : {};
+        const pre = currentVisit.clarifier_prefill as Record<string, string | number> | undefined;
+        const preStr: Record<string, string> = {};
+        if (pre && typeof pre === 'object') {
+            for (const [k, v] of Object.entries(pre)) {
+                const key = String(k).trim();
+                if (!key) continue;
+                preStr[key] =
+                    typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v ?? '').trim();
+            }
+        }
+        const merged = { ...inferred, ...preStr };
+        if (Object.keys(merged).length > 0) {
+            setAnswers((prev) => ({ ...merged, ...prev }));
         }
         prefilledVisitIdsRef.current.add(vid);
     }, [currentVisit, jobDescription]);
@@ -262,7 +283,12 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
 
             {q.type === 'select' && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {q.options?.map((val: string) => (
+                    {(q.options?.length
+                        ? q.options
+                        : /wall|substrate|surface|mount/i.test(q.id)
+                          ? ['stud', 'brick', 'concrete', 'tile', 'unsure']
+                          : []
+                    ).map((val: string) => (
                         <Button
                             key={val}
                             variant={answers[q.id] === val ? 'default' : 'outline'}
