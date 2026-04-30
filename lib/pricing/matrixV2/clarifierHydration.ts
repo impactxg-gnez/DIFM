@@ -41,6 +41,22 @@ export function inferWallSurfaceFromText(normalized: string): string | undefined
     return undefined;
 }
 
+/** TV / monitor diagonal in inches (e.g. 55 inch TV → 55). */
+export function inferTvScreenInches(normalized: string): number | undefined {
+    const m =
+        normalized.match(/\b(\d{2,3})\s*-?\s*(inch|inches|"|″)\b/i) ||
+        normalized.match(/\b(\d{2,3})\s*-?\s*inch\b/i);
+    if (!m) return undefined;
+    const n = parseInt(m[1], 10);
+    if (!Number.isFinite(n) || n < 22 || n > 120) return undefined;
+    return n;
+}
+
+function matchesTvSizeClarifierId(clarifierId: string): boolean {
+    const low = clarifierId.trim().toLowerCase();
+    return /\b(tv.?size|screen.?size|display.?size|diagonal|panel|screen.?diag)\b/i.test(low);
+}
+
 function matchesItemCountKey(clarifierId: string): boolean {
     return ITEM_KEYS.test(clarifierId.trim());
 }
@@ -103,6 +119,15 @@ export function hydrateClarifiersFromText(
         }
         for (const cid of itemCids) {
             out[cid] = maxQ;
+        }
+    }
+
+    const inchGuess = inferTvScreenInches(normalized);
+    if (inchGuess !== undefined) {
+        for (const cid of allCids) {
+            if (matchesTvSizeClarifierId(cid)) {
+                out[cid] = inchGuess;
+            }
         }
     }
 

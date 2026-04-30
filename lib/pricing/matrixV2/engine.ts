@@ -2,17 +2,21 @@
  * Pricing + routing logic for MATRIX V2 workbook (JOB_ITEMS / PHRASE_MAPPING / PRICING_TIERS / CLARIFIERS).
  */
 
-import type { BookingMappingMeta } from '../bookingRoutingTypes';
+import type { BookingMappingMeta, MatrixV2ParserTrace } from '../bookingRoutingTypes';
 import { preprocessBookingInput } from '../inputPreprocess';
 import type { GeneratedVisit } from '../visitEngine';
 import type { MatrixV2Model, MatrixV2JobRow } from './types';
 import {
     applyClarifierAnswersToQuantityMap,
     hydrateClarifiersFromText,
+    inferTvScreenInches,
+    inferWallSurfaceFromText,
     mergeClarifierAnswerLayers,
     normalizeClientClarifierAnswers,
     wallMinuteAdjustmentForJobs,
 } from './clarifierHydration';
+import { buildFlexibleMatchingText, collapsedForPhraseMatch } from './flexText';
+import { inferJobsByKeywords } from './keywordJobInference';
 
 export const MATRIX_V2_REVIEW_MESSAGE = "We'll review your request and get back with a quote.";
 
@@ -36,14 +40,7 @@ export function normalizeV2Input(input: string): string {
         .trim();
 }
 
-/** Collapse fillers so matrix phrases match "clean apartment" ↔ "clean my apartment". */
-export function collapsedForPhraseMatch(normalized: string): string {
-    return normalized
-        .replace(/\b(my|the|our|a|an|me|to)\b/gi, ' ')
-        .replace(/\b(please|pls|could\s+you|can\s+you|i\s+need|need|want|wanna|gotta)\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+export { collapsedForPhraseMatch } from './flexText';
 
 /** True if phrase appears in input — allows optional qty between tokens (e.g. mount 20 tv). */
 export function phraseMatchesInput(phrase: string, normalized: string): boolean {
@@ -118,17 +115,36 @@ function qtyFromDigitOrWordMatch(n: string, re: RegExp): number | null {
     return w !== undefined ? w : null;
 }
 
+function isTvMountQuantityJob(jobId: string): boolean {
+    return (
+        jobId === 'tv_mount' ||
+        /tv.?mount|mount.?tv/i.test(jobId) ||
+        (jobId.includes('tv') && jobId.includes('mount'))
+    );
+}
+
 export function quantityForJob(jobId: string, normalized: string): number {
     const n = normalized.toLowerCase();
-    const pick = (re: RegExp) => {
-        const m = n.match(re);
+    const pick = (re: RegExp, hay: string = n) => {
+        const m = hay.match(re);
         if (!m) return null;
         const v = parseInt(m[1] || m[2], 10);
         return Number.isFinite(v) ? Math.max(1, v) : null;
     };
 
-    if (jobId === 'tv_mount') {
-        return pick(/\b(\d+)\s*tvs?\b/i) ?? pick(/\bmount\s+(\d+)\s*tvs?\b/i) ?? pick(/\bmount\s+(\d+)\b/i) ?? 1;
+    if (isTvMountQuantityJob(jobId)) {
+        const stripped = n.replace(/\b\d{1,3}\s*-?\s*(inch|inches|"|″|cm)\b/gi, ' ');
+        const multiTvs = pick(/\b(\d+)\s*tvs\b/i, stripped);
+        if (multiTvs) return multiTvs;
+        const numTv = stripped.match(/\b(\d+)\s+tv\b/i);
+        if (numTv) {
+            const idx = stripped.indexOf(numTv[0]);
+            const tail = stripped.slice(idx + numTv[0].length, idx + numTv[0].length + 16);
+            if (!/\b(inch|inches|"|″)\b/i.test(tail)) {
+                return Math.max(1, parseInt(numTv[1], 10));
+            }
+        }
+        return pick(/\bmount\s+(\d+)\s*tvs?\b/i, stripped) ?? 1;
     }
     if (jobId === 'shelf_install') {
         return (
@@ -230,21 +246,124 @@ function formatMatrixV2Clarifiers(
     }));
 }
 
+function mergeKnownJobIds(model: MatrixV2Model, lists: string[][]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const list of lists) {
+        for (const id of list) {
+            if (!id || seen.has(id)) continue;
+            if (!model.jobs.has(id)) continue;
+            seen.add(id);
+            out.push(id);
+        }
+    }
+    return out;
+}
+
+function classifyParserResolution(params: {
+    phrase_job_ids: string[];
+    phrase_job_ids_flex: string[];
+    keyword_job_ids: string[];
+    merged: string[];
+}): MatrixV2ParserTrace['resolution'] {
+    if (params.merged.length === 0) return 'none';
+    const p = params.phrase_job_ids.length > 0;
+    const pf = params.phrase_job_ids_flex.length > 0;
+    const kw = params.keyword_job_ids.length > 0;
+    if (kw && !p && !pf) return 'keyword';
+    if ((p || pf) && kw) return 'phrase+keyword';
+    if (pf && !p) return 'phrase_flex';
+    if (p) return 'phrase';
+    return 'mixed';
+}
+
+function resolveMatrixV2JobIds(model: MatrixV2Model, normalized: string): {
+    jobIds: string[];
+    parser: MatrixV2ParserTrace;
+} {
+    const flexibleText = buildFlexibleMatchingText(normalized);
+    const phrase_job_ids = matchAllJobIdsFromPhrases(model, normalized);
+    const phrase_job_ids_flex = matchAllJobIdsFromPhrases(model, flexibleText);
+    const kw = inferJobsByKeywords(model, normalized);
+    const merged = mergeKnownJobIds(model, [phrase_job_ids, phrase_job_ids_flex, kw.jobIds]);
+
+    const entities: Record<string, string | number> = {};
+    const wall = inferWallSurfaceFromText(normalized);
+    if (wall) entities.WALL_TYPE = wall;
+    const inch = inferTvScreenInches(normalized);
+    if (inch !== undefined) entities.TV_SIZE = inch;
+
+    return {
+        jobIds: merged,
+        parser: {
+            normalized_input: normalized,
+            flexible_match_text: flexibleText,
+            phrase_job_ids,
+            phrase_job_ids_flex,
+            keyword_job_ids: kw.jobIds,
+            keywords_matched: kw.keywords_matched,
+            merged_job_ids: merged,
+            resolution: classifyParserResolution({
+                phrase_job_ids,
+                phrase_job_ids_flex,
+                keyword_job_ids: kw.jobIds,
+                merged,
+            }),
+            entities: { ...entities },
+        },
+    };
+}
+
+function enrichParserEntitiesFromAnswers(
+    parser: MatrixV2ParserTrace,
+    merged: Record<string, string | number>,
+    jobIds: string[],
+    qtyMap: Record<string, number>,
+): void {
+    const e = { ...parser.entities };
+    for (const [k, val] of Object.entries(merged)) {
+        const up = k.toUpperCase().replace(/\s+/g, '_');
+        if (/(ITEM_COUNT|QUANTITY|NUM_ITEMS|HOW_MANY|^COUNT$|N_ITEMS|NUM_BLIND)/i.test(up)) {
+            e.ITEM_COUNT = val;
+        }
+        if (/(TV.?SIZE|SCREEN.?SIZE|DISPLAY.?SIZE|DIAGONAL|SCREEN.?DIAG|PANEL.?SIZE)/i.test(k)) {
+            e.TV_SIZE = val;
+        }
+        if (/(WALL.?TYPE|SURFACE|SUBSTRATE|INSTALL.?SURFACE)/i.test(up)) {
+            e.WALL_TYPE = val;
+        }
+    }
+    if (jobIds.length === 1 && e.ITEM_COUNT === undefined && qtyMap[jobIds[0]]) {
+        e.ITEM_COUNT = qtyMap[jobIds[0]];
+    }
+    parser.entities = e;
+}
+
 export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, opts?: MatrixV2RouteOptions) {
     const normalized = normalizeV2Input(userInput);
     const parts = normalized.split(' and ').map((s) => s.trim()).filter(Boolean);
 
-    const jobIds = matchAllJobIdsFromPhrases(model, normalized);
+    const { jobIds, parser: parserTrace } = resolveMatrixV2JobIds(model, normalized);
 
     /** Step 5: vague / no mapping */
-    if (jobIds.length === 0 || !normalized.trim()) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_NO_MATCH'], []);
+    if (!normalized.trim()) {
+        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_NO_MATCH'], [], {
+            parser: parserTrace,
+        });
+    }
+
+    if (jobIds.length === 0) {
+        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_NO_MATCH'], [], {
+            parser: parserTrace,
+        });
     }
 
     /** Step 5: unknown job safeguard */
     for (const id of jobIds) {
         if (!model.jobs.has(id)) {
-            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_JOB_UNKNOWN'], []);
+            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_JOB_UNKNOWN'], [], {
+                parser: parserTrace,
+            });
         }
     }
 
@@ -257,6 +376,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     const clientAnswers = normalizeClientClarifierAnswers(opts?.clarifierAnswers);
     const clarifierAnswersMerged = mergeClarifierAnswerLayers(hydratedFromText, clientAnswers);
     applyClarifierAnswersToQuantityMap(model, jobIds, qtyMap, clarifierAnswersMerged);
+    enrichParserEntitiesFromAnswers(parserTrace, clarifierAnswersMerged, jobIds, qtyMap);
 
     const cleaningUnits = inferCleaningUnits(normalized);
 
@@ -281,6 +401,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                         wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
                     clarifierAnswers: clarifierAnswersMerged,
                     clarifierHydration: hydratedFromText,
+                    parser: parserTrace,
                 },
             );
         }
@@ -306,6 +427,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                     wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
                 clarifierAnswers: clarifierAnswersMerged,
                 clarifierHydration: hydratedFromText,
+                parser: parserTrace,
             },
         );
     }
@@ -328,6 +450,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                 distinctRoutingBuckets: categories.length,
                 clarifierAnswers: clarifierAnswersMerged,
                 clarifierHydration: hydratedFromText,
+                parser: parserTrace,
             },
         );
     }
@@ -372,6 +495,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                     wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
                 clarifierAnswers: clarifierAnswersMerged,
                 clarifierHydration: hydratedFromText,
+                parser: parserTrace,
             },
         );
     }
@@ -389,7 +513,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         quantityByJob: qtyMap,
         estimatedTotalMinutes: totalMinutes,
         distinctRoutingBucketCount: 1,
-        matrixV2: { routing: 'FIXED_PRICE' as const },
+        matrixV2: { routing: 'FIXED_PRICE' as const, parser: parserTrace },
         clarifierAnswers: clarifierAnswersMerged,
         clarifierHydration: hydratedFromText,
     };
@@ -478,12 +602,13 @@ function computeEstimatedMinutes(jobIds: string[], qtyMap: Record<string, number
 }
 
 export interface MatrixV2ReviewMetaExtras {
-    detectedJobIds: string[];
-    quantityByJob: Record<string, number>;
-    estimatedMinutes: number;
+    detectedJobIds?: string[];
+    quantityByJob?: Record<string, number>;
+    estimatedMinutes?: number;
     distinctRoutingBuckets?: number;
     clarifierAnswers?: Record<string, string | number>;
     clarifierHydration?: Record<string, string | number>;
+    parser?: MatrixV2ParserTrace;
 }
 
 function buildReviewResult(
@@ -543,7 +668,11 @@ function buildReviewResult(
             quantityByJob: { ...qtyMap },
             estimatedTotalMinutes: metaExtras?.estimatedMinutes ?? 0,
             distinctRoutingBucketCount: bucketCount,
-            matrixV2: { routing: 'REVIEW_QUOTE' as const, reviewReason: warnings[0] },
+            matrixV2: {
+                routing: 'REVIEW_QUOTE' as const,
+                reviewReason: warnings[0],
+                ...(metaExtras?.parser ? { parser: metaExtras.parser } : {}),
+            },
             ...(metaExtras?.clarifierAnswers
                 ? { clarifierAnswers: metaExtras.clarifierAnswers }
                 : {}),

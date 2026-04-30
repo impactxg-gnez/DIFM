@@ -80,6 +80,9 @@ export async function persistBookingPipelineLog(args: PersistBookingPipelineLogA
                 ? ('OUT_OF_SCOPE' as const)
                 : (result.pipeline ?? extraction?.pipeline ?? null),
             total_minutes: extraction?.total_minutes ?? null,
+            ...(extraction?.mappingMeta?.matrixV2?.parser
+                ? { parser_trace: extraction.mappingMeta.matrixV2.parser }
+                : {}),
         },
         clarifier_answers: { ...(result.clarifier_answers ?? {}) },
         clarifier_hydration: { ...(result.clarifier_hydration ?? {}) },
