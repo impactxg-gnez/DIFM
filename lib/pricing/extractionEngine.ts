@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { routeAndPriceMatrixV2 } from './matrixV2/engine';
+import { persistMatrixV2AuditLog } from './matrixV2/audit';
+import { routeAndPriceMatrixV2, normalizeV2Input } from './matrixV2/engine';
 import { excelSource } from './excelLoader';
 import { buildVisitsWithQuantities, GeneratedVisit } from './visitEngine';
 import { attachClarifiersToVisits } from './clarifierEngine';
@@ -35,7 +36,7 @@ export interface ExtractionPipelineResult {
     quantities: Record<string, number>;
     visits: GeneratedVisit[];
     price: number;
-    clarifiers: Array<{ tag: string; question: string; capability_tag?: string; affects_time?: boolean; affects_safety?: boolean }>;
+    clarifiers: Array<{ tag: string; question: string; capability_tag?: string; affects_time?: boolean; affects_safety?: boolean; inputType?: string }>;
     flags: {
         usedDeterministicPipeline: boolean;
         usedGenericFallback: boolean;
@@ -47,6 +48,8 @@ export interface ExtractionPipelineResult {
     /** UX / v1Pricing: clarify, commercial quote, partial parse, etc. */
     warnings?: string[];
     mappingMeta?: BookingMappingMeta;
+    /** Set when MATRIX V2 workbook path ran (classification + pricing). */
+    pipeline?: 'MATRIX_V2' | 'LEGACY';
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -138,8 +141,23 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
     const v2 = excelSource.getMatrixV2Model();
     if (v2 && excelSource.isMatrixV2()) {
         const v2Result = routeAndPriceMatrixV2(v2, userInput);
-        extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: v2Result });
-        return v2Result;
+        const result: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };
+        extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
+        const qty = result.mappingMeta?.quantityByJob ?? result.quantities ?? {};
+        await persistMatrixV2AuditLog({
+            rawInput: userInput,
+            normalizedInput: normalizeV2Input(userInput),
+            detectedJobIds: result.jobs.length > 0 ? result.jobs : Object.keys(qty),
+            quantityByJob: qty as Record<string, number>,
+            routing: result.mappingMeta?.matrixV2?.routing ?? 'REVIEW_QUOTE',
+            routingWarnings: result.warnings ?? [],
+            reviewReason: result.mappingMeta?.matrixV2?.reviewReason,
+            totalPrice: result.price,
+            tier: result.tier,
+            clarifierIds: (result.clarifiers ?? []).map((c) => c.tag),
+            minutesEstimated: result.mappingMeta?.estimatedTotalMinutes ?? result.total_minutes,
+        });
+        return result;
     }
 
     const jobItems = Array.from(excelSource.jobItems.values());

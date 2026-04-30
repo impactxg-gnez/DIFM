@@ -35,6 +35,10 @@ export async function POST(request: Request) {
             routing: pricing.routing,
             confidenceLevel: pricing.confidenceLevel,
             canSubmitQuoteRequest: pricing.canSubmitQuoteRequest,
+            clarifiers: pricing.clarifiers ?? [],
+            finalJobs: pricing.finalJobs ?? [],
+            quantitiesByJob: pricing.quantitiesByJob ?? {},
+            pipeline: pricing.pipeline,
         });
     } catch (error) {
         console.error('Price preview error', error);

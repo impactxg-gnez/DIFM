@@ -1,6 +1,6 @@
-export type UiTier = 'H1' | 'H2' | 'H3';
+export type UiTier = 'H1' | 'H2' | 'H3' | 'H4' | 'C1' | 'C2' | 'C3' | 'C4';
 
-const VALID_UI_TIERS = new Set<UiTier>(['H1', 'H2', 'H3']);
+const VALID_UI_TIERS = new Set<UiTier>(['H1', 'H2', 'H3', 'H4', 'C1', 'C2', 'C3', 'C4']);
 
 function normalizeTierToken(raw: string): string {
   return raw.trim().toUpperCase();
@@ -13,7 +13,9 @@ export function normalizeTier(tier: unknown): UiTier {
     return raw as UiTier;
   }
 
-  console.error('Invalid tier received from backend', tier);
+  if (raw.length > 0 && !raw.includes('→') && !raw.includes('->')) {
+    console.error('Invalid tier received from backend', tier);
+  }
 
   // Transitional values like "E2 → H3" or "E2 -> H3"
   if (raw.includes('→') || raw.includes('->')) {

@@ -24,6 +24,15 @@ export function normalizeV2Input(input: string): string {
         .trim();
 }
 
+/** Collapse fillers so matrix phrases match "clean apartment" ↔ "clean my apartment". */
+export function collapsedForPhraseMatch(normalized: string): string {
+    return normalized
+        .replace(/\b(my|the|our|a|an|me|to)\b/gi, ' ')
+        .replace(/\b(please|pls|could\s+you|can\s+you|i\s+need|need|want|wanna|gotta)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 /** True if phrase appears in input — allows optional qty between tokens (e.g. mount 20 tv). */
 export function phraseMatchesInput(phrase: string, normalized: string): boolean {
     const p = phrase.trim().toLowerCase();
@@ -41,12 +50,16 @@ export function phraseMatchesInput(phrase: string, normalized: string): boolean 
 
 /** All distinct job_item_ids whose phrase matches anywhere in the input (longer phrases checked first). */
 export function matchAllJobIdsFromPhrases(model: MatrixV2Model, normalized: string): string[] {
+    const collapsed = collapsedForPhraseMatch(normalized);
     const sorted = [...model.phrases].sort((a, b) => b.phrase.length - a.phrase.length);
     const seen = new Set<string>();
     const out: string[] = [];
     for (const row of sorted) {
         if (!row.job_item_id || !row.phrase) continue;
-        if (!phraseMatchesInput(row.phrase, normalized)) continue;
+        const hit =
+            phraseMatchesInput(row.phrase, normalized) ||
+            phraseMatchesInput(row.phrase, collapsed);
+        if (!hit) continue;
         if (seen.has(row.job_item_id)) continue;
         seen.add(row.job_item_id);
         out.push(row.job_item_id);
@@ -69,6 +82,30 @@ function inferCleaningUnits(normalized: string): number {
     return 1;
 }
 
+const NUM_WORDS: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+};
+
+/** Parse qty from `3 things` or `three things`. */
+function qtyFromDigitOrWordMatch(n: string, re: RegExp): number | null {
+    const m = n.match(re);
+    if (!m) return null;
+    const g = m[1];
+    if (!g) return null;
+    if (/^\d+$/.test(g)) return Math.max(1, parseInt(g, 10));
+    const w = NUM_WORDS[g.toLowerCase()];
+    return w !== undefined ? w : null;
+}
+
 function quantityForJob(jobId: string, normalized: string): number {
     const n = normalized.toLowerCase();
     const pick = (re: RegExp) => {
@@ -82,10 +119,19 @@ function quantityForJob(jobId: string, normalized: string): number {
         return pick(/\b(\d+)\s*tvs?\b/i) ?? pick(/\bmount\s+(\d+)\s*tvs?\b/i) ?? pick(/\bmount\s+(\d+)\b/i) ?? 1;
     }
     if (jobId === 'shelf_install') {
-        return pick(/\b(\d+)\s*(shelves|shelf)\b/i) ?? 1;
+        return (
+            qtyFromDigitOrWordMatch(n, /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(shelves|shelf)\b/i) ??
+            pick(/\b(\d+)\s*(shelves|shelf)\b/i) ??
+            1
+        );
     }
     if (jobId === 'blind_install') {
-        return pick(/\b(\d+)\s*blinds?\b/i) ?? 1;
+        return (
+            qtyFromDigitOrWordMatch(n, /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+blinds?\b/i) ??
+            qtyFromDigitOrWordMatch(n, /\bblinds?\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i) ??
+            pick(/\b(\d+)\s*blinds?\b/i) ??
+            1
+        );
     }
     if (jobId === 'curtain_rail') {
         return pick(/\b(\d+)\s*(rails?|curtains?)\b/i) ?? 1;
@@ -100,11 +146,6 @@ function quantityForJob(jobId: string, normalized: string): number {
         return pick(/\b(\d+)\s*(machines?|dishwashers?|washers?)\b/i) ?? 1;
     }
     return 1;
-}
-
-function handymanPriceForTier(tiers: MatrixV2Model['handymanTiers'], tierCode: string): number {
-    const row = tiers.find((t) => t.tier === tierCode);
-    return row ? Number(row.price_gbp) || 0 : 0;
 }
 
 /** Combined handyman tier from total minutes ceiling. */
@@ -129,9 +170,12 @@ function cleaningPrice(job: MatrixV2JobRow, model: MatrixV2Model, bhkBands: numb
     return Math.max(pSize, pBase);
 }
 
-function mergeClarifiers(model: MatrixV2Model, jobIds: string[]): Array<{ tag: string; question: string }> {
+function mergeClarifiers(
+    model: MatrixV2Model,
+    jobIds: string[],
+): Array<{ tag: string; question: string; inputType?: string }> {
     const seen = new Set<string>();
-    const out: Array<{ tag: string; question: string }> = [];
+    const out: Array<{ tag: string; question: string; inputType?: string }> = [];
     for (const jid of jobIds) {
         const row = model.jobs.get(jid);
         if (!row) continue;
@@ -142,6 +186,7 @@ function mergeClarifiers(model: MatrixV2Model, jobIds: string[]): Array<{ tag: s
             out.push({
                 tag: cid,
                 question: def?.question ?? cid,
+                inputType: def?.type,
             });
         }
     }
@@ -181,7 +226,17 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
         let q = qtyMap[id];
         if (row.category === 'CLEANING') q = cleaningUnits;
         if (q > th) {
-            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_QUANTITY_REVIEW'], mergeClarifiers(model, jobIds));
+            return buildReviewResult(
+                parts,
+                MATRIX_V2_REVIEW_MESSAGE,
+                ['MATRIX_V2_QUANTITY_REVIEW'],
+                mergeClarifiers(model, jobIds),
+                {
+                    detectedJobIds: [...jobIds],
+                    quantityByJob: { ...qtyMap },
+                    estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+                },
+            );
         }
     }
 
@@ -199,58 +254,61 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
 
     /** Multi-job different category → REVIEW */
     if (categories.length > 1) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_CROSS_CATEGORY'], mergeClarifiers(model, jobIds));
+        return buildReviewResult(
+            parts,
+            MATRIX_V2_REVIEW_MESSAGE,
+            ['MATRIX_V2_CROSS_CATEGORY'],
+            mergeClarifiers(model, jobIds),
+            {
+                detectedJobIds: [...jobIds],
+                quantityByJob: { ...qtyMap },
+                estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+                distinctRoutingBuckets: categories.length,
+            },
+        );
     }
 
     const category = categories[0] || 'HANDYMAN';
 
-    const totalMinutes = jobIds.reduce((sum, id) => {
-        const row = model.jobs.get(id)!;
-        return sum + row.max_minutes * qtyMap[id];
-    }, 0) + Math.max(0, jobIds.length - 1) * 10;
+    const totalMinutes =
+        jobIds.reduce((sum, id) => {
+            const row = model.jobs.get(id)!;
+            return sum + row.max_minutes * qtyMap[id];
+        }, 0) + Math.max(0, jobIds.length - 1) * 10;
 
-    /** Multi-job same category: combined time ceiling */
-    if (jobIds.length > 1 && category === 'HANDYMAN' && totalMinutes >= 240) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_TIME_BUNDLE'], mergeClarifiers(model, jobIds));
-    }
-
-    /** Pricing */
+    /** Pricing (single source: matrix tiers; handyman uses combined minutes incl. quantity × max_minutes per job) */
     let totalPrice = 0;
     let displayTier = 'H1';
-    let displayMinutes = totalMinutes;
+    const displayMinutes = totalMinutes;
 
     if (category === 'HANDYMAN') {
-        if (jobIds.length === 1) {
-            const j = model.jobs.get(jobIds[0])!;
-            displayTier = j.base_tier;
-            totalPrice = handymanPriceForTier(model.handymanTiers, j.base_tier);
-            if (!totalPrice) {
-                const fallback = handymanTierForMinutes(j.max_minutes * qtyMap[jobIds[0]], model.handymanTiers);
-                totalPrice = fallback?.price_gbp ?? 0;
-                displayTier = fallback?.tier ?? displayTier;
-            }
-        } else {
-            const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
-            totalPrice = t?.price_gbp ?? 0;
-            displayTier = t?.tier ?? displayTier;
-        }
+        const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
+        totalPrice = t?.price_gbp ?? 0;
+        displayTier = t?.tier ?? 'H1';
     } else if (category === 'CLEANING') {
-        if (jobIds.length > 1) {
-            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_CLEANING_BUNDLE'], mergeClarifiers(model, jobIds));
-        }
-        const j = model.jobs.get(jobIds[0])!;
         const bhk = inferCleaningBhk(normalized);
-        totalPrice = cleaningPrice(j, model, bhk);
+        totalPrice = jobIds.reduce((sum, id) => sum + cleaningPrice(model.jobs.get(id)!, model, bhk), 0);
         displayTier = `C${Math.min(4, Math.max(1, bhk))}`;
     }
 
     if (!totalPrice || totalPrice <= 0) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_PRICE_FAIL'], mergeClarifiers(model, jobIds));
+        return buildReviewResult(
+            parts,
+            MATRIX_V2_REVIEW_MESSAGE,
+            ['MATRIX_V2_PRICE_FAIL'],
+            mergeClarifiers(model, jobIds),
+            {
+                detectedJobIds: [...jobIds],
+                quantityByJob: { ...qtyMap },
+                estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+            },
+        );
     }
 
     const clarifiers = mergeClarifiers(model, jobIds).map((c) => ({
         tag: c.tag,
         question: c.question,
+        ...(c.inputType ? { inputType: c.inputType } : {}),
         affects_time: true,
         affects_safety: false as const,
     }));
@@ -343,12 +401,30 @@ function humanize(id: string): string {
     return id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function computeEstimatedMinutes(jobIds: string[], qtyMap: Record<string, number>, model: MatrixV2Model): number {
+    return (
+        jobIds.reduce((sum, id) => sum + (model.jobs.get(id)?.max_minutes ?? 0) * qtyMap[id], 0) +
+        Math.max(0, jobIds.length - 1) * 10
+    );
+}
+
+export interface MatrixV2ReviewMetaExtras {
+    detectedJobIds: string[];
+    quantityByJob: Record<string, number>;
+    estimatedMinutes: number;
+    distinctRoutingBuckets?: number;
+}
+
 function buildReviewResult(
     parts: string[],
     message: string,
     warnings: string[],
-    clarifiers: Array<{ tag: string; question: string }>,
+    clarifiers: Array<{ tag: string; question: string; inputType?: string }>,
+    metaExtras?: MatrixV2ReviewMetaExtras,
 ) {
+    const jobIds = metaExtras?.detectedJobIds ?? [];
+    const qtyMap = metaExtras?.quantityByJob ?? {};
+    const bucketCount = metaExtras?.distinctRoutingBuckets ?? (jobIds.length === 0 ? 0 : 1);
     return {
         jobs: [],
         quantitiesList: [],
@@ -362,6 +438,7 @@ function buildReviewResult(
         clarifiers: clarifiers.map((c) => ({
             tag: c.tag,
             question: c.question,
+            ...(c.inputType ? { inputType: c.inputType } : {}),
             affects_time: true,
             affects_safety: false,
         })),
@@ -375,14 +452,14 @@ function buildReviewResult(
         message,
         warnings,
         mappingMeta: {
-            distinctRuleJobCount: 0,
-            allResolutionSpecific: false,
+            distinctRuleJobCount: jobIds.length,
+            allResolutionSpecific: jobIds.length > 0,
             usedGenericFallback: false,
             partClauseCount: parts.length,
-            distinctPricingJobCount: 0,
-            quantityByJob: {},
-            estimatedTotalMinutes: 0,
-            distinctRoutingBucketCount: 0,
+            distinctPricingJobCount: jobIds.length,
+            quantityByJob: { ...qtyMap },
+            estimatedTotalMinutes: metaExtras?.estimatedMinutes ?? 0,
+            distinctRoutingBucketCount: bucketCount,
             matrixV2: { routing: 'REVIEW_QUOTE' as const, reviewReason: warnings[0] },
         },
     };

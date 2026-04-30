@@ -22,6 +22,12 @@ export interface V1PricingResult {
     mappingMeta?: BookingMappingMeta | null;
     /** True when customer may submit a review/quote request (not out of scope). */
     canSubmitQuoteRequest: boolean;
+    /** Detected job_item_ids after classification (matrix or legacy). */
+    finalJobs?: string[];
+    /** Quantity per job_item_id from extraction / matrix. */
+    quantitiesByJob?: Record<string, number>;
+    /** Which pricing path produced this result. */
+    pipeline?: 'MATRIX_V2' | 'LEGACY';
 }
 
 function applyRoutingToPublicPricing(pricing: V1PricingResult, routing: BookingRouting): V1PricingResult {
@@ -64,6 +70,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             confidenceLevel: 'LOW',
             mappingMeta: null,
             canSubmitQuoteRequest: true,
+            finalJobs: [],
+            quantitiesByJob: {},
+            pipeline: 'LEGACY',
         };
     }
 
@@ -73,6 +82,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
 
     if (extraction.jobs.length === 0) {
         const fromPipeline = extraction.warnings?.length ? extraction.warnings : ['NEEDS_CLARIFICATION'];
+        const qb = extraction.mappingMeta?.quantityByJob ?? extraction.quantities ?? {};
+        const pipelineFlag =
+            extraction.pipeline ?? (extraction.mappingMeta?.matrixV2 ? ('MATRIX_V2' as const) : ('LEGACY' as const));
         const base: V1PricingResult = {
             visits: [],
             totalPrice: 0,
@@ -87,6 +99,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             confidenceLevel: 'LOW',
             mappingMeta: extraction.mappingMeta ?? null,
             canSubmitQuoteRequest: true,
+            finalJobs: Object.keys(qb),
+            quantitiesByJob: qb,
+            pipeline: pipelineFlag,
         };
         return base;
     }
@@ -114,6 +129,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
 
     // 5. Clarifier Binding (Excel-Driven) + hybrid routing
     const mergedWarnings = [...(extraction.warnings ?? [])].filter(Boolean);
+    const quantitiesByJob = extraction.mappingMeta?.quantityByJob ?? extraction.quantities ?? {};
+    const pipelineFlag =
+        extraction.pipeline ?? (extraction.mappingMeta?.matrixV2 ? ('MATRIX_V2' as const) : ('LEGACY' as const));
     const raw: V1PricingResult = {
         visits,
         totalPrice,
@@ -125,6 +143,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         routing: 'FIXED_PRICE',
         confidenceLevel: 'HIGH',
         canSubmitQuoteRequest: true,
+        finalJobs: [...extraction.jobs],
+        quantitiesByJob,
+        pipeline: pipelineFlag,
     };
 
     const { routing, confidenceLevel, reviewMessage } = computeBookingRouting(raw, extraction.mappingMeta ?? null);

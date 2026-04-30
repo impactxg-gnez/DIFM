@@ -20,6 +20,22 @@ async function assertReview(description: string) {
     }
 }
 
+async function assertQuantity(description: string, jobId: string, expectedQty: number) {
+    const p = await calculateV1Pricing(description);
+    const qb = p.quantitiesByJob?.[jobId];
+    if (qb !== expectedQty) {
+        throw new Error(`Expected qty ${expectedQty} for ${jobId} on "${description}" — got ${qb}, pipeline=${p.pipeline}`);
+    }
+}
+
+async function assertClarifierCount(description: string, min: number) {
+    const p = await calculateV1Pricing(description);
+    const n = p.clarifiers?.length ?? 0;
+    if (n < min) {
+        throw new Error(`Expected >=${min} clarifiers for "${description}" — got ${n}`);
+    }
+}
+
 async function main() {
     excelSource.reload();
     if (!excelSource.isMatrixV2()) {
@@ -29,8 +45,11 @@ async function main() {
     }
 
     await assertFixed('mount tv');
+    await assertClarifierCount('mount tv', 1);
     await assertFixed('install blinds');
     await assertFixed('clean apartment');
+    await assertFixed('clean my apartment');
+    await assertQuantity('install 2 blinds', 'blind_install', 2);
     await assertFixed('mount tv and install shelf');
     await assertFixed('install blinds and install curtain rail');
     await assertReview('install 50 desks');

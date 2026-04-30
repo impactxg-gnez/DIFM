@@ -25,6 +25,7 @@ interface HomeSearchInterfaceProps {
 }
 
 const JOB_LABELS: Record<string, string> = {
+    // Legacy / V1 ids
     tv_mount_standard: 'TV Mount',
     shelf_install_single: 'Shelf Install',
     install_shelves_set: 'Shelf Install',
@@ -33,6 +34,21 @@ const JOB_LABELS: Record<string, string> = {
     pic_hang: 'Picture Hang',
     handyman_small_repair: 'Minor Repair',
     appliance_install: 'Appliance Install',
+    // MATRIX V2 workbook ids
+    tv_mount: 'TV Mount',
+    shelf_install: 'Shelf Install',
+    blind_install: 'Blind Install',
+    curtain_rail: 'Curtain Rail',
+    furniture_assembly: 'Furniture Assembly',
+    wall_repair: 'Wall Repair',
+    picture_hang: 'Picture Hang',
+    washing_machine_install: 'Washing Machine Install',
+    dishwasher_install: 'Dishwasher Install',
+    home_cleaning: 'Home Cleaning',
+    home_cleaning_standard: 'Home Cleaning',
+    home_cleaning_deep: 'Deep Cleaning',
+    bathroom_cleaning: 'Bathroom Cleaning',
+    kitchen_cleaning: 'Kitchen Cleaning',
 };
 
 const FLAG_LABELS: Record<string, string> = {
@@ -235,18 +251,34 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
 
     const trimmedDescription = description.trim();
     const isTooShortForExtraction = trimmedDescription.length > 0 && trimmedDescription.length < 6;
-    const previewJobs: string[] = Array.isArray(pricePreview?.finalJobs)
-        ? pricePreview.finalJobs
-        : Array.isArray(pricePreview?.visits)
-            ? pricePreview.visits.flatMap((visit: any) => {
-                const primary = String(visit?.primary_job_item?.job_item_id || '').trim();
-                const addons = Array.isArray(visit?.addon_job_items)
-                    ? visit.addon_job_items.map((a: any) => String(a?.job_item_id || '').trim())
-                    : [];
-                return [primary, ...addons].filter(Boolean);
-            })
-            : [];
+    const previewJobs: string[] =
+        Array.isArray(pricePreview?.finalJobs) && pricePreview.finalJobs.length > 0
+            ? pricePreview.finalJobs
+            : Array.isArray(pricePreview?.visits)
+                ? pricePreview.visits.flatMap((visit: any) => {
+                    const primary = String(visit?.primary_job_item?.job_item_id || '').trim();
+                    const addons = Array.isArray(visit?.addon_job_items)
+                        ? visit.addon_job_items.map((a: any) => String(a?.job_item_id || '').trim())
+                        : [];
+                    return [primary, ...addons].filter(Boolean);
+                  })
+                : [];
     const jobLabels = previewJobs.map(resolveJobLabel);
+    const quantitiesMap = ((pricePreview?.quantitiesByJob || {}) as Record<string, number>) || {};
+    const qtySubtitle =
+        previewJobs.length > 0
+            ? previewJobs
+                  .map((id) => {
+                      const q = quantitiesMap[id];
+                      const label = resolveJobLabel(id);
+                      return typeof q === 'number' && q > 1 ? `${label} × ${q}` : label;
+                  })
+                  .join(' • ')
+            : '';
+    const matrixClarifiers: Array<{ tag?: string; question?: string }> = Array.isArray(pricePreview?.clarifiers)
+        ? pricePreview.clarifiers
+        : [];
+    const showMatrixClarifiers = matrixClarifiers.length > 0 && !isPricingLoading;
     const displayTitle =
         jobLabels.length === 1
             ? jobLabels[0]
@@ -416,6 +448,23 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     )}
 
+                    {/* Matrix clarifiers (from workbook) — before price or quote path */}
+                    {showMatrixClarifiers && (
+                        <div className="bg-white/[0.06] border border-white/15 rounded-[20px] p-4 text-white/90 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-2">
+                            <p className="text-[11px] font-semibold text-white tracking-wide">We’ll confirm details with you</p>
+                            <ul className="list-disc list-inside space-y-1.5 marker:text-blue-400/80">
+                                {matrixClarifiers.map((c) => (
+                                    <li key={c.tag || c.question} className="text-[11px] text-white/80 leading-snug pl-0.5">
+                                        {typeof c.question === 'string' && c.question.trim() ? c.question : c.tag}
+                                    </li>
+                                ))}
+                            </ul>
+                            {showFixedPath ? (
+                                <p className="text-[10px] text-white/45 pt-1">Price below reflects this scope — final lock at booking.</p>
+                            ) : null}
+                        </div>
+                    )}
+
                     {/* Review / quote path (low confidence, commercial, multi-service, vague, etc.) */}
                     {(pricePreview || isPricingLoading) && showReviewPath && (
                         <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-[24px] p-4 text-emerald-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
@@ -480,6 +529,9 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                     </span>
                                     {!isPricingLoading && subtitle && (
                                         <span className="text-[10px] text-black/65 mt-1">{subtitle}</span>
+                                    )}
+                                    {!isPricingLoading && qtySubtitle && (
+                                        <span className="text-[10px] text-black/65 mt-1 font-medium">{qtySubtitle}</span>
                                     )}
                                     <span className="text-[10px] text-black/50">Price locked when you book</span>
                                 </div>
