@@ -18,4 +18,8 @@ export interface BookingMappingMeta {
         routing: 'FIXED_PRICE' | 'REVIEW_QUOTE';
         reviewReason?: string;
     };
+    /** MATRIX V2: merged clarifier answers used for pricing (user + text hydration). */
+    clarifierAnswers?: Record<string, string | number>;
+    /** MATRIX V2: values inferred only from raw text before user edits. */
+    clarifierHydration?: Record<string, string | number>;
 }

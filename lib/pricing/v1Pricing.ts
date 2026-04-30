@@ -28,6 +28,10 @@ export interface V1PricingResult {
     quantitiesByJob?: Record<string, number>;
     /** Which pricing path produced this result. */
     pipeline?: 'MATRIX_V2' | 'LEGACY';
+    /** MATRIX V2 merged clarifier answers (text + user) used for pricing. */
+    clarifier_answers?: Record<string, string | number>;
+    /** MATRIX V2 text-only hydration snapshot. */
+    clarifier_hydration?: Record<string, string | number>;
 }
 
 function applyRoutingToPublicPricing(pricing: V1PricingResult, routing: BookingRouting): V1PricingResult {
@@ -49,7 +53,14 @@ const SUPPORTED_SERVICES = [
     'Painting', 'TV Mounting', 'Carpentry', 'General Repairs'
 ];
 
-export async function calculateV1Pricing(description: string): Promise<V1PricingResult> {
+export interface CalculateV1PricingOptions {
+    clarifierAnswers?: Record<string, unknown>;
+}
+
+export async function calculateV1Pricing(
+    description: string,
+    options?: CalculateV1PricingOptions,
+): Promise<V1PricingResult> {
     const lower = description.toLowerCase();
 
     // 1. Out-of-scope: phrase list + heuristics (no naive single-substring "tax" / "class" / "pet" matching).
@@ -78,7 +89,9 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
 
     // 2. Extraction Pipeline:
     // userInput -> GPT-4o extraction -> validated job_item_ids -> fallback deterministic parser
-    const extraction = await runExtractionPipeline(description);
+    const extraction = await runExtractionPipeline(description, {
+        clarifierAnswers: options?.clarifierAnswers,
+    });
 
     if (extraction.jobs.length === 0) {
         const fromPipeline = extraction.warnings?.length ? extraction.warnings : ['NEEDS_CLARIFICATION'];
@@ -102,6 +115,8 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
             finalJobs: Object.keys(qb),
             quantitiesByJob: qb,
             pipeline: pipelineFlag,
+            clarifier_answers: extraction.clarifier_answers ?? extraction.mappingMeta?.clarifierAnswers,
+            clarifier_hydration: extraction.clarifier_hydration ?? extraction.mappingMeta?.clarifierHydration,
         };
         return base;
     }
@@ -146,6 +161,8 @@ export async function calculateV1Pricing(description: string): Promise<V1Pricing
         finalJobs: [...extraction.jobs],
         quantitiesByJob,
         pipeline: pipelineFlag,
+        clarifier_answers: extraction.clarifier_answers ?? extraction.mappingMeta?.clarifierAnswers,
+        clarifier_hydration: extraction.clarifier_hydration ?? extraction.mappingMeta?.clarifierHydration,
     };
 
     const { routing, confidenceLevel, reviewMessage } = computeBookingRouting(raw, extraction.mappingMeta ?? null);

@@ -3,12 +3,15 @@ import { normalizeTier } from '@/lib/pricing/tierNormalization';
 
 export async function POST(req: Request) {
   try {
-    const { userInput } = await req.json();
+    const { userInput, clarifierAnswers } = await req.json();
     if (!userInput || typeof userInput !== "string") {
       return new Response(JSON.stringify({ error: "userInput is required" }), { status: 400 });
     }
 
-    const extraction = await runExtractionPipeline(userInput);
+    const extraction = await runExtractionPipeline(userInput, {
+      clarifierAnswers:
+        clarifierAnswers && typeof clarifierAnswers === "object" ? clarifierAnswers : undefined,
+    });
 
     return Response.json({
       jobs: extraction.jobs,
@@ -16,6 +19,8 @@ export async function POST(req: Request) {
       total_minutes: extraction.total_minutes,
       tier: normalizeTier(extraction.tier),
       clarifiers: extraction.clarifiers.map((c) => c.tag),
+      clarifier_answers: extraction.clarifier_answers ?? {},
+      clarifier_hydration: extraction.clarifier_hydration ?? {},
       // Extended diagnostics payload for UI/debug.
       jobDetails: extraction.jobDetails,
       capabilities: extraction.capabilities,

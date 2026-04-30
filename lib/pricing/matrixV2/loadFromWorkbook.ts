@@ -54,20 +54,23 @@ export function parseMatrixV2Workbook(workbook: WorkBook): MatrixV2Model {
     const cleaningTiers: MatrixV2CleaningTier[] = [];
     const tierRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(tierSheet);
     for (const row of tierRows) {
-        const tier = String(row.tier || '').trim();
+        const tierRaw = String(row.tier || '').trim();
+        const tier = tierRaw.toUpperCase();
         const mmRaw = row.max_minutes;
         const price = Number(row.price_gbp) || 0;
         if (!tier) continue;
-        if (typeof mmRaw === 'number' || /^\s*\d+\s*$/.test(String(mmRaw))) {
-            handymanTiers.push({
+        if (tier.startsWith('C')) {
+            cleaningTiers.push({
                 tier,
-                max_minutes: Number(mmRaw),
+                label: String(mmRaw ?? row.label ?? '').trim(),
                 price_gbp: price,
             });
         } else {
-            cleaningTiers.push({
+            const mm = Number(mmRaw);
+            if (!Number.isFinite(mm)) continue;
+            handymanTiers.push({
                 tier,
-                label: String(mmRaw || '').trim(),
+                max_minutes: mm,
                 price_gbp: price,
             });
         }
@@ -79,10 +82,16 @@ export function parseMatrixV2Workbook(workbook: WorkBook): MatrixV2Model {
     for (const row of clarRows) {
         const id = String(row.clarifier_id || row.id || '').trim();
         if (!id) continue;
+        const optRaw = row.options ?? row.option_list ?? row.choices ?? '';
+        const opts = String(optRaw || '')
+            .split(/[,|;]/)
+            .map((s) => String(s).trim())
+            .filter(Boolean);
         clarifiers.set(id, {
             id,
             question: String(row.question || '').trim(),
             type: String(row.type || row.input_type || 'text').trim(),
+            ...(opts.length ? { options: opts } : {}),
         });
     }
 

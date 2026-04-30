@@ -6,8 +6,20 @@ import type { BookingMappingMeta } from '../bookingRoutingTypes';
 import { preprocessBookingInput } from '../inputPreprocess';
 import type { GeneratedVisit } from '../visitEngine';
 import type { MatrixV2Model, MatrixV2JobRow } from './types';
+import {
+    applyClarifierAnswersToQuantityMap,
+    hydrateClarifiersFromText,
+    mergeClarifierAnswerLayers,
+    normalizeClientClarifierAnswers,
+    wallMinuteAdjustmentForJobs,
+} from './clarifierHydration';
 
 export const MATRIX_V2_REVIEW_MESSAGE = "We'll review your request and get back with a quote.";
+
+export interface MatrixV2RouteOptions {
+    /** User-edited clarifier values; merged over text-hydration (used for pricing + UI). */
+    clarifierAnswers?: Record<string, unknown>;
+}
 
 function escapeRe(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -106,7 +118,7 @@ function qtyFromDigitOrWordMatch(n: string, re: RegExp): number | null {
     return w !== undefined ? w : null;
 }
 
-function quantityForJob(jobId: string, normalized: string): number {
+export function quantityForJob(jobId: string, normalized: string): number {
     const n = normalized.toLowerCase();
     const pick = (re: RegExp) => {
         const m = n.match(re);
@@ -164,18 +176,18 @@ function cleaningPrice(job: MatrixV2JobRow, model: MatrixV2Model, bhkBands: numb
     const bhk = Math.min(4, Math.max(1, bhkBands));
     const tierByBhk = `C${bhk}`;
     const sizeRow = model.cleaningTiers.find((r) => r.tier === tierByBhk);
-    const baseRow = model.cleaningTiers.find((r) => r.tier === job.base_tier);
-    const pSize = sizeRow?.price_gbp ?? 0;
-    const pBase = baseRow?.price_gbp ?? 0;
-    return Math.max(pSize, pBase);
+    if (sizeRow && sizeRow.price_gbp > 0) return sizeRow.price_gbp;
+    const baseKey = String(job.base_tier || '').trim().toUpperCase();
+    const baseRow = model.cleaningTiers.find((r) => r.tier === baseKey);
+    return baseRow?.price_gbp ?? 0;
 }
 
 function mergeClarifiers(
     model: MatrixV2Model,
     jobIds: string[],
-): Array<{ tag: string; question: string; inputType?: string }> {
+): Array<{ tag: string; question: string; inputType?: string; options?: string[] }> {
     const seen = new Set<string>();
-    const out: Array<{ tag: string; question: string; inputType?: string }> = [];
+    const out: Array<{ tag: string; question: string; inputType?: string; options?: string[] }> = [];
     for (const jid of jobIds) {
         const row = model.jobs.get(jid);
         if (!row) continue;
@@ -187,13 +199,38 @@ function mergeClarifiers(
                 tag: cid,
                 question: def?.question ?? cid,
                 inputType: def?.type,
+                options: def?.options,
             });
         }
     }
     return out;
 }
 
-export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
+function formatMatrixV2Clarifiers(
+    model: MatrixV2Model,
+    jobIds: string[],
+    merged: Record<string, string | number>,
+): Array<{
+    tag: string;
+    question: string;
+    inputType?: string;
+    options?: string[];
+    value?: string | number;
+    affects_time: boolean;
+    affects_safety: boolean;
+}> {
+    return mergeClarifiers(model, jobIds).map((c) => ({
+        tag: c.tag,
+        question: c.question,
+        ...(c.inputType ? { inputType: c.inputType } : {}),
+        ...(c.options?.length ? { options: c.options } : {}),
+        ...(merged[c.tag] !== undefined ? { value: merged[c.tag] } : {}),
+        affects_time: true,
+        affects_safety: false,
+    }));
+}
+
+export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, opts?: MatrixV2RouteOptions) {
     const normalized = normalizeV2Input(userInput);
     const parts = normalized.split(' and ').map((s) => s.trim()).filter(Boolean);
 
@@ -216,6 +253,11 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
         qtyMap[id] = Math.max(1, quantityForJob(id, normalized));
     }
 
+    const hydratedFromText = hydrateClarifiersFromText(model, jobIds, normalized, quantityForJob);
+    const clientAnswers = normalizeClientClarifierAnswers(opts?.clarifierAnswers);
+    const clarifierAnswersMerged = mergeClarifierAnswerLayers(hydratedFromText, clientAnswers);
+    applyClarifierAnswersToQuantityMap(model, jobIds, qtyMap, clarifierAnswersMerged);
+
     const cleaningUnits = inferCleaningUnits(normalized);
 
     /** Quantity threshold (cleaning uses property count, not BHK). */
@@ -230,11 +272,15 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
                 parts,
                 MATRIX_V2_REVIEW_MESSAGE,
                 ['MATRIX_V2_QUANTITY_REVIEW'],
-                mergeClarifiers(model, jobIds),
+                formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
                 {
                     detectedJobIds: [...jobIds],
                     quantityByJob: { ...qtyMap },
-                    estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+                    estimatedMinutes:
+                        computeEstimatedMinutes(jobIds, qtyMap, model) +
+                        wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
+                    clarifierAnswers: clarifierAnswersMerged,
+                    clarifierHydration: hydratedFromText,
                 },
             );
         }
@@ -247,7 +293,21 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
 
     /** Commercial cleaning-style office cue (phrase not in V2 mapping) handled by NO_MATCH unless we detect */
     if (normalized.includes('clean') && /\b(?<!home\s)(office|retail|warehouse|commercial)\b/i.test(normalized)) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_COMMERCIAL_CLEAN'], []);
+        return buildReviewResult(
+            parts,
+            MATRIX_V2_REVIEW_MESSAGE,
+            ['MATRIX_V2_COMMERCIAL_CLEAN'],
+            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
+            {
+                detectedJobIds: [...jobIds],
+                quantityByJob: { ...qtyMap },
+                estimatedMinutes:
+                    computeEstimatedMinutes(jobIds, qtyMap, model) +
+                    wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
+                clarifierAnswers: clarifierAnswersMerged,
+                clarifierHydration: hydratedFromText,
+            },
+        );
     }
 
     const categories = [...new Set(jobIds.map((id) => model.jobs.get(id)!.category))];
@@ -258,25 +318,32 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_CROSS_CATEGORY'],
-            mergeClarifiers(model, jobIds),
+            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
             {
                 detectedJobIds: [...jobIds],
                 quantityByJob: { ...qtyMap },
-                estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+                estimatedMinutes:
+                    computeEstimatedMinutes(jobIds, qtyMap, model) +
+                    wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
                 distinctRoutingBuckets: categories.length,
+                clarifierAnswers: clarifierAnswersMerged,
+                clarifierHydration: hydratedFromText,
             },
         );
     }
 
     const category = categories[0] || 'HANDYMAN';
 
-    const totalMinutes =
+    const baseMinutes =
         jobIds.reduce((sum, id) => {
             const row = model.jobs.get(id)!;
             return sum + row.max_minutes * qtyMap[id];
         }, 0) + Math.max(0, jobIds.length - 1) * 10;
 
-    /** Pricing (single source: matrix tiers; handyman uses combined minutes incl. quantity × max_minutes per job) */
+    const wallAdj = wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged);
+    const totalMinutes = baseMinutes + wallAdj;
+
+    /** Pricing (single source: matrix tiers; handyman uses combined minutes incl. quantity × max_minutes per job + clarifier adjustments) */
     let totalPrice = 0;
     let displayTier = 'H1';
     const displayMinutes = totalMinutes;
@@ -296,22 +363,20 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_PRICE_FAIL'],
-            mergeClarifiers(model, jobIds),
+            formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged),
             {
                 detectedJobIds: [...jobIds],
                 quantityByJob: { ...qtyMap },
-                estimatedMinutes: computeEstimatedMinutes(jobIds, qtyMap, model),
+                estimatedMinutes:
+                    computeEstimatedMinutes(jobIds, qtyMap, model) +
+                    wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
+                clarifierAnswers: clarifierAnswersMerged,
+                clarifierHydration: hydratedFromText,
             },
         );
     }
 
-    const clarifiers = mergeClarifiers(model, jobIds).map((c) => ({
-        tag: c.tag,
-        question: c.question,
-        ...(c.inputType ? { inputType: c.inputType } : {}),
-        affects_time: true,
-        affects_safety: false as const,
-    }));
+    const clarifiers = formatMatrixV2Clarifiers(model, jobIds, clarifierAnswersMerged);
 
     const visits = buildVisits(jobIds, qtyMap, model, category, displayTier, totalPrice, totalMinutes);
 
@@ -325,6 +390,8 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
         estimatedTotalMinutes: totalMinutes,
         distinctRoutingBucketCount: 1,
         matrixV2: { routing: 'FIXED_PRICE' as const },
+        clarifierAnswers: clarifierAnswersMerged,
+        clarifierHydration: hydratedFromText,
     };
 
     return {
@@ -345,6 +412,8 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string) {
         visits,
         price: totalPrice,
         clarifiers,
+        clarifier_answers: clarifierAnswersMerged,
+        clarifier_hydration: hydratedFromText,
         flags: {
             usedDeterministicPipeline: true,
             usedGenericFallback: false,
@@ -413,13 +482,23 @@ export interface MatrixV2ReviewMetaExtras {
     quantityByJob: Record<string, number>;
     estimatedMinutes: number;
     distinctRoutingBuckets?: number;
+    clarifierAnswers?: Record<string, string | number>;
+    clarifierHydration?: Record<string, string | number>;
 }
 
 function buildReviewResult(
     parts: string[],
     message: string,
     warnings: string[],
-    clarifiers: Array<{ tag: string; question: string; inputType?: string }>,
+    clarifiers: Array<{
+        tag: string;
+        question: string;
+        inputType?: string;
+        options?: string[];
+        value?: string | number;
+        affects_time?: boolean;
+        affects_safety?: boolean;
+    }>,
     metaExtras?: MatrixV2ReviewMetaExtras,
 ) {
     const jobIds = metaExtras?.detectedJobIds ?? [];
@@ -439,9 +518,13 @@ function buildReviewResult(
             tag: c.tag,
             question: c.question,
             ...(c.inputType ? { inputType: c.inputType } : {}),
-            affects_time: true,
-            affects_safety: false,
+            ...(c.options?.length ? { options: c.options } : {}),
+            ...(c.value !== undefined ? { value: c.value } : {}),
+            affects_time: c.affects_time ?? true,
+            affects_safety: c.affects_safety ?? false,
         })),
+        clarifier_answers: metaExtras?.clarifierAnswers ?? {},
+        clarifier_hydration: metaExtras?.clarifierHydration ?? {},
         flags: {
             usedDeterministicPipeline: true,
             usedGenericFallback: false,
@@ -461,6 +544,12 @@ function buildReviewResult(
             estimatedTotalMinutes: metaExtras?.estimatedMinutes ?? 0,
             distinctRoutingBucketCount: bucketCount,
             matrixV2: { routing: 'REVIEW_QUOTE' as const, reviewReason: warnings[0] },
+            ...(metaExtras?.clarifierAnswers
+                ? { clarifierAnswers: metaExtras.clarifierAnswers }
+                : {}),
+            ...(metaExtras?.clarifierHydration
+                ? { clarifierHydration: metaExtras.clarifierHydration }
+                : {}),
         },
     };
 }

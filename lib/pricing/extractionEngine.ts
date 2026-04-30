@@ -36,7 +36,20 @@ export interface ExtractionPipelineResult {
     quantities: Record<string, number>;
     visits: GeneratedVisit[];
     price: number;
-    clarifiers: Array<{ tag: string; question: string; capability_tag?: string; affects_time?: boolean; affects_safety?: boolean; inputType?: string }>;
+    clarifiers: Array<{
+        tag: string;
+        question: string;
+        capability_tag?: string;
+        affects_time?: boolean;
+        affects_safety?: boolean;
+        inputType?: string;
+        options?: string[];
+        value?: string | number;
+    }>;
+    /** MATRIX V2: effective clarifier answers (hydration + client). */
+    clarifier_answers?: Record<string, string | number>;
+    /** MATRIX V2: text-only hydration before edits. */
+    clarifier_hydration?: Record<string, string | number>;
     flags: {
         usedDeterministicPipeline: boolean;
         usedGenericFallback: boolean;
@@ -130,17 +143,24 @@ function buildClarifyResult(
     };
 }
 
-export async function runExtractionPipeline(userInput: string): Promise<ExtractionPipelineResult> {
-    const cacheKey = normalizeCacheKey(userInput);
-    const cached = extractionCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-        return cached.result;
-    }
+export interface ExtractionPipelineOptions {
+    /** User-entered clarifier values; merged with text hydration by MATRIX V2 engine. */
+    clarifierAnswers?: Record<string, unknown>;
+}
 
+export async function runExtractionPipeline(
+    userInput: string,
+    options?: ExtractionPipelineOptions,
+): Promise<ExtractionPipelineResult> {
     excelSource.ensureLoaded();
     const v2 = excelSource.getMatrixV2Model();
     if (v2 && excelSource.isMatrixV2()) {
-        const v2Result = routeAndPriceMatrixV2(v2, userInput);
+        const cacheKey = `v2|${normalizeCacheKey(userInput)}|${JSON.stringify(options?.clarifierAnswers ?? {})}`;
+        const cached = extractionCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.result;
+        }
+        const v2Result = routeAndPriceMatrixV2(v2, userInput, { clarifierAnswers: options?.clarifierAnswers });
         const result: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };
         extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
         const qty = result.mappingMeta?.quantityByJob ?? result.quantities ?? {};
@@ -155,9 +175,17 @@ export async function runExtractionPipeline(userInput: string): Promise<Extracti
             totalPrice: result.price,
             tier: result.tier,
             clarifierIds: (result.clarifiers ?? []).map((c) => c.tag),
+            clarifierHydrationFromText: result.clarifier_hydration ?? result.mappingMeta?.clarifierHydration,
+            clarifierAnswersEffective: result.clarifier_answers ?? result.mappingMeta?.clarifierAnswers,
             minutesEstimated: result.mappingMeta?.estimatedTotalMinutes ?? result.total_minutes,
         });
         return result;
+    }
+
+    const cacheKey = normalizeCacheKey(userInput);
+    const cached = extractionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.result;
     }
 
     const jobItems = Array.from(excelSource.jobItems.values());

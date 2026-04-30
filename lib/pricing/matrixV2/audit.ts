@@ -12,6 +12,8 @@ export interface MatrixV2AuditPayload {
     tier: string;
     clarifierIds: string[];
     minutesEstimated: number;
+    clarifierHydrationFromText?: Record<string, string | number>;
+    clarifierAnswersEffective?: Record<string, string | number>;
 }
 
 export async function persistMatrixV2AuditLog(payload: MatrixV2AuditPayload): Promise<void> {

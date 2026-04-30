@@ -25,10 +25,15 @@ export interface MatrixV2CleaningTier {
     price_gbp: number;
 }
 
+/** Resolve per-job quantity from normalized user text (used for clarifier hydration). */
+export type MatrixV2QuantityResolver = (jobId: string, normalized: string) => number;
+
 export interface MatrixV2ClarifierRow {
     id: string;
     question: string;
     type: string;
+    /** Choices for dropdown/select clarifiers (from workbook options column). */
+    options?: string[];
 }
 
 export interface MatrixV2Model {

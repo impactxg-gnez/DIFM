@@ -6,14 +6,16 @@ import { normalizeTier } from '@/lib/pricing/tierNormalization';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { description } = body;
+        const { description, clarifierAnswers } = body;
 
         if (!description) {
             return NextResponse.json({ error: 'Missing description' }, { status: 400 });
         }
 
         // V1 Pricing Engine returns visit-first format
-        const pricing = await calculateV1Pricing(description);
+        const pricing = await calculateV1Pricing(description, {
+            clarifierAnswers: clarifierAnswers && typeof clarifierAnswers === 'object' ? clarifierAnswers : undefined,
+        });
         const bookable = isV1PricingBookable(pricing);
 
         // Return visit-first contract with warnings and metadata
@@ -39,6 +41,8 @@ export async function POST(request: Request) {
             finalJobs: pricing.finalJobs ?? [],
             quantitiesByJob: pricing.quantitiesByJob ?? {},
             pipeline: pricing.pipeline,
+            clarifier_answers: pricing.clarifier_answers ?? {},
+            clarifier_hydration: pricing.clarifier_hydration ?? {},
         });
     } catch (error) {
         console.error('Price preview error', error);
