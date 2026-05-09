@@ -143,6 +143,27 @@ export function hydrateClarifiersFromText(
         }
     }
 
+    // Hydrate rooms from BHK
+    const bhkMatch = normalized.match(/\b(\d+)\s*-?\s*bhk\b|\b(one|two|three|four)\s+-?\s*bhk\b/i);
+    if (bhkMatch) {
+        let bhk = 1;
+        if (/^\d+$/.test(bhkMatch[1])) {
+            bhk = parseInt(bhkMatch[1], 10);
+        } else if (bhkMatch[2]) {
+            const w = bhkMatch[2].toLowerCase();
+            const mapWord: Record<string, number> = { one: 1, two: 2, three: 3, four: 4 };
+            bhk = mapWord[w] ?? 1;
+        }
+        
+        const rooms = bhk + 2; // e.g. 2 BHK -> 4 rooms
+        for (const cid of allCids) {
+            const question = model.clarifiers.get(cid)?.question || '';
+            if (/room|bhk/i.test(cid) || question.toLowerCase().includes('how many rooms')) {
+                out[cid] = rooms;
+            }
+        }
+    }
+
     return out;
 }
 

@@ -171,11 +171,20 @@ function formatMatrixV2Clarifiers(
 }> {
     return mergeClarifiers(model, jobIds).map((c) => {
         const dv = clarifierUiValue(c.tag, hydratedFromText, clientAnswers);
+        let inputType = c.inputType;
+        let options = c.options;
+
+        // Force dropdown for standard vs deep cleaning
+        if (c.question.toLowerCase().includes('standard or deep')) {
+            inputType = 'select';
+            options = ['Standard', 'Deep'];
+        }
+
         return {
             tag: c.tag,
             question: c.question,
-            ...(c.inputType ? { inputType: c.inputType } : {}),
-            ...(c.options?.length ? { options: c.options } : {}),
+            ...(inputType ? { inputType } : {}),
+            ...(options?.length ? { options } : {}),
             ...(dv !== undefined ? { value: dv } : {}),
             affects_time: true,
             affects_safety: false,
@@ -408,9 +417,32 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         totalPrice = t?.price_gbp ?? 0;
         displayTier = t?.tier ?? 'H1';
     } else if (category === 'CLEANING') {
-        const bhk = inferCleaningBhk(normalized);
-        totalPrice = jobIds.reduce((sum, id) => sum + cleaningPrice(model.jobs.get(id)!, model, bhk), 0);
-        displayTier = `C${Math.min(4, Math.max(1, bhk))}`;
+        // Read rooms from clarifiers to determine BHK
+        let inferredBhk = inferCleaningBhk(normalized);
+        let rooms = inferredBhk + 2; // Default logic: 1 BHK = 3 rooms, 2 BHK = 4 rooms
+        
+        // Find if user provided a rooms value
+        const roomsCid = Object.keys(clarifierAnswersMerged).find(cid => 
+            /room|bhk/i.test(cid) || model.clarifiers.get(cid)?.question.toLowerCase().includes('how many rooms')
+        );
+        if (roomsCid && clarifierAnswersMerged[roomsCid]) {
+            const val = parseInt(String(clarifierAnswersMerged[roomsCid]), 10);
+            if (!isNaN(val)) {
+                rooms = val;
+                inferredBhk = Math.max(1, rooms - 2);
+            }
+        }
+
+        const baseCleaningPrice = jobIds.reduce((sum, id) => sum + cleaningPrice(model.jobs.get(id)!, model, inferredBhk), 0);
+        
+        // Check if deep cleaning is selected
+        const typeCid = Object.keys(clarifierAnswersMerged).find(cid => 
+            model.clarifiers.get(cid)?.question.toLowerCase().includes('standard or deep')
+        );
+        const isDeep = typeCid && String(clarifierAnswersMerged[typeCid]).toLowerCase() === 'deep';
+        
+        totalPrice = isDeep ? baseCleaningPrice * 1.5 : baseCleaningPrice;
+        displayTier = `C${Math.min(4, Math.max(1, inferredBhk))}`;
     }
 
     if (!totalPrice || totalPrice <= 0) {
