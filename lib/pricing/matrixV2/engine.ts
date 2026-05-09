@@ -33,6 +33,10 @@ function escapeRe(s: string): string {
 export function normalizeV2Input(input: string): string {
     return preprocessBookingInput(input)
         .toLowerCase()
+        .replace(/\b(installed|installing)\b/g, 'install')
+        .replace(/\b(mounted|mounting)\b/g, 'mount')
+        .replace(/\b(cleaned|cleaning)\b/g, 'clean')
+        .replace(/\b(hanging|hanged)\b/g, 'hang')
         .replace(/\+/g, ' and ')
         .replace(/&/g, ' and ')
         .replace(/;/g, ' and ')
@@ -341,7 +345,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     }
 
     /** Commercial cleaning-style office cue (phrase not in V2 mapping) handled by NO_MATCH unless we detect */
-    if (normalized.includes('clean') && /\b(?<!home\s)(office|retail|warehouse|commercial)\b/i.test(normalized)) {
+    if (normalized.includes('clean') && /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel)\b/i.test(normalized)) {
         return buildReviewResult(
             parts,
             MATRIX_V2_REVIEW_MESSAGE,

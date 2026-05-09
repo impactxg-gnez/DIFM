@@ -166,6 +166,22 @@ function inferWallHoleFill(model: MatrixV2Model, t: string, signals: string[], s
     return id;
 }
 
+function inferCleaning(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
+    if (!/\b(clean|cleaned|cleaning)\b/i.test(t)) return null;
+    const commercial = /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel)\b/i.test(t);
+    if (commercial) return null; 
+
+    const residential = /\b(apartment|house|home|deep|kitchen|bathroom|sofa|move\s*out|end\s*of\s*tenancy)\b/i.test(t);
+    if (residential || /\b(clean\s+my|get\s+my\s+(house|apartment)\s+cleaned)\b/i.test(t)) {
+        const id = firstExistingId(model, ['home_cleaning', 'home_cleaning_standard']);
+        if (!id) return null;
+        scores[id] = (scores[id] ?? 0) + 40;
+        signals.push('keyword:cleaning');
+        return id;
+    }
+    return null;
+}
+
 const INFERENCES: Array<{
     infer: (
         model: MatrixV2Model,
@@ -184,6 +200,7 @@ const INFERENCES: Array<{
     { infer: inferFurnitureAssembly },
     { infer: inferCableConceal },
     { infer: inferWallHoleFill },
+    { infer: inferCleaning },
 ];
 
 /**

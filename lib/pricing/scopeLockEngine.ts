@@ -140,8 +140,53 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     }
 
     const mappingTime = visitBaseMinutes + clarifierTime;
-    const effectiveMinutes = visitBaseMinutes + clarifierTime;
+    
+    let effectiveMinutes = visitBaseMinutes + clarifierTime;
     const selectedClarifiers = getSelectedClarifiers(answers);
+    
+    const qtyKeys = ['ITEM_COUNT', 'QUANTITY', 'SHELF_COUNT', 'NUM_ITEMS', 'HOW_MANY', 'COUNT', 'N_ITEMS', 'NUM_BLIND'];
+    let answersQty: number | null = null;
+    for (const k of qtyKeys) {
+        if (answers[k] !== undefined && String(answers[k]).trim() !== '') {
+            answersQty = parseInt(String(answers[k]), 10);
+            if (!Number.isNaN(answersQty)) break;
+        }
+    }
+
+    if (answersQty !== null && answersQty > 0) {
+        let matchedMax = 999;
+        if (visit.primary_job_item_id.includes('mirror')) matchedMax = 10;
+        else if (visit.primary_job_item_id.includes('tv')) matchedMax = 5;
+        else if (visit.primary_job_item_id.includes('blind')) matchedMax = 8;
+        else if (visit.primary_job_item_id.includes('shelf')) matchedMax = 12;
+
+        if (answersQty > matchedMax) {
+            return {
+                status: 'OVERFLOW',
+                action: 'ROUTE_TO_REVIEW',
+                reason: 'EXCEEDS_MAX_LADDER_TIME',
+                bookingAllowed: false,
+                nextStep: 'REVIEW',
+                message: "That quantity is outside standard residential pricing. Please contact us for a custom quote.",
+                eta: '30-60 minutes',
+                effectiveMinutes: 999,
+                ladderMaxTime: 999,
+                overflowDelta: 0,
+                capability: capability,
+                maxLadder: 'H3',
+                overflowAction: 'REVIEW',
+                selectedClarifiers,
+            };
+        }
+
+        // Recalculate effective minutes using the new quantity
+        const primaryMatrixMinutes = getMatrixTime(visit.primary_job_item_id);
+        const dynamicBase = primaryMatrixMinutes * answersQty;
+        // Include addon minutes as originally planned, assume addons are 1x or unchanged bulk
+        const addonMatrixMinutes = matrixBaseMinutes - primaryMatrixMinutes;
+        effectiveMinutes = dynamicBase + addonMatrixMinutes + clarifierTime;
+    }
+
     const guardrail = getLadderGuardrail(capability, ladder);
     const expectedUpperBoundForCapability = guardrail?.ladder_max_time || Number.MAX_SAFE_INTEGER;
 

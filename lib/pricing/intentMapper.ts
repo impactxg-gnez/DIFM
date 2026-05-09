@@ -309,6 +309,10 @@ function applyBulkEfficiency(baseMinutes: number, quantity: number): number {
 export function normalizeInput(input: string): string {
     return preprocessBookingInput(input)
         .toLowerCase()
+        .replace(/\b(installed|installing)\b/g, 'install')
+        .replace(/\b(mounted|mounting)\b/g, 'mount')
+        .replace(/\b(cleaned|cleaning)\b/g, 'clean')
+        .replace(/\b(hanging|hanged)\b/g, 'hang')
         .replace(/\+/g, ' and ')
         .replace(/&/g, ' and ')
         .replace(/;/g, ' and ')

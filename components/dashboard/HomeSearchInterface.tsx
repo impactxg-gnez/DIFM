@@ -313,7 +313,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
 
             {/* Header: Auto-detected location (top left); tap opens address modal */}
-            <div className="absolute top-8 left-4 sm:left-6 z-20 max-w-[min(85vw,280px)]">
+            <div className="fixed top-8 left-4 sm:left-6 z-50 max-w-[min(85vw,280px)]">
                 <button
                     type="button"
                     onClick={handleAddressClick}
@@ -331,7 +331,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             </div>
 
             {showLoginButton && (
-                <div className="absolute top-8 right-6 z-20">
+                <div className="fixed top-8 right-6 z-50">
                     <button
                         onClick={onLoginClick}
                         className="flex items-center justify-center px-6 py-2 h-[44px] bg-white/5 border border-white/10 rounded-full backdrop-blur-md hover:bg-white/10 transition-all font-semibold text-sm text-white/80 tracking-wide"
