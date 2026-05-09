@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SERVICE_CATEGORIES, PLATFORM_FEE_PERCENT } from '@/lib/constants';
 import { getNextStates } from '@/lib/jobStateMachine';
-import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2, Timer } from 'lucide-react';
+import { MapPin, ShieldAlert, Sparkles, Users, Wallet, Sliders, RefreshCw, CreditCard, X, ChevronRight, AlertCircle, CheckCircle2, Timer, FileQuestion, DollarSign, UserCheck, XCircle } from 'lucide-react';
 import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const fetcher = (url: string) =>
@@ -32,6 +32,7 @@ const fetcher = (url: string) =>
 
 const tabs = [
     { id: 'jobs', label: 'Jobs', icon: ShieldAlert },
+    { id: 'pending_reviews', label: 'Pending Reviews', icon: FileQuestion },
     { id: 'extraction', label: 'Extraction Logs', icon: Sparkles },
     { id: 'disputes', label: 'Disputes', icon: ShieldAlert },
     { id: 'providers', label: 'Providers', icon: Users },
@@ -54,6 +55,10 @@ export function AdminView({ user }: { user: any }) {
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
     const { data: patterns, mutate: mutatePatterns } = useSWR(activeTab === 'patterns' ? '/api/admin/job-patterns' : null, fetcher);
     const { data: extractionLogs, mutate: mutateExtractionLogs } = useSWR(activeTab === 'extraction' ? '/api/admin/extraction-logs' : null, fetcher);
+    const { data: pendingReviews, mutate: mutatePendingReviews } = useSWR(activeTab === 'pending_reviews' ? '/api/admin/pending-reviews' : null, fetcher, { refreshInterval: 10000 });
+    const [reviewActionDialog, setReviewActionDialog] = useState<{ open: boolean; record?: any; action?: 'quote' | 'reject' }>({ open: false });
+    const [reviewQuoteAmount, setReviewQuoteAmount] = useState('');
+    const [reviewRejectNote, setReviewRejectNote] = useState('');
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -1225,8 +1230,111 @@ export function AdminView({ user }: { user: any }) {
         </div>
     );
 
+    const STATUS_COLORS: Record<string, string> = {
+        NEW: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+        REVIEWED: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+        QUOTED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        REJECTED: 'bg-red-500/20 text-red-300 border-red-500/30',
+    };
+
+    const handlePendingReviewAction = async (id: string, action: 'REVIEWED' | 'QUOTED' | 'REJECTED', quoteAmount?: string, rejectNote?: string) => {
+        try {
+            const res = await fetch(`/api/admin/pending-reviews/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    review_status: action,
+                    ...(quoteAmount ? { custom_quote: Number(quoteAmount) } : {}),
+                    ...(rejectNote ? { rejection_note: rejectNote } : {}),
+                }),
+            });
+            if (res.ok) {
+                mutatePendingReviews();
+                setReviewActionDialog({ open: false });
+                setReviewQuoteAmount('');
+                setReviewRejectNote('');
+            }
+        } catch (e) {
+            console.error('Pending review action error', e);
+        }
+    };
+
+    const pendingReviewsContent = (() => {
+        if (!pendingReviews) return <div className="p-6 text-center text-muted-foreground">Loading pending reviews…</div>;
+        if (!Array.isArray(pendingReviews)) return <div className="p-6 text-center text-destructive">Failed to load pending reviews.</div>;
+        if (pendingReviews.length === 0) return (
+            <div className="text-center py-16 bg-white/5 rounded-xl border border-dashed border-white/10">
+                <FileQuestion className="w-10 h-10 text-gray-500 mx-auto mb-3" />
+                <p className="text-muted-foreground">No pending reviews yet.</p>
+                <p className="text-xs text-gray-500 mt-1">Custom quote requests from customers will appear here.</p>
+            </div>
+        );
+        return (
+            <div className="grid gap-4">
+                {pendingReviews.map((r: any) => (
+                    <Card key={r.id} className="p-5 border border-white/10 bg-zinc-900/70 backdrop-blur">
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                            <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="outline" className="font-mono">{String(r.request_id || r.id).slice(0, 8)}</Badge>
+                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${STATUS_COLORS[r.review_status] || STATUS_COLORS.NEW}`}>
+                                        {r.review_status}
+                                    </span>
+                                    <span className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleString()}</span>
+                                </div>
+                                <div className="bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-sm text-white/80 italic">
+                                    "{r.raw_input}"
+                                </div>
+                                {r.detected_job && (
+                                    <div className="text-xs text-gray-400">Detected: <span className="text-indigo-300">{r.detected_job}</span></div>
+                                )}
+                                <div className="grid grid-cols-3 gap-2 text-xs text-gray-400 pt-1">
+                                    <div>Qty: <span className="text-white">{r.quantity}</span></div>
+                                    <div>Est. mins: <span className="text-white">{r.estimated_minutes}</span></div>
+                                </div>
+                                <div className="border-t border-white/5 pt-2 mt-1 space-y-0.5">
+                                    <div className="text-sm font-semibold text-white">{r.user_name}</div>
+                                    <div className="text-xs text-gray-400">{r.email} · {r.phone}</div>
+                                    {r.notes && <div className="text-xs text-gray-400 italic mt-1">"{r.notes}"</div>}
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2 shrink-0">
+                                <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
+                                    onClick={() => setReviewActionDialog({ open: true, record: r, action: 'quote' })}
+                                    disabled={r.review_status === 'REJECTED'}
+                                >
+                                    <DollarSign className="w-3 h-3" /> Set Quote
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-500 text-white gap-1"
+                                    onClick={() => handlePendingReviewAction(r.id, 'REVIEWED')}
+                                    disabled={r.review_status !== 'NEW'}
+                                >
+                                    <UserCheck className="w-3 h-3" /> Mark Reviewed
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="gap-1"
+                                    onClick={() => setReviewActionDialog({ open: true, record: r, action: 'reject' })}
+                                    disabled={r.review_status === 'REJECTED'}
+                                >
+                                    <XCircle className="w-3 h-3" /> Reject
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+        );
+    })();
+
     const contentMap: Record<string, JSX.Element> = {
         jobs: jobsContent,
+        pending_reviews: pendingReviewsContent,
         extraction: extractionContent,
         disputes: disputesContent,
         providers: providersContent,
@@ -1885,6 +1993,66 @@ export function AdminView({ user }: { user: any }) {
                                 Save Changes
                             </Button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Pending Review Action Dialog — Set Quote or Reject */}
+            {reviewActionDialog.open && reviewActionDialog.record && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-[380px] space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-base font-bold text-white">
+                                {reviewActionDialog.action === 'quote' ? '💰 Set Quote' : '❌ Reject Request'}
+                            </h3>
+                            <button onClick={() => setReviewActionDialog({ open: false })} className="p-1 rounded hover:bg-white/10">
+                                <X className="w-4 h-4 text-white/60" />
+                            </button>
+                        </div>
+                        <div className="text-xs text-gray-400 bg-white/5 rounded-lg px-3 py-2 italic">
+                            "{reviewActionDialog.record.raw_input}"
+                        </div>
+                        <div className="text-sm text-gray-300">
+                            Customer: <span className="text-white font-semibold">{reviewActionDialog.record.user_name}</span>
+                            {' '}· {reviewActionDialog.record.email}
+                        </div>
+                        {reviewActionDialog.action === 'quote' ? (
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-gray-400 uppercase">Quote Amount (£)</label>
+                                <input
+                                    type="number"
+                                    value={reviewQuoteAmount}
+                                    onChange={(e) => setReviewQuoteAmount(e.target.value)}
+                                    placeholder="e.g. 150"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
+                                />
+                                <Button
+                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    disabled={!reviewQuoteAmount || isNaN(Number(reviewQuoteAmount))}
+                                    onClick={() => handlePendingReviewAction(reviewActionDialog.record!.id, 'QUOTED', reviewQuoteAmount)}
+                                >
+                                    Confirm Quote
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-gray-400 uppercase">Rejection Note (optional)</label>
+                                <textarea
+                                    value={reviewRejectNote}
+                                    onChange={(e) => setReviewRejectNote(e.target.value)}
+                                    placeholder="Reason for rejection…"
+                                    rows={3}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-red-500/50 resize-none"
+                                />
+                                <Button
+                                    variant="destructive"
+                                    className="w-full"
+                                    onClick={() => handlePendingReviewAction(reviewActionDialog.record!.id, 'REJECTED', undefined, reviewRejectNote)}
+                                >
+                                    Confirm Rejection
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

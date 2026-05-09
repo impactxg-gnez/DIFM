@@ -1,0 +1,247 @@
+'use client';
+
+import { useState } from 'react';
+import { X, CheckCircle, Send, Loader2 } from 'lucide-react';
+
+interface ReviewQuoteModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    /** Pre-populated from the search input */
+    rawInput?: string;
+    detectedJob?: string;
+    parsedEntities?: Record<string, unknown>;
+    quantity?: number;
+    estimatedMinutes?: number;
+    confidenceScore?: number;
+    /** Pre-fill name/email from logged-in user if available */
+    prefilledName?: string;
+    prefilledEmail?: string;
+}
+
+type Phase = 'form' | 'submitting' | 'success';
+
+export function ReviewQuoteModal({
+    isOpen,
+    onClose,
+    rawInput = '',
+    detectedJob,
+    parsedEntities,
+    quantity = 1,
+    estimatedMinutes = 0,
+    confidenceScore = 0,
+    prefilledName = '',
+    prefilledEmail = '',
+}: ReviewQuoteModalProps) {
+    const [phase, setPhase] = useState<Phase>('form');
+    const [name, setName] = useState(prefilledName);
+    const [email, setEmail] = useState(prefilledEmail);
+    const [phone, setPhone] = useState('');
+    const [notes, setNotes] = useState('');
+    const [error, setError] = useState('');
+
+    if (!isOpen) return null;
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    const phoneDigits = phone.replace(/\D/g, '');
+    const phoneOk = phoneDigits.length >= 8 && phoneDigits.length <= 15;
+    const canSubmit = name.trim().length > 0 && emailOk && phoneOk;
+
+    const handleSubmit = async () => {
+        if (!canSubmit) return;
+        setPhase('submitting');
+        setError('');
+        try {
+            const res = await fetch('/api/admin/pending-reviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    raw_input: rawInput,
+                    detected_job: detectedJob ?? null,
+                    parsed_entities: parsedEntities ?? null,
+                    quantity,
+                    estimated_minutes: estimatedMinutes,
+                    confidence_score: confidenceScore,
+                    user_name: name.trim(),
+                    email: email.trim(),
+                    phone: phone.trim(),
+                    notes: notes.trim() || null,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Submission failed');
+            }
+            setPhase('success');
+        } catch (e: any) {
+            setError(e?.message || 'Something went wrong. Please try again.');
+            setPhase('form');
+        }
+    };
+
+    const handleClose = () => {
+        setPhase('form');
+        setName(prefilledName);
+        setEmail(prefilledEmail);
+        setPhone('');
+        setNotes('');
+        setError('');
+        onClose();
+    };
+
+    return (
+        /* Backdrop */
+        <div
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+            onClick={(e) => { if (e.target === e.currentTarget && phase !== 'submitting') handleClose(); }}
+        >
+            <div className="relative w-full sm:max-w-[440px] bg-[#111113] border border-white/10 rounded-t-[28px] sm:rounded-[28px] overflow-hidden shadow-2xl">
+
+                {/* Close */}
+                {phase !== 'submitting' && (
+                    <button
+                        onClick={handleClose}
+                        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                        <X className="w-4 h-4 text-white/60" />
+                    </button>
+                )}
+
+                {phase === 'success' ? (
+                    /* ── SUCCESS STATE ── */
+                    <div className="flex flex-col items-center justify-center px-8 py-14 gap-6 text-center">
+                        <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                            <CheckCircle className="w-8 h-8 text-emerald-400" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white mb-2">Request Submitted!</h2>
+                            <p className="text-sm text-white/60 leading-relaxed">
+                                Thanks — our team will review your request and contact you shortly with a confirmed quote.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleClose}
+                            className="w-full py-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-colors"
+                        >
+                            Done
+                        </button>
+                    </div>
+                ) : (
+                    /* ── FORM STATE ── */
+                    <div className="flex flex-col">
+                        {/* Header */}
+                        <div className="px-6 pt-6 pb-4 border-b border-white/5">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400 mb-1">Custom Quote Required</div>
+                            <h2 className="text-lg font-bold text-white leading-snug">
+                                This job needs a review from our team
+                            </h2>
+                            <p className="text-xs text-white/50 mt-1 leading-relaxed">
+                                Due to quantity, complexity, or scope — fill in your details and we'll get back with a confirmed price.
+                            </p>
+                            {rawInput && (
+                                <div className="mt-3 px-3 py-2 bg-white/5 rounded-xl border border-white/5 text-xs text-white/40 italic truncate">
+                                    "{rawInput}"
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Form */}
+                        <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[55vh]">
+                            {/* Full Name */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Full Name <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    autoComplete="name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Your full name"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors"
+                                />
+                            </div>
+
+                            {/* Email */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Email <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    autoComplete="email"
+                                    inputMode="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors"
+                                />
+                            </div>
+
+                            {/* Phone */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Phone Number <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="tel"
+                                    autoComplete="tel"
+                                    inputMode="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="+44 7700 900000"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors"
+                                />
+                                <p className="text-[9px] text-white/30 mt-1">We'll use this to contact you with your quote.</p>
+                            </div>
+
+                            {/* Notes */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Additional Notes <span className="text-white/30">(optional)</span>
+                                </label>
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    placeholder="Any extra details, preferred time, access info…"
+                                    rows={3}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
+                                />
+                            </div>
+
+                            {error && (
+                                <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300">
+                                    {error}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* CTA */}
+                        <div className="px-6 pb-8 pt-2">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={!canSubmit || phase === 'submitting'}
+                                className={`w-full flex items-center justify-center gap-2 py-4 rounded-full font-bold text-sm transition-all ${
+                                    canSubmit && phase !== 'submitting'
+                                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-[0_8px_24px_rgba(245,158,11,0.35)]'
+                                        : 'bg-white/5 text-white/30 cursor-not-allowed'
+                                }`}
+                            >
+                                {phase === 'submitting' ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Submitting…</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="w-4 h-4" />
+                                        <span>Request Custom Quote</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

@@ -125,6 +125,7 @@ export function CustomerView({ user }: { user: any }) {
     const [issuePhotos, setIssuePhotos] = useState('');
     const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
     const [isSubmittingParts, setIsSubmittingParts] = useState(false);
+    const [overflowBanner, setOverflowBanner] = useState<string | null>(null);
 
     // Location Logic
     const [userLocation, setUserLocation] = useState<string>('');
@@ -836,9 +837,9 @@ export function CustomerView({ user }: { user: any }) {
                             if (res.ok) {
                                 const result = await res.json();
                                 if (result.status === 'OVERFLOW') {
-                                    const eta = result.eta || '30-60 minutes';
+                                    const eta = result.eta || '30–60 minutes';
                                     const delta = Number(result.overflow_delta || 0);
-                                    alert(`${result.message || 'This job requires review before booking can continue.'}\nETA: ${eta}\nComplexity delta: +${delta} minutes.`);
+                                    setOverflowBanner(`${result.message || 'This job requires a custom review before booking can continue.'} ETA: ${eta}. Complexity: +${delta} min.`);
                                     setStep('LIST');
                                     setVisits([]);
                                     setActiveTab('STATUS');
@@ -926,6 +927,16 @@ export function CustomerView({ user }: { user: any }) {
                 return (
                     <div className="space-y-4 pt-8 px-6 text-white pb-24">
                         <h2 className="text-2xl font-bold">Active Jobs</h2>
+                        {overflowBanner && (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex gap-3 items-start">
+                                <span className="text-amber-400 text-lg mt-0.5">⚠️</span>
+                                <div className="flex-1">
+                                    <p className="text-sm text-amber-200 font-semibold mb-0.5">Custom Review Required</p>
+                                    <p className="text-xs text-amber-100/70">{overflowBanner}</p>
+                                </div>
+                                <button onClick={() => setOverflowBanner(null)} className="text-amber-400/60 hover:text-amber-300 text-xs">✕</button>
+                            </div>
+                        )}
                         {activeJobs.length === 0 ? (
                             <div className="text-center py-12 bg-white/5 border-white/10 rounded-lg text-gray-400">
                                 No active jobs.

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Search, Mic, Camera, CheckCircle } from 'lucide-react';
+import { Search, Mic, Camera, CheckCircle, FileQuestion } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
+import { ReviewQuoteModal } from '@/components/ReviewQuoteModal';
 import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingCopy';
 
 export type HomeBookingFlow = 'fixed' | 'quote';
@@ -86,10 +87,13 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
 
     // Modal State
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState('');
     const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
     const [quoteContactEmail, setQuoteContactEmail] = useState('');
     const [quoteContactPhone, setQuoteContactPhone] = useState('');
+    // Track last routing to avoid re-opening modal on every re-render
+    const lastAutoOpenedRoutingRef = useRef<string | null>(null);
 
     // Debounce description input
     useEffect(() => {
@@ -106,6 +110,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         const fetchPrice = async () => {
             if (!debouncedDesc.trim()) {
                 setPricePreview(null);
+                lastAutoOpenedRoutingRef.current = null;
                 return;
             }
 
@@ -119,6 +124,18 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 if (res.ok) {
                     const data = await res.json();
                     setPricePreview(data);
+                    // Auto-open review modal when routing is REVIEW_QUOTE
+                    const r = data?.routing as string | undefined;
+                    const isReview = r === 'REVIEW_QUOTE' ||
+                        (Array.isArray(data?.warnings) && data.warnings.some((w: string) =>
+                            ['COMMERCIAL_QUOTE_REQUIRED', 'MATRIX_V2_COMMERCIAL_CLEAN',
+                             'MATRIX_V2_QUANTITY_REVIEW', 'MATRIX_V2_CROSS_CATEGORY',
+                             'COMMERCIAL_BULK', 'HIGH_QUANTITY'].includes(w)
+                        ));
+                    if (isReview && lastAutoOpenedRoutingRef.current !== debouncedDesc) {
+                        lastAutoOpenedRoutingRef.current = debouncedDesc;
+                        setIsReviewModalOpen(true);
+                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch price:', error);
@@ -245,8 +262,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         });
     };
 
-    const handleMediaClick = (type: 'mic' | 'camera') => {
-        alert(`${type === 'mic' ? 'Voice Note' : 'Camera'} upload coming soon!`);
+    const handleMediaClick = (_type: 'mic' | 'camera') => {
+        // Coming soon — no alert
     };
 
     const trimmedDescription = description.trim();
@@ -284,21 +301,31 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const hasBookableVisits = Array.isArray(pricePreview?.visits) && pricePreview.visits.length > 0;
     const routing = pricePreview?.routing as string | undefined;
     const isOut = previewWarnings.includes('OUT_OF_SCOPE') || pricePreview?.isOutOfScope;
+    /** All warning codes that mean this job needs a custom review */
+    const REVIEW_WARNINGS = new Set([
+        'COMMERCIAL_QUOTE_REQUIRED',
+        'MATRIX_V2_COMMERCIAL_CLEAN',
+        'MATRIX_V2_QUANTITY_REVIEW',
+        'MATRIX_V2_CROSS_CATEGORY',
+        'MATRIX_V2_NO_MATCH',
+        'MATRIX_V2_PRICE_FAIL',
+        'COMMERCIAL_BULK',
+        'HIGH_QUANTITY',
+        'BUNDLE_COMPLEX_QUOTE_REQUIRED',
+    ]);
+    const isReviewRouting = routing === 'REVIEW_QUOTE' || previewWarnings.some((w) => REVIEW_WARNINGS.has(w));
     /** Book with fixed price: has quote + (API says bookable or legacy without `routing` field). */
     const showFixedPath =
         !isOut &&
+        !isReviewRouting &&
         hasDisplayPrice &&
         hasBookableVisits &&
         !blocksBookableQuote &&
         (pricePreview?.bookable === true ||
             routing === 'FIXED_PRICE' ||
             (routing == null && hasDisplayPrice));
-    /** Review / quote: only for commercial jobs, per user request. */
-    const showReviewPath =
-        !isOut &&
-        !showFixedPath &&
-        pricePreview != null &&
-        previewWarnings.includes('COMMERCIAL_QUOTE_REQUIRED');
+    /** Review / quote path: triggered for ALL review-routing cases (commercial, quantity, etc.) */
+    const showReviewPath = !isOut && isReviewRouting && pricePreview != null;
     const addressOk = Boolean(selectedAddress?.trim());
     const quoteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quoteContactEmail.trim());
     const quotePhoneDigits = quoteContactPhone.replace(/\D/g, '');
@@ -431,52 +458,22 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 {pricePreview?.suggestedServices?.join(', ') || 'Plumbing, Electrical, Handyman, Cleaning, Painting, TV Mounting, and more home services'}
                             </div>
                         </div>
-                    )}
-
-                    {/* Review / quote path (low confidence, commercial, multi-service, vague, etc.) */}
+                                {/* Review / custom-quote banner — shown instead of fixed price card */}
                     {(pricePreview || isPricingLoading) && showReviewPath && (
-                        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-[24px] p-4 text-emerald-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
-                            <div className="font-semibold text-sm flex items-center gap-2">
-                                <span>✉️</span>
-                                <span>Confirm & submit</span>
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-[24px] p-4 text-amber-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm flex items-center gap-2 mb-2">
+                                <FileQuestion className="w-4 h-4 text-amber-400" />
+                                <span className="text-amber-300">Custom Quote Required</span>
                             </div>
-                            <p className="text-xs text-emerald-100/90 leading-relaxed">
-                                {pricePreview?.clarifyMessage || REVIEW_QUOTE_MESSAGE}
+                            <p className="text-xs text-amber-100/80 leading-relaxed mb-3">
+                                This job needs a review from our team due to quantity, complexity, or scope. Tap below to submit your details.
                             </p>
-                            <p className="text-[10px] text-emerald-200/70">
-                                No upfront price is shown for this request — our team or a pro will follow up.
-                            </p>
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
-                                        Email <span className="text-red-400">*</span>
-                                    </label>
-                                    <input
-                                        type="email"
-                                        autoComplete="email"
-                                        inputMode="email"
-                                        value={quoteContactEmail}
-                                        onChange={(e) => setQuoteContactEmail(e.target.value)}
-                                        placeholder="you@example.com"
-                                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-medium text-emerald-200/80 block mb-1">
-                                        Phone number <span className="text-red-400">*</span>
-                                    </label>
-                                    <input
-                                        type="tel"
-                                        autoComplete="tel"
-                                        inputMode="tel"
-                                        value={quoteContactPhone}
-                                        onChange={(e) => setQuoteContactPhone(e.target.value)}
-                                        placeholder="+44 … or local number"
-                                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30"
-                                    />
-                                    <p className="text-[9px] text-emerald-200/50 mt-1">We’ll use this to reach you with your quote.</p>
-                                </div>
-                            </div>
+                            <button
+                                onClick={() => setIsReviewModalOpen(true)}
+                                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors"
+                            >
+                                Request Custom Quote →
+                            </button>
                         </div>
                     )}
 
@@ -512,7 +509,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     )}
                 </div>
 
-                {/* Primary actions — no dead end: always offer quote when review path applies */}
+                {/* Primary CTA */}
                 <div className="mt-8 flex flex-col items-center gap-3 w-full max-w-[400px] px-4">
                     {showFixedPath && (
                         <Button
@@ -529,11 +526,12 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     )}
                     {showReviewPath && (
                         <Button
-                            onClick={handleQuoteSubmitClick}
-                            disabled={!canAct || !addressOk || !quoteContactOk}
-                            className="w-full max-w-sm px-8 h-[56px] rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setIsReviewModalOpen(true)}
+                            disabled={!canAct}
+                            className="w-full max-w-sm px-8 h-[56px] rounded-full bg-amber-500 hover:bg-amber-400 text-black flex items-center justify-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_8px_24px_rgba(245,158,11,0.35)]"
                         >
-                            <span className="text-base font-bold">Submit for quote</span>
+                            <FileQuestion className="w-5 h-5" />
+                            <span className="text-base font-bold">Request Custom Quote</span>
                         </Button>
                     )}
                 </div>
@@ -556,6 +554,18 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 isOpen={isAddressModalOpen}
                 onClose={() => setIsAddressModalOpen(false)}
                 onSave={handleAddressSave}
+            />
+
+            {/* Review / Custom Quote Modal */}
+            <ReviewQuoteModal
+                isOpen={isReviewModalOpen}
+                onClose={() => setIsReviewModalOpen(false)}
+                rawInput={description}
+                detectedJob={pricePreview?.jobs?.[0]}
+                parsedEntities={pricePreview?.quantities}
+                quantity={pricePreview?.quantitiesList?.[0] ?? 1}
+                estimatedMinutes={pricePreview?.total_minutes ?? 0}
+                confidenceScore={0}
             />
         </div>
     );
