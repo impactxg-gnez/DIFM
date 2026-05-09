@@ -494,3 +494,25 @@ model UserAddress {
   
   @@index([userId])
 }
+
+model PendingReview {
+  id                String   @id @default(uuid())
+  request_id        String   @unique @default(uuid())
+  raw_input         String
+  detected_job      String?
+  parsed_entities   Json?
+  quantity          Int      @default(1)
+  estimated_minutes Int      @default(0)
+  confidence_score  Float    @default(0)
+  
+  user_name         String
+  email             String
+  phone             String
+  notes             String?
+  uploaded_photos   String?
+  
+  review_status     String   @default("NEW") // "NEW", "REVIEWED", "QUOTED", "REJECTED"
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

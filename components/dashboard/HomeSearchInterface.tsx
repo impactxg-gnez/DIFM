@@ -342,10 +342,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             )}
 
             {/* Scrollable Main Content Wrapper */}
-            <div className="relative z-10 w-full flex flex-col items-center pt-[120px] pb-32 px-4 md:px-0">
+            {/* pt-[168px] on mobile: address chip is fixed ~64px tall + 8px top = 72px; hero graphic is ~120px; give 168px total clearance so logo always clears the chip */}
+            <div className="relative z-10 w-full flex flex-col items-center pt-[168px] sm:pt-[120px] pb-32 px-4 md:px-0">
 
-                {/* Hero Graphic */}
-                <div className="w-[180px] h-[180px] mb-4 flex items-center justify-center">
+                {/* Hero Graphic — smaller on mobile so it doesn't crowd the address chip */}
+                <div className="w-[140px] h-[140px] sm:w-[180px] sm:h-[180px] mb-4 flex items-center justify-center">
                     <img
                         src="/hero-graphic.png"
                         alt="DIFM Hero"
