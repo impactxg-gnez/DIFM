@@ -293,13 +293,12 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         (pricePreview?.bookable === true ||
             routing === 'FIXED_PRICE' ||
             (routing == null && hasDisplayPrice));
-    /** Review / quote: not OOS, not the fixed path, and server allows quote submission (or legacy unknown). */
+    /** Review / quote: only for commercial jobs, per user request. */
     const showReviewPath =
         !isOut &&
         !showFixedPath &&
         pricePreview != null &&
-        (pricePreview?.canSubmitQuoteRequest !== false) &&
-        (routing === 'REVIEW_QUOTE' || routing == null);
+        previewWarnings.includes('COMMERCIAL_QUOTE_REQUIRED');
     const addressOk = Boolean(selectedAddress?.trim());
     const quoteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quoteContactEmail.trim());
     const quotePhoneDigits = quoteContactPhone.replace(/\D/g, '');
@@ -476,12 +475,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                     />
                                     <p className="text-[9px] text-emerald-200/50 mt-1">We’ll use this to reach you with your quote.</p>
                                 </div>
-                            </div>
-                            <div
-                                onClick={handleAddressClick}
-                                className={`w-full h-[44px] rounded-[16px] flex items-center justify-center cursor-pointer text-sm font-semibold transition-colors ${selectedAddress ? 'bg-emerald-600 text-white' : 'bg-white/10 text-white/70'}`}
-                            >
-                                {selectedAddress || 'Add your address (required)'}
                             </div>
                         </div>
                     )}

@@ -36,6 +36,9 @@ model User {
   
   // Provider documents
   documents       ProviderDocument[]
+  
+  // Addresses
+  addresses       UserAddress[]
 
   // Relations
   jobsCreated     Job[]    @relation("CustomerJobs")
@@ -474,4 +477,20 @@ model ClarifierLibrary {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model UserAddress {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address   String
+  apt       String?
+  label     String   // e.g. "Home", "Office", "Other", or custom label
+  latitude  Float?
+  longitude Float?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
 }

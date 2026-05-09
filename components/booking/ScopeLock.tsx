@@ -249,7 +249,9 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
     };
 
     const handleContinueAfterClarifiers = () => {
-        if (!allClarifiersAnswered || preview.status === 'OVERFLOW' || preview.bookingAllowed === false) return;
+        if (!allClarifiersAnswered) return;
+        // Preview may return OVERFLOW (e.g. large TV minutes) — user must still reach step 2b;
+        // final POST routes to review when needed.
         setClarifierPhaseDone(true);
     };
 
@@ -292,23 +294,37 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             )}
 
             {q.type === 'select' && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {(q.options?.length
+                (() => {
+                    const opts: string[] = q.options?.length
                         ? q.options
                         : /wall|substrate|surface|mount/i.test(q.id)
                           ? ['stud', 'brick', 'concrete', 'tile', 'unsure']
-                          : []
-                    ).map((val: string) => (
-                        <Button
-                            key={val}
-                            variant={answers[q.id] === val ? 'default' : 'outline'}
-                            className={`text-xs ${answers[q.id] === val ? 'bg-blue-600' : 'border-white/10 hover:bg-white/5'}`}
-                            onClick={() => handleAnswer(q.id, val)}
-                        >
-                            {val}
-                        </Button>
-                    ))}
-                </div>
+                          : [];
+                    if (opts.length === 0) {
+                        return (
+                            <Input
+                                className="border-white/10 bg-white/5 py-6 text-lg text-white caret-white placeholder:text-gray-400 focus-visible:ring-blue-500"
+                                placeholder="Your answer..."
+                                value={answers[q.id] || ''}
+                                onChange={(e) => handleAnswer(q.id, e.target.value)}
+                            />
+                        );
+                    }
+                    return (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {opts.map((val: string) => (
+                                <Button
+                                    key={val}
+                                    variant={answers[q.id] === val ? 'default' : 'outline'}
+                                    className={`text-xs ${answers[q.id] === val ? 'bg-blue-600' : 'border-white/10 hover:bg-white/5'}`}
+                                    onClick={() => handleAnswer(q.id, val)}
+                                >
+                                    {val}
+                                </Button>
+                            ))}
+                        </div>
+                    );
+                })()
             )}
             {q.type === 'number' && (
                 <Input
@@ -525,26 +541,16 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                 <div className="space-y-3">
                     {showClarifierOnly ? (
                         <Button
-                            className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold"
-                            disabled={
-                                !allClarifiersAnswered ||
-                                preview.status === 'OVERFLOW' ||
-                                preview.bookingAllowed === false
-                            }
+                            className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold disabled:opacity-40"
+                            disabled={!allClarifiersAnswered}
                             onClick={handleContinueAfterClarifiers}
                         >
                             Continue to price & photos
                         </Button>
                     ) : (
                         <Button
-                            className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold"
-                            disabled={
-                                !allClarifiersAnswered ||
-                                !descriptionValid ||
-                                isSubmitting ||
-                                preview.status === 'OVERFLOW' ||
-                                preview.bookingAllowed === false
-                            }
+                            className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold disabled:opacity-40"
+                            disabled={!allClarifiersAnswered || !descriptionValid || isSubmitting}
                             onClick={handleFinalSubmit}
                         >
                             {isSubmitting
