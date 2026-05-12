@@ -55,6 +55,8 @@ const JOB_LABELS: Record<string, string> = {
     install_light_fitting: 'Ceiling light / fitting',
     install_ceiling_fan: 'Ceiling fan install',
     room_painting: 'Interior painting',
+    ac_wall_unit_install: 'AC / split unit install',
+    ac_unit_service: 'AC service',
 };
 
 const FLAG_LABELS: Record<string, string> = {

@@ -451,7 +451,13 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     let displayTier = 'H1';
     const displayMinutes = totalMinutes;
 
-    if (category === 'HANDYMAN' || category === 'PLUMBING' || category === 'ELECTRICAL' || category === 'PAINTER') {
+    if (
+        category === 'HANDYMAN' ||
+        category === 'PLUMBING' ||
+        category === 'ELECTRICAL' ||
+        category === 'PAINTER' ||
+        category === 'HVAC'
+    ) {
         const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
         totalPrice = t?.price_gbp ?? 0;
         displayTier = t?.tier ?? 'H1';
@@ -541,7 +547,9 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                     ? 'ELECTRICAL'
                     : category === 'PAINTER'
                       ? 'PAINTER'
-                      : 'HANDYMAN',
+                      : category === 'HVAC'
+                        ? 'HVAC'
+                        : 'HANDYMAN',
         ],
         quantities: { ...qtyMap },
         visits,
@@ -581,11 +589,13 @@ function buildVisits(
                 ? 'ELECTRICAL'
                 : category === 'PAINTER'
                   ? 'PAINTER'
-                  : 'HANDYMAN';
+                  : category === 'HVAC'
+                    ? 'HVAC'
+                    : 'HANDYMAN';
     const itemClass =
         category === 'CLEANING'
             ? 'CLEANING'
-            : category === 'PLUMBING' || category === 'ELECTRICAL' || category === 'PAINTER'
+            : category === 'PLUMBING' || category === 'ELECTRICAL' || category === 'PAINTER' || category === 'HVAC'
               ? ('SPECIALIST' as const)
               : ('STANDARD' as const);
     const visitTypeLabel =
@@ -597,7 +607,9 @@ function buildVisits(
                 ? 'Electrical'
                 : category === 'PAINTER'
                   ? 'Painting'
-                  : 'Handyman';
+                  : category === 'HVAC'
+                    ? 'Air conditioning'
+                    : 'Handyman';
     return [
         {
             visit_id: '',

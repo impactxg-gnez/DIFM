@@ -147,12 +147,14 @@ function inferVisitTypeLabel(itemClass: GeneratedVisit['item_class'], capability
         if (capabilityTags.includes('PLUMBING')) return 'Plumbing';
         if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
         if (capabilityTags.includes('PAINTER')) return 'Painting';
+        if (capabilityTags.includes('HVAC')) return 'Air conditioning';
         return 'Specialist';
     }
     // STANDARD (default)
     if (capabilityTags.includes('PLUMBING')) return 'Plumbing';
     if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
     if (capabilityTags.includes('PAINTER')) return 'Painting';
+    if (capabilityTags.includes('HVAC')) return 'Air conditioning';
     return 'Handyman';
 }
 
@@ -267,7 +269,7 @@ function createGroupVisit(capability: string, items: MatrixTimedItem[], minutes:
     // Infer class
     let itemClass: GeneratedVisit['item_class'] = "STANDARD";
     if (capability === 'CLEANING') itemClass = "CLEANING";
-    else if (['PLUMBING', 'ELECTRICAL', 'PAINTER'].includes(capability)) itemClass = "SPECIALIST";
+    else if (['PLUMBING', 'ELECTRICAL', 'PAINTER', 'HVAC'].includes(capability)) itemClass = "SPECIALIST";
 
     const visitTypeLabel = inferVisitTypeLabel(itemClass, [capability]);
 

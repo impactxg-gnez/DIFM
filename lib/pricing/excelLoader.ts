@@ -6,6 +6,7 @@ import { parseMatrixV2Workbook } from './matrixV2/loadFromWorkbook';
 import { applySyntheticResidentialPlumbingToModel } from './matrixV2/syntheticResidentialPlumbing';
 import { applySyntheticResidentialElectricalToModel } from './matrixV2/syntheticResidentialElectrical';
 import { applySyntheticResidentialPaintingToModel } from './matrixV2/syntheticResidentialPainting';
+import { applySyntheticResidentialHvacToModel } from './matrixV2/syntheticResidentialHvac';
 
 export interface PhraseMappingExcel {
     pattern_id?: number;
@@ -214,7 +215,9 @@ class ExcelSource {
                         ? 'ELECTRICAL'
                         : row.category === 'PAINTER'
                           ? 'PAINTER'
-                          : 'HANDYMAN';
+                          : row.category === 'HVAC'
+                            ? 'HVAC'
+                            : 'HANDYMAN';
             this._jobItems.set(id, {
                 job_item_id: id,
                 display_name:
@@ -228,7 +231,11 @@ class ExcelSource {
                               ? 'Ceiling fan install'
                               : id === 'room_painting'
                                 ? 'Interior room painting'
-                                : id.replace(/_/g, ' '),
+                                : id === 'ac_wall_unit_install'
+                                  ? 'Wall / split AC install'
+                                  : id === 'ac_unit_service'
+                                    ? 'AC service visit'
+                                    : id.replace(/_/g, ' '),
                 capability_tag: cap,
                 default_time_weight_minutes: row.max_minutes,
                 pricing_ladder: 'MATRIX_V2_HANDYMAN',
@@ -284,6 +291,7 @@ class ExcelSource {
                     applySyntheticResidentialPlumbingToModel(this._matrixV2Model);
                     applySyntheticResidentialElectricalToModel(this._matrixV2Model);
                     applySyntheticResidentialPaintingToModel(this._matrixV2Model);
+                    applySyntheticResidentialHvacToModel(this._matrixV2Model);
                     this.populateLegacyCachesFromV2();
                     console.log(
                         `[ExcelSource] MATRIX V2 loaded: ${this._matrixV2Model.jobs.size} jobs, ${this._matrixV2Model.phrases.length} phrase rows`,

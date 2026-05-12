@@ -250,6 +250,55 @@ function inferResidentialPainting(
     return id;
 }
 
+function inferResidentialHvac(
+    model: MatrixV2Model,
+    t: string,
+    signals: string[],
+    scores: Record<string, number>,
+): string | null {
+    const installId = firstExistingId(model, ['ac_wall_unit_install']);
+    const serviceId = firstExistingId(model, ['ac_unit_service']);
+    if (!installId && !serviceId) return null;
+
+    if (/\b(car|vehicle|automotive)\b/i.test(t)) return null;
+    const coolingWord = /\b(cool(?:ing)?|hvac|air\s*[- ]?\s*con(?:d(?:ition(?:ing)?)?)?|aircon|split\s+ac|\bac\s+split\b|mini\s*-?\s*split)\b/i.test(t);
+    if (/\b(adapter|charger|usb|hdmi|laptop|computer|power\s+supply)\b/i.test(t) && !coolingWord) {
+        return null;
+    }
+
+    const hasAc =
+        /\bac\s+service\b/i.test(t) ||
+        /\b(ac|hvac|a\.c\.|aircon|air\s*[- ]?\s*con(?:d(?:ition(?:ing)?)?)?)\b/i.test(t) ||
+        /\bmini\s*-?\s*split\b/i.test(t) ||
+        /\bsplit\s+ac\b|\bac\s+split\b/i.test(t) ||
+        /\bac\s+(?:units?)\b/i.test(t);
+
+    if (!hasAc) return null;
+
+    const installCue =
+        !!installId &&
+        /\b(install(?:ation|ing)?|fit(?:ted|ting)?|mount(?:ed|ing)?|\bhang\b|replac(?:e|ing|ement))\b/i.test(t);
+    const serviceCue =
+        !!serviceId &&
+        (/\bac\s+service\b/i.test(t) ||
+            (/\b(service|servicing|repairs?|repair|maintain(?:ance)?|annual|fault|faulty|service\s+call)\b/i.test(t) &&
+                /\bac\b|\bhvac\b|air\s*[- ]?\s*con|aircon/i.test(t)) ||
+            (/\b(not\s+cooling|regas|re[- ]?gas|recharg)\b/i.test(t) &&
+                /\bac\b|\bhvac\b|air\s*[- ]?\s*con|aircon/i.test(t)));
+
+    if (installCue && installId) {
+        scores[installId] = (scores[installId] ?? 0) + 52;
+        signals.push('keyword:hvac_install');
+        return installId;
+    }
+    if (serviceCue && serviceId) {
+        scores[serviceId] = (scores[serviceId] ?? 0) + 48;
+        signals.push('keyword:hvac_service');
+        return serviceId;
+    }
+    return null;
+}
+
 function inferCableConceal(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!CABLE_TOKEN.test(t)) return null;
     const id =
@@ -303,6 +352,7 @@ const INFERENCES: Array<{
     { infer: inferCurtain },
     { infer: inferAppliances },
     { infer: inferResidentialElectrical },
+    { infer: inferResidentialHvac },
     { infer: inferResidentialPainting },
     { infer: inferPlumbing },
     { infer: inferFurnitureAssembly },

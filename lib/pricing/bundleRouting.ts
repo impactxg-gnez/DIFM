@@ -30,6 +30,7 @@ export function routingBucketForJobItem(jobItemId: string): string {
     }
     if (/PEST/.test(cap) || /pest/.test(id)) return 'PEST';
     if (/PAINT|DECOR|WALLPAPER/.test(cap) || /paint|decor|wallpaper/.test(id)) return 'PAINTING';
+    if (/HVAC|AIR\s*CON|COOLING/i.test(cap) || /ac_|aircon|\bac\s*unit|hvac/.test(id)) return 'HVAC';
     if (/APPLIANCE|OVEN|DISHWASHER|WASHER|FRIDGE/.test(cap) || /appliance|washer|dishwasher|oven/.test(id)) {
         return 'APPLIANCE';
     }
