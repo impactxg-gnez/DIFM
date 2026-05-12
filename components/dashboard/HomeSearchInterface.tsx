@@ -108,6 +108,7 @@ const COMMERCIAL_QUOTE_LANDING_WARNINGS = new Set([
     'HIGH_QUANTITY',
     'MATRIX_V2_QUANTITY_REVIEW',
     'MATRIX_V2_COMMERCIAL_CLEAN',
+    'MATRIX_V2_COMMERCIAL_PAINT',
 ]);
 
 function resolveJobLabel(jobId: string): string {

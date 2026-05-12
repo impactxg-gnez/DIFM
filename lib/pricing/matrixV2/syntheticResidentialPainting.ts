@@ -25,7 +25,6 @@ const SYNTH_PHRASES = [
     'paint lounge',
     'paint living room',
     'paint kitchen',
-    'paint office',
     'paint study',
     'paint landing',
     'paint flat',

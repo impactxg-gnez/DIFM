@@ -320,6 +320,13 @@ function suggestsNonResidentialCleaningSite(normalized: string): boolean {
     return /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel|retail|shop)\b/i.test(normalized);
 }
 
+/** Workplace / retail site painting — residential room painting matrix does not apply (unless clearly home office). */
+function suggestsCommercialPaintingSite(normalized: string): boolean {
+    if (!/\bpaint(?:ing)?|repaints?\b/i.test(normalized)) return false;
+    if (/\bhome\s+office\b/i.test(normalized)) return false;
+    return /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel|retail|shop)\b/i.test(normalized);
+}
+
 export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, opts?: MatrixV2RouteOptions) {
     const normalized = normalizeV2Input(userInput);
     const parts = normalized.split(' and ').map((s) => s.trim()).filter(Boolean);
@@ -336,6 +343,11 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     if (jobIds.length === 0) {
         if (suggestsNonResidentialCleaningSite(normalized)) {
             return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_COMMERCIAL_CLEAN'], [], {
+                parser: parserTrace,
+            });
+        }
+        if (suggestsCommercialPaintingSite(normalized)) {
+            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_COMMERCIAL_PAINT'], [], {
                 parser: parserTrace,
             });
         }
@@ -410,6 +422,26 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
             ['MATRIX_V2_COMMERCIAL_CLEAN'],
+            formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
+            {
+                detectedJobIds: [...jobIds],
+                quantityByJob: { ...qtyMap },
+                estimatedMinutes:
+                    computeEstimatedMinutes(jobIds, qtyMap, model) +
+                    wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
+                clarifierAnswers: clarifierAnswersMerged,
+                clarifierHydration: hydratedFromText,
+                parser: parserTrace,
+            },
+        );
+    }
+
+    /** Workplace / retail painting — even if “office” matched a residential SKU phrase. */
+    if (jobIds.includes('room_painting') && suggestsCommercialPaintingSite(normalized)) {
+        return buildReviewResult(
+            parts,
+            MATRIX_V2_REVIEW_MESSAGE,
+            ['MATRIX_V2_COMMERCIAL_PAINT'],
             formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
             {
                 detectedJobIds: [...jobIds],

@@ -376,6 +376,11 @@ function inferResidentialPainting(
         /\b(paint(?:ing)?|repaints?|repaint(?:ed|ing)?|decorat(?:e|ing)|emulsion(?:ed)?)\b/i.test(t) || /\bpainters?\b/i.test(t);
     if (!paintCue) return null;
 
+    /** Workplace “paint office” etc. — commercial quote; keep home office residential. */
+    if (/\boffice\b/i.test(t) && !/\bhome\s+office\b/i.test(t)) {
+        return null;
+    }
+
     const spaceCue =
         /\b(room|rooms|bedroom|bedrooms|kitchen|bathroom|lounge|living|living\s+room|hall|hallway|landing|study|office|flat|flats|apartment|house|home|interior|inside|wall|walls|ceiling|ceilings|skirting|doors?)\b/i.test(
             t,
