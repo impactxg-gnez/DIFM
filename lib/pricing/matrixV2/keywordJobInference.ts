@@ -177,6 +177,52 @@ function inferPlumbing(model: MatrixV2Model, t: string, signals: string[], score
     return id;
 }
 
+function inferResidentialElectrical(
+    model: MatrixV2Model,
+    t: string,
+    signals: string[],
+    scores: Record<string, number>,
+): string | null {
+    const hoodOrCookerVent = /\b(kitchen\s+hood|cooker\s+hood|extractor\s+hood)\b/i.test(t);
+
+    const fanId = firstExistingId(model, ['install_ceiling_fan', 'ceiling_fan_install']);
+    const fanCue =
+        !hoodOrCookerVent &&
+        /\b(install|fit|hang|mount|repair|replac(?:e|ing)|fix(?:ed|ing))\b/i.test(t) &&
+        (/\bceiling\s+fan\b/i.test(t) || (/\bceiling\b/i.test(t) && /\bfan\b/i.test(t)));
+
+    const lightId = firstExistingId(model, ['install_light_fitting', 'install_light_fitting_standard', 'light_install']);
+    const lightCue =
+        !/\bceiling\s+fan\b/i.test(t) &&
+        /\b(install|fit|hang|mount|repair|replac(?:e|ing))\b/i.test(t) &&
+        /\b(light|lights|fitting|pendant|chandeliers?|spotlights?)\b/i.test(t) &&
+        (/\bceiling\b/i.test(t) || /\b(pendants?|chandeliers?)\b/i.test(t));
+
+    const socketId = firstExistingId(model, ['replace_socket', 'socket_replace', 'replace_socket_faceplate']);
+    const socketCue =
+        /\b(socket|sockets|outlet|outlets)\b/i.test(t) &&
+        /\b(replac(?:e|ing)|replacement|chang(?:e|ing)|repair(?:ing)?|broken|faulty|upgrade|add|moving|relocat(?:e|ing)|install(?:ed|ing)|fitting|fitted)\b/i.test(
+            t,
+        );
+
+    if (fanId && fanCue) {
+        signals.push('keyword:ceiling_fan');
+        scores[fanId] = (scores[fanId] ?? 0) + 52;
+        return fanId;
+    }
+    if (socketId && socketCue && !/\bceiling\s+fan\b/i.test(t)) {
+        signals.push('keyword:socket_replace');
+        scores[socketId] = (scores[socketId] ?? 0) + 48;
+        return socketId;
+    }
+    if (lightId && lightCue) {
+        signals.push('keyword:ceiling_light');
+        scores[lightId] = (scores[lightId] ?? 0) + 46;
+        return lightId;
+    }
+    return null;
+}
+
 function inferCableConceal(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!CABLE_TOKEN.test(t)) return null;
     const id =
@@ -229,6 +275,7 @@ const INFERENCES: Array<{
     { infer: inferPictures },
     { infer: inferCurtain },
     { infer: inferAppliances },
+    { infer: inferResidentialElectrical },
     { infer: inferPlumbing },
     { infer: inferFurnitureAssembly },
     { infer: inferCableConceal },

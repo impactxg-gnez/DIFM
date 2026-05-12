@@ -51,6 +51,9 @@ const JOB_LABELS: Record<string, string> = {
     bathroom_cleaning: 'Bathroom Cleaning',
     kitchen_cleaning: 'Kitchen Cleaning',
     tap_leak_fix: 'Tap / Sink / Small plumbing',
+    replace_socket: 'Socket replacement',
+    install_light_fitting: 'Ceiling light / fitting',
+    install_ceiling_fan: 'Ceiling fan install',
 };
 
 const FLAG_LABELS: Record<string, string> = {

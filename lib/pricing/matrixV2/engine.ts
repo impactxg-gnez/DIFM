@@ -451,7 +451,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     let displayTier = 'H1';
     const displayMinutes = totalMinutes;
 
-    if (category === 'HANDYMAN' || category === 'PLUMBING') {
+    if (category === 'HANDYMAN' || category === 'PLUMBING' || category === 'ELECTRICAL') {
         const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
         totalPrice = t?.price_gbp ?? 0;
         displayTier = t?.tier ?? 'H1';
@@ -533,7 +533,13 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             complexityTierDelta: 0,
         })),
         capabilities: [
-            category === 'CLEANING' ? 'CLEANING' : category === 'PLUMBING' ? 'PLUMBING' : 'HANDYMAN',
+            category === 'CLEANING'
+                ? 'CLEANING'
+                : category === 'PLUMBING'
+                  ? 'PLUMBING'
+                  : category === 'ELECTRICAL'
+                    ? 'ELECTRICAL'
+                    : 'HANDYMAN',
         ],
         quantities: { ...qtyMap },
         visits,
@@ -569,11 +575,13 @@ function buildVisits(
             ? 'CLEANING'
             : category === 'PLUMBING'
               ? 'PLUMBING'
-              : 'HANDYMAN';
+              : category === 'ELECTRICAL'
+                ? 'ELECTRICAL'
+                : 'HANDYMAN';
     const itemClass =
         category === 'CLEANING'
             ? 'CLEANING'
-            : category === 'PLUMBING'
+            : category === 'PLUMBING' || category === 'ELECTRICAL'
               ? ('SPECIALIST' as const)
               : ('STANDARD' as const);
     const visitTypeLabel =
@@ -581,7 +589,9 @@ function buildVisits(
             ? 'Cleaning'
             : category === 'PLUMBING'
               ? 'Plumbing'
-              : 'Handyman';
+              : category === 'ELECTRICAL'
+                ? 'Electrical'
+                : 'Handyman';
     return [
         {
             visit_id: '',
