@@ -451,7 +451,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     let displayTier = 'H1';
     const displayMinutes = totalMinutes;
 
-    if (category === 'HANDYMAN') {
+    if (category === 'HANDYMAN' || category === 'PLUMBING') {
         const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
         totalPrice = t?.price_gbp ?? 0;
         displayTier = t?.tier ?? 'H1';
@@ -532,7 +532,9 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             adjustedMinutes: (model.jobs.get(id)?.max_minutes ?? 0) * qtyMap[id],
             complexityTierDelta: 0,
         })),
-        capabilities: [category === 'CLEANING' ? 'CLEANING' : 'HANDYMAN'],
+        capabilities: [
+            category === 'CLEANING' ? 'CLEANING' : category === 'PLUMBING' ? 'PLUMBING' : 'HANDYMAN',
+        ],
         quantities: { ...qtyMap },
         visits,
         price: totalPrice,
@@ -562,13 +564,29 @@ function buildVisits(
 ): GeneratedVisit[] {
     const primaryId = jobIds[0];
     const primaryJob = model.jobs.get(primaryId)!;
-    const cap = category === 'CLEANING' ? 'CLEANING' : 'HANDYMAN';
-    const itemClass = category === 'CLEANING' ? 'CLEANING' : ('STANDARD' as const);
+    const cap =
+        category === 'CLEANING'
+            ? 'CLEANING'
+            : category === 'PLUMBING'
+              ? 'PLUMBING'
+              : 'HANDYMAN';
+    const itemClass =
+        category === 'CLEANING'
+            ? 'CLEANING'
+            : category === 'PLUMBING'
+              ? ('SPECIALIST' as const)
+              : ('STANDARD' as const);
+    const visitTypeLabel =
+        category === 'CLEANING'
+            ? 'Cleaning'
+            : category === 'PLUMBING'
+              ? 'Plumbing'
+              : 'Handyman';
     return [
         {
             visit_id: '',
             item_class: itemClass,
-            visit_type_label: category === 'CLEANING' ? 'Cleaning' : 'Handyman',
+            visit_type_label: visitTypeLabel,
             primary_job_item: {
                 job_item_id: primaryId,
                 display_name: humanize(primaryId),

@@ -154,6 +154,29 @@ function inferAppliances(model: MatrixV2Model, t: string, signals: string[], sco
     return null;
 }
 
+function inferPlumbing(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
+    const id = firstExistingId(model, ['tap_leak_fix']);
+    if (!id) return null;
+
+    const blockedDrain =
+        /\b(block|blocked|clog|clogged)\b/i.test(t) && /\b(sink|drain|pipes?|u\s*[- ]?bend|trap)\b/i.test(t);
+    const tapOrFaucetLeak =
+        /\b(tap|taps|faucet|mixers?)\b/i.test(t) && /\b(leak|leaks|leaking|drip|drips|dripping|broken|fix|repair)\b/i.test(t);
+    const sinkLeakOnly = /\bsink\b/i.test(t) && /\b(leak|leaks|leaking|drip)\b/i.test(t);
+    const pipeIssue = /\bpipe(s)?\b/i.test(t) && /\b(leak|leaks|repair|fix|broken|burst)\b/i.test(t);
+    const generalSmallPlumb =
+        /\bplumb(er|ers|ing)?\b/i.test(t) && /\b(fix|repair|leak|blocked|clog|unclog)\b/i.test(t);
+    const toiletIssue =
+        /\b(toilet|wc|loo)\b/i.test(t) && /\b(fix|repair|blocked|clog|overflow|flush|leak)\b/i.test(t);
+
+    if (!(blockedDrain || tapOrFaucetLeak || sinkLeakOnly || pipeIssue || generalSmallPlumb || toiletIssue)) {
+        return null;
+    }
+    scores[id] = (scores[id] ?? 0) + 48;
+    signals.push('keyword:residential_plumbing');
+    return id;
+}
+
 function inferCableConceal(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!CABLE_TOKEN.test(t)) return null;
     const id =
@@ -206,6 +229,7 @@ const INFERENCES: Array<{
     { infer: inferPictures },
     { infer: inferCurtain },
     { infer: inferAppliances },
+    { infer: inferPlumbing },
     { infer: inferFurnitureAssembly },
     { infer: inferCableConceal },
     { infer: inferWallHoleFill },

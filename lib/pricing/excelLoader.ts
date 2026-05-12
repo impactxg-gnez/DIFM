@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import type { MatrixV2Model } from './matrixV2/types';
 import { parseMatrixV2Workbook } from './matrixV2/loadFromWorkbook';
+import { applySyntheticResidentialPlumbingToModel } from './matrixV2/syntheticResidentialPlumbing';
 
 export interface PhraseMappingExcel {
     pattern_id?: number;
@@ -202,10 +203,12 @@ class ExcelSource {
         this._pricingTiers.clear();
 
         for (const [id, row] of this._matrixV2Model.jobs) {
-            const cap = row.category === 'CLEANING' ? 'CLEANING' : 'HANDYMAN';
+            const cap =
+                row.category === 'CLEANING' ? 'CLEANING' : row.category === 'PLUMBING' ? 'PLUMBING' : 'HANDYMAN';
             this._jobItems.set(id, {
                 job_item_id: id,
-                display_name: id.replace(/_/g, ' '),
+                display_name:
+                    id === 'tap_leak_fix' ? 'Tap / sink / small plumbing fix' : id.replace(/_/g, ' '),
                 capability_tag: cap,
                 default_time_weight_minutes: row.max_minutes,
                 pricing_ladder: 'MATRIX_V2_HANDYMAN',
@@ -258,6 +261,7 @@ class ExcelSource {
             if (workbook.Sheets['JOB_ITEMS'] && workbook.Sheets['PHRASE_MAPPING']) {
                 try {
                     this._matrixV2Model = parseMatrixV2Workbook(workbook);
+                    applySyntheticResidentialPlumbingToModel(this._matrixV2Model);
                     this.populateLegacyCachesFromV2();
                     console.log(
                         `[ExcelSource] MATRIX V2 loaded: ${this._matrixV2Model.jobs.size} jobs, ${this._matrixV2Model.phrases.length} phrase rows`,
