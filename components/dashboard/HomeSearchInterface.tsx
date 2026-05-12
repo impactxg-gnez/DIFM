@@ -140,12 +140,13 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     setPricePreview(data);
                     // Auto-open review modal when routing is REVIEW_QUOTE
                     const r = data?.routing as string | undefined;
+                    const warnList = Array.isArray(data?.warnings) ? data.warnings : [];
                     const isReview = r === 'REVIEW_QUOTE' ||
-                        (Array.isArray(data?.warnings) && data.warnings.some((w: string) =>
+                        warnList.some((w: unknown) =>
                             ['COMMERCIAL_QUOTE_REQUIRED', 'MATRIX_V2_COMMERCIAL_CLEAN',
                              'MATRIX_V2_QUANTITY_REVIEW', 'MATRIX_V2_CROSS_CATEGORY',
-                             'COMMERCIAL_BULK', 'HIGH_QUANTITY'].includes(w)
-                        ));
+                             'COMMERCIAL_BULK', 'HIGH_QUANTITY'].includes(String(w))
+                        );
                     if (isReview && lastAutoOpenedRoutingRef.current !== debouncedDesc) {
                         lastAutoOpenedRoutingRef.current = debouncedDesc;
                         setIsReviewModalOpen(true);
@@ -518,20 +519,31 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             {/* Interactive Clarifier Controls (e.g. Rooms, Cleaning Tier) */}
                             {Array.isArray(pricePreview?.clarifiers) && pricePreview.clarifiers.length > 0 && (
                                 <div className="mt-4 pt-4 border-t border-black/5 space-y-3">
-                                    {pricePreview.clarifiers.map((c: any) => (
+                                    {pricePreview.clarifiers.map((c: any) => {
+                                        const stringOptions = Array.isArray(c.options)
+                                            ? c.options.filter((o: unknown): o is string => typeof o === 'string')
+                                            : [];
+                                        return (
                                         <div key={c.tag} className="flex items-center justify-between gap-4">
                                             <span className="text-[10px] font-bold text-black/60 uppercase tracking-wider leading-tight max-w-[60%]">
                                                 {c.question}
                                             </span>
                                             <div className="flex items-center">
-                                                {c.inputType === 'select' || (Array.isArray(c.options) && c.options.length > 0) ? (
+                                                {stringOptions.length > 0 ? (
                                                     <select
-                                                        value={c.value}
-                                                        onChange={(e) => setClarifierAnswers(prev => ({ ...prev, [c.tag]: e.target.value }))}
+                                                        value={c.value ?? ''}
+                                                        onChange={(e) =>
+                                                            setClarifierAnswers((prev) => ({
+                                                                ...prev,
+                                                                [c.tag]: e.target.value,
+                                                            }))
+                                                        }
                                                         className="bg-black/5 border border-black/15 rounded-lg px-2 py-1.5 text-[11px] font-bold text-black/80 focus:outline-none focus:border-[#007AFF]/30 transition-colors"
                                                     >
-                                                        {c.options.map((opt: string) => (
-                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        {stringOptions.map((opt: string) => (
+                                                            <option key={opt} value={opt}>
+                                                                {opt}
+                                                            </option>
                                                         ))}
                                                     </select>
                                                 ) : (c.inputType === 'number' || typeof c.value === 'number') ? (
@@ -560,7 +572,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                                 )}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
 
