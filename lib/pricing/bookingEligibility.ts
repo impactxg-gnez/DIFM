@@ -7,6 +7,8 @@ import type { V1PricingResult } from './v1Pricing';
 export const V1_PRICING_BLOCK_WARNINGS = new Set<string>([
     'OUT_OF_SCOPE',
     'NEEDS_CLARIFICATION',
+    'MATRIX_V2_NO_MATCH',
+    'MATRIX_V2_JOB_UNKNOWN',
     'COMMERCIAL_QUOTE_REQUIRED',
     'BUNDLE_COMPLEX_QUOTE_REQUIRED',
     'CONTRADICTION_CLARIFY',

@@ -69,10 +69,21 @@ const FLAG_LABELS: Record<string, string> = {
 const BOOKING_BLOCK_WARNINGS = new Set([
     'OUT_OF_SCOPE',
     'NEEDS_CLARIFICATION',
+    'MATRIX_V2_NO_MATCH',
+    'MATRIX_V2_JOB_UNKNOWN',
     'COMMERCIAL_QUOTE_REQUIRED',
     'BUNDLE_COMPLEX_QUOTE_REQUIRED',
     'CONTRADICTION_CLARIFY',
     'PARTIAL_PARSE_CLARIFY',
+]);
+
+/** Show “add detail” banner (not custom-quote flow, not out-of-scope). */
+const CLARIFY_LANDING_WARNINGS = new Set([
+    'NEEDS_CLARIFICATION',
+    'MATRIX_V2_NO_MATCH',
+    'MATRIX_V2_JOB_UNKNOWN',
+    'PARTIAL_PARSE_CLARIFY',
+    'CONTRADICTION_CLARIFY',
 ]);
 
 /** Landing "Request custom quote" — only bulk / commercial quantity paths (not general REVIEW_QUOTE routing). */
@@ -319,6 +330,16 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const needsCommercialQuoteOnLanding = previewWarnings.some((w) =>
         COMMERCIAL_QUOTE_LANDING_WARNINGS.has(w),
     );
+    const showClarifyOnLanding =
+        pricePreview != null &&
+        !isPricingLoading &&
+        !isOut &&
+        !needsCommercialQuoteOnLanding &&
+        previewWarnings.some((w) => CLARIFY_LANDING_WARNINGS.has(String(w)));
+    const clarifyBannerText =
+        typeof pricePreview?.clarifyMessage === 'string' && pricePreview.clarifyMessage.trim()
+            ? pricePreview.clarifyMessage.trim()
+            : 'Please add more detail about the task so we can match it to a priced home service.';
     /** Fixed banner: show estimate when not blocked — even if API uses REVIEW_QUOTE routing for matrix bookkeeping. */
     const showFixedPath =
         !isOut &&
@@ -448,7 +469,16 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     </div>
 
-                    {/* Out of Scope Warning */}
+                    {/* No match / need more detail — priced home tasks only */}
+                    {showClarifyOnLanding && (
+                        <div className="bg-blue-600/15 border border-blue-500/35 rounded-[24px] p-4 text-blue-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2 text-blue-200">
+                                <FileQuestion className="w-4 h-4 shrink-0" />
+                                <span>Need a bit more detail</span>
+                            </div>
+                            <p className="text-xs text-blue-100/85 leading-relaxed">{clarifyBannerText}</p>
+                        </div>
+                    )}
                     {pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
                         <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-[24px] p-4 text-yellow-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="font-semibold text-sm mb-2 flex items-center gap-2">
@@ -456,12 +486,13 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 <span>Service Not Available</span>
                             </div>
                             <div className="text-xs mb-3 text-yellow-100/80">
-                                We don't currently offer "{description}". 
-                                We specialize in home repairs, installations, and cleaning services.
+                                We don't currently offer "{description}". We specialize in home repairs, installations, and cleaning
+                                services.
                             </div>
                             <div className="text-xs">
                                 <strong className="text-yellow-200">Available services:</strong>{' '}
-                                {pricePreview?.suggestedServices?.join(', ') || 'Plumbing, Electrical, Handyman, Cleaning, Painting, TV Mounting, and more home services'}
+                                {pricePreview?.suggestedServices?.join(', ') ||
+                                    'Plumbing, Electrical, Handyman, Cleaning, Painting, TV Mounting, and more home services'}
                             </div>
                         </div>
                     )}

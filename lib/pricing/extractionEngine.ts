@@ -13,6 +13,7 @@ import type { BookingMappingMeta } from './bookingRoutingTypes';
 import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 import { computeBundleSignals } from './bundleRouting';
 import { routeAndPriceMatrixV2 } from './matrixV2/engine';
+import { isVagueBookingRequest } from './bookingGuards';
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -157,6 +158,18 @@ export async function runExtractionPipeline(
         const cached = extractionCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.result;
+        }
+        const normalizedForGuards = normalizeInput(userInput);
+        if (normalizedForGuards.trim() && isVagueBookingRequest(normalizedForGuards)) {
+            const parts = splitInput(normalizedForGuards);
+            const clarifyResult = buildClarifyResult(
+                userInput,
+                parts,
+                warningsForClarifyReason('VAGUE_INPUT'),
+                'Please describe the specific task (for example what to mount, fix, or install).',
+            );
+            extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: clarifyResult });
+            return clarifyResult;
         }
         const v2Result = routeAndPriceMatrixV2(v2, userInput, { clarifierAnswers: options?.clarifierAnswers });
         const result: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };

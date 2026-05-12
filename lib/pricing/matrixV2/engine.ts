@@ -22,6 +22,10 @@ import { quantityForJob } from './itemQuantity';
 
 export const MATRIX_V2_REVIEW_MESSAGE = "We'll review your request and get back with a quote.";
 
+/** No phrase/job match — ask for a concrete home task (landing + preview UX). */
+export const MATRIX_V2_CLARIFY_NO_MATCH =
+    'We could not match that to a priced home service. Describe the specific job—for example fixing a leaking tap, mounting a TV, painting a room, or cleaning—so we can show a price.';
+
 export interface MatrixV2RouteOptions {
     /** User-edited clarifier values; merged over text-hydration (used for pricing + UI). */
     clarifierAnswers?: Record<string, unknown>;
@@ -324,16 +328,18 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
 
     /** Step 5: vague / no mapping */
     if (!normalized.trim()) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_NO_MATCH'], [], {
+        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'NEEDS_CLARIFICATION'], [], {
             parser: parserTrace,
         });
     }
 
     if (jobIds.length === 0) {
-        const warn = suggestsNonResidentialCleaningSite(normalized)
-            ? (['MATRIX_V2_COMMERCIAL_CLEAN'] as const)
-            : (['MATRIX_V2_NO_MATCH'] as const);
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, [...warn], [], {
+        if (suggestsNonResidentialCleaningSite(normalized)) {
+            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_COMMERCIAL_CLEAN'], [], {
+                parser: parserTrace,
+            });
+        }
+        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'NEEDS_CLARIFICATION'], [], {
             parser: parserTrace,
         });
     }
@@ -341,9 +347,15 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     /** Step 5: unknown job safeguard */
     for (const id of jobIds) {
         if (!model.jobs.has(id)) {
-            return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_JOB_UNKNOWN'], [], {
-                parser: parserTrace,
-            });
+            return buildReviewResult(
+                parts,
+                MATRIX_V2_CLARIFY_NO_MATCH,
+                ['MATRIX_V2_JOB_UNKNOWN', 'NEEDS_CLARIFICATION'],
+                [],
+                {
+                    parser: parserTrace,
+                },
+            );
         }
     }
 
