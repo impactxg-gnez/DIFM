@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { inferScopeAnswersFromDescription } from '@/lib/pricing/scopeAnswerInference';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,8 +7,42 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertCircle, Camera, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
+import { ReviewQuoteModal } from '@/components/ReviewQuoteModal';
 
 const MIN_SCOPE_DESCRIPTION_CHARS = 10;
+
+const SCOPE_QUANTITY_KEYS = [
+    'ITEM_COUNT',
+    'QUANTITY',
+    'SHELF_COUNT',
+    'NUM_ITEMS',
+    'HOW_MANY',
+    'COUNT',
+    'N_ITEMS',
+    'NUM_BLIND',
+];
+
+function inferredQuantityFromScopeAnswers(ans: Record<string, string>): number {
+    for (const k of SCOPE_QUANTITY_KEYS) {
+        const raw = ans[k];
+        if (raw === undefined || String(raw).trim() === '') continue;
+        const n = parseInt(String(raw), 10);
+        if (!Number.isNaN(n) && n > 0) return n;
+    }
+    return 1;
+}
+
+function scopeAnswersSummaryForQuote(
+    qs: Question[],
+    ans: Record<string, string>,
+): string {
+    const parts = qs.map((q) => {
+        const v = ans[q.id];
+        if (!v || String(v).trim() === '') return null;
+        return `${q.text}: ${String(v).trim()}`;
+    });
+    return parts.filter(Boolean).join(' | ');
+}
 
 interface ScopeLockProps {
     visits: any[];
@@ -112,9 +146,13 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
         prefilledVisitIdsRef.current = new Set();
     }, [visits]);
 
+    const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const lastAutoCommercialModalKeyRef = useRef<string | null>(null);
+
     const [preview, setPreview] = useState({
         status: 'OK' as 'OK' | 'OVERFLOW',
         bookingAllowed: true,
+        overflowReason: '' as string,
         nextStep: '' as '' | 'REVIEW',
         message: '',
         eta: '',
@@ -221,6 +259,7 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
         setPreview({
             status: 'OK',
             bookingAllowed: true,
+            overflowReason: '',
             nextStep: '',
             message: '',
             eta: '',
@@ -233,6 +272,28 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             priceAfter: Number(currentVisit?.display_price),
         });
     }, [currentVisit, currentVisitIndex]);
+
+    useEffect(() => {
+        setReviewModalOpen(false);
+        lastAutoCommercialModalKeyRef.current = null;
+    }, [currentVisitIndex]);
+
+    const visitIdStable = currentVisit ? String(currentVisit.visit_id || currentVisit.id || '') : '';
+    const isCommercialQuantityOverflow =
+        preview.status === 'OVERFLOW' &&
+        (preview.overflowReason === 'COMMERCIAL_QUANTITY' ||
+            /\boutside standard residential pricing\b/i.test(preview.message || ''));
+
+    useEffect(() => {
+        if (!isCommercialQuantityOverflow || !visitIdStable) {
+            if (!isCommercialQuantityOverflow) lastAutoCommercialModalKeyRef.current = null;
+            return;
+        }
+        const key = `${visitIdStable}:${inferredQuantityFromScopeAnswers(answers)}`;
+        if (lastAutoCommercialModalKeyRef.current === key) return;
+        lastAutoCommercialModalKeyRef.current = key;
+        setReviewModalOpen(true);
+    }, [isCommercialQuantityOverflow, visitIdStable, answers]);
 
     useEffect(() => {
         if (!currentVisit) return;
@@ -258,6 +319,7 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                     setPreview({
                         status: 'OVERFLOW',
                         bookingAllowed: false,
+                        overflowReason: typeof data.reason === 'string' ? data.reason : '',
                         nextStep: data.nextStep || 'REVIEW',
                         message:
                             data.message ||
@@ -276,6 +338,7 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                 setPreview({
                     status: 'OK',
                     bookingAllowed: true,
+                    overflowReason: '',
                     nextStep: '',
                     message: '',
                     eta: '',
@@ -296,6 +359,43 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             mounted = false;
         };
     }, [answers, currentVisit, clarifierPhaseDone, needsClarifierGate]);
+
+    const primaryJobId = String(currentVisit?.primary_job_item?.job_item_id ?? '').trim();
+    const reviewQuoteRawInput = useMemo(() => {
+        const head = (jobDescription || '').trim();
+        const summary = scopeAnswersSummaryForQuote(scopedQuestions, answers);
+        const tail = summary ? `${head ? `${head} | ` : ''}${summary}` : head;
+        return tail || 'Scope lock request';
+    }, [jobDescription, scopedQuestions, answers]);
+
+    const reviewParsedEntities = useMemo(
+        () =>
+            ({
+                visit_id: visitIdStable || null,
+                primary_job: primaryJobId || null,
+                clarifier_answers: { ...answers },
+                scope_preview: {
+                    status: preview.status,
+                    overflow_reason: preview.overflowReason || null,
+                    message: preview.message || null,
+                },
+                commercial_quantity: isCommercialQuantityOverflow,
+            }) as Record<string, unknown>,
+        [
+            visitIdStable,
+            primaryJobId,
+            answers,
+            preview.status,
+            preview.overflowReason,
+            preview.message,
+            isCommercialQuantityOverflow,
+        ],
+    );
+
+    const reviewEstimatedMinutes =
+        preview.status === 'OVERFLOW'
+            ? Number(preview.minutesAfter || currentVisit?.total_minutes || 0)
+            : Number(currentVisit?.total_minutes || 0);
 
     if (!currentVisit) return null;
 
@@ -511,7 +611,7 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                             </div>
                         )}
 
-                        {preview.status === 'OVERFLOW' && (
+                        {!isCommercialQuantityOverflow && preview.status === 'OVERFLOW' && (
                             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
                                 <p className="text-sm font-medium text-amber-400">{preview.message}</p>
                                 <p className="mt-1 text-xs text-amber-200">
@@ -620,6 +720,18 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                     <Button variant="ghost" className="w-full text-gray-500 hover:text-white" onClick={onCancel}>
                         Cancel booking
                     </Button>
+                    {isCommercialQuantityOverflow && (
+                        <p className="text-center text-sm text-amber-100/90 px-2">
+                            This quantity needs a custom quote.{' '}
+                            <button
+                                type="button"
+                                className="text-amber-400 underline font-semibold hover:text-amber-300"
+                                onClick={() => setReviewModalOpen(true)}
+                            >
+                                Open quote form
+                            </button>
+                        </p>
+                    )}
                 </div>
 
                 <div className="text-center">
@@ -628,6 +740,17 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                         Prices stay fixed unless scope differs on site.
                     </p>
                 </div>
+
+                <ReviewQuoteModal
+                    isOpen={reviewModalOpen}
+                    onClose={() => setReviewModalOpen(false)}
+                    rawInput={reviewQuoteRawInput}
+                    detectedJob={primaryJobId || undefined}
+                    parsedEntities={reviewParsedEntities}
+                    quantity={inferredQuantityFromScopeAnswers(answers)}
+                    estimatedMinutes={reviewEstimatedMinutes}
+                    confidenceScore={0}
+                />
             </div>
         </div>
     );

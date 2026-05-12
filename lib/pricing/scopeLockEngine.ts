@@ -19,7 +19,7 @@ export interface ScopePricingSuccessResult {
 export interface ScopePricingOverflowResult {
     status: 'OVERFLOW';
     action: 'ROUTE_TO_REVIEW';
-    reason: 'EXCEEDS_MAX_LADDER_TIME';
+    reason: 'EXCEEDS_MAX_LADDER_TIME' | 'COMMERCIAL_QUANTITY';
     bookingAllowed: false;
     nextStep: 'REVIEW';
     message: string;
@@ -164,7 +164,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
             return {
                 status: 'OVERFLOW',
                 action: 'ROUTE_TO_REVIEW',
-                reason: 'EXCEEDS_MAX_LADDER_TIME',
+                reason: 'COMMERCIAL_QUANTITY',
                 bookingAllowed: false,
                 nextStep: 'REVIEW',
                 message: "That quantity is outside standard residential pricing. Please contact us for a custom quote.",
