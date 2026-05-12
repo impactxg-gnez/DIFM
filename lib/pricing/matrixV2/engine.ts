@@ -308,6 +308,14 @@ function enrichParserEntitiesFromAnswers(
     parser.entities = e;
 }
 
+/** Commercial / non-residential cleaning cues — fixed matrix does not apply; use custom quote landing. */
+function suggestsNonResidentialCleaningSite(normalized: string): boolean {
+    if (!/\bclean(ing)?\b/i.test(normalized)) return false;
+    /** Small residential office at home — keep on residential path when we have a job match elsewhere. */
+    if (/\bhome\s+office\b/i.test(normalized)) return false;
+    return /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel|retail|shop)\b/i.test(normalized);
+}
+
 export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, opts?: MatrixV2RouteOptions) {
     const normalized = normalizeV2Input(userInput);
     const parts = normalized.split(' and ').map((s) => s.trim()).filter(Boolean);
@@ -322,7 +330,10 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     }
 
     if (jobIds.length === 0) {
-        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, ['MATRIX_V2_NO_MATCH'], [], {
+        const warn = suggestsNonResidentialCleaningSite(normalized)
+            ? (['MATRIX_V2_COMMERCIAL_CLEAN'] as const)
+            : (['MATRIX_V2_NO_MATCH'] as const);
+        return buildReviewResult(parts, MATRIX_V2_REVIEW_MESSAGE, [...warn], [], {
             parser: parserTrace,
         });
     }
@@ -381,8 +392,8 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         if (row.category === 'CLEANING') qtyMap[id] = cleaningUnits;
     }
 
-    /** Commercial cleaning-style office cue (phrase not in V2 mapping) handled by NO_MATCH unless we detect */
-    if (normalized.includes('clean') && /\b(office|warehouse|restaurant|commercial|building|factory|school|hotel)\b/i.test(normalized)) {
+    /** Commercial / office cleaning — not priced on the residential matrix. */
+    if (suggestsNonResidentialCleaningSite(normalized)) {
         return buildReviewResult(
             parts,
             MATRIX_V2_REVIEW_MESSAGE,
