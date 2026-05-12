@@ -38,6 +38,48 @@ function normalizeInputType(raw: unknown): Question['type'] {
     return 'text';
 }
 
+/** Matrix + legacy loaders can attach both TV_SIZE_INCHES and TV_SIZE — same question twice. */
+function isTvSizeClarifierId(id: string): boolean {
+    const u = id.toUpperCase();
+    return u === 'TV_SIZE' || u === 'TV_SIZE_INCHES' || u.startsWith('TV_SIZE_');
+}
+
+function dedupeTvSizeClarifiers(questions: Question[]): Question[] {
+    const tvQs = questions.filter((q) => isTvSizeClarifierId(q.id));
+    if (tvQs.length <= 1) return questions;
+
+    const score = (q: Question) => {
+        let s = 0;
+        const u = q.id.toUpperCase();
+        if (u === 'TV_SIZE_INCHES') s += 100;
+        if (/inch/i.test(q.text)) s += 50;
+        if (q.clarifier_type !== 'SAFETY' && q.affects_time !== false) s += 25;
+        if (q.required) s += 10;
+        return s;
+    };
+
+    let best = tvQs[0]!;
+    for (let i = 1; i < tvQs.length; i++) {
+        if (score(tvQs[i]!) > score(best)) best = tvQs[i]!;
+    }
+    const dropIds = new Set(tvQs.filter((q) => q.id !== best.id).map((q) => q.id));
+    return questions.filter((q) => !dropIds.has(q.id));
+}
+
+/** Keep TV_SIZE_* answers aligned for backends that still read both keys. */
+function syncTvSizeAnswerAliases(
+    answers: Record<string, string>,
+    qId: string,
+    value: string,
+): Record<string, string> {
+    if (!isTvSizeClarifierId(qId)) return answers;
+    const next = { ...answers, [qId]: value };
+    next.TV_SIZE = value;
+    next.TV_SIZE_INCHES = value;
+    next.tv_size = value;
+    return next;
+}
+
 function buildQuestionsFromVisit(visit: any): Question[] {
     const matrixQuestions = Array.isArray(visit?.clarifiers) ? visit.clarifiers : [];
     if (matrixQuestions.length === 0) return [];
@@ -100,13 +142,17 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
         const vid = String(currentVisit.visit_id || currentVisit.id || '');
         if (!vid || prefilledVisitIdsRef.current.has(vid)) return;
         const qs = buildQuestionsFromVisit(currentVisit);
-        const visitCapability = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();
-        const scoped = qs.filter((q: Question) => {
-            if (!q.capability_tag || !visitCapability) return true;
-            return String(q.capability_tag).toUpperCase() === visitCapability;
-        });
+        const visitCapabilityForPrefill = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();
+        const scopedForInference = dedupeTvSizeClarifiers(
+            qs.filter((q: Question) => {
+                if (!q.capability_tag || !visitCapabilityForPrefill) return true;
+                return String(q.capability_tag).toUpperCase() === visitCapabilityForPrefill;
+            }),
+        );
         const inferred =
-            jobDescription?.trim() ? inferScopeAnswersFromDescription(jobDescription.trim(), scoped) : {};
+            jobDescription?.trim()
+                ? inferScopeAnswersFromDescription(jobDescription.trim(), scopedForInference)
+                : {};
         const pre = currentVisit.clarifier_prefill as Record<string, string | number> | undefined;
         const preStr: Record<string, string> = {};
         if (pre && typeof pre === 'object') {
@@ -128,6 +174,13 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
             const existing = merged[k];
             if (existing === undefined || String(existing).trim() === '') merged[k] = v;
         }
+        const tvAny = merged.TV_SIZE_INCHES || merged.TV_SIZE || merged.tv_size;
+        const tvNormalized = tvAny !== undefined ? String(tvAny).trim() : '';
+        if (tvNormalized !== '') {
+            merged.TV_SIZE_INCHES = tvNormalized;
+            merged.TV_SIZE = tvNormalized;
+            merged.tv_size = tvNormalized;
+        }
         if (Object.keys(merged).length > 0) {
             setAnswers((prev) => ({ ...merged, ...prev }));
         }
@@ -136,10 +189,12 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
 
     const questions = currentVisit ? buildQuestionsFromVisit(currentVisit) : [];
     const visitCapability = String(currentVisit?.required_capability_tags?.[0] || '').toUpperCase();
-    const scopedQuestions = questions.filter((q) => {
-        if (!q.capability_tag || !visitCapability) return true;
-        return String(q.capability_tag).toUpperCase() === visitCapability;
-    });
+    const scopedQuestions = dedupeTvSizeClarifiers(
+        questions.filter((q) => {
+            if (!q.capability_tag || !visitCapability) return true;
+            return String(q.capability_tag).toUpperCase() === visitCapability;
+        }),
+    );
 
     const pricingQuestions = scopedQuestions.filter((q) => q.clarifier_type !== 'SAFETY' && q.affects_time !== false);
     const pricingQuestionIds = new Set(pricingQuestions.map((q) => q.id));
@@ -245,7 +300,7 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
     if (!currentVisit) return null;
 
     const handleAnswer = (qId: string, value: string) => {
-        setAnswers((prev) => ({ ...prev, [qId]: value }));
+        setAnswers((prev) => syncTvSizeAnswerAliases({ ...prev, [qId]: value }, qId, value));
     };
 
     const handleContinueAfterClarifiers = () => {
