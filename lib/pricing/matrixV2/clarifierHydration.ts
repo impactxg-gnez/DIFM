@@ -155,11 +155,11 @@ export function hydrateClarifiersFromText(
             bhk = mapWord[w] ?? 1;
         }
         
-        const rooms = bhk + 2; // e.g. 2 BHK -> 4 rooms
+        // BHK labels count configured bedrooms — hall/kitchen are separate scope-lock toggles (not pre-added here).
         for (const cid of allCids) {
             const question = model.clarifiers.get(cid)?.question || '';
             if (/room|bhk/i.test(cid) || question.toLowerCase().includes('how many rooms')) {
-                out[cid] = rooms;
+                out[cid] = bhk;
             }
         }
     }

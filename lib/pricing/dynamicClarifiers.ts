@@ -11,6 +11,7 @@ import {
     wallMaterialMentioned,
 } from './bookingSignals';
 import { cleaningTypeNeedsClarifier, mentionsPropertySize } from './cleaningIntent';
+import { isWholeHomeCleanJobId, truthyCleaningScopeYes } from './wholeHomeCleaningScope';
 
 export type PlannedClarifierInputType = 'number' | 'select' | 'boolean' | 'text';
 
@@ -61,12 +62,7 @@ function isSocketJobId(id: string): boolean {
 }
 
 function isCleaningPricingJobId(id: string): boolean {
-    return (
-        id === 'home_cleaning_standard' ||
-        id === 'home_cleaning_deep' ||
-        id === 'bathroom_cleaning' ||
-        id === 'kitchen_cleaning'
-    );
+    return isWholeHomeCleanJobId(id) || id === 'bathroom_cleaning' || id === 'kitchen_cleaning';
 }
 
 function addPlanned(map: Map<string, PlannedClarifier>, item: PlannedClarifier) {
@@ -89,6 +85,19 @@ function basePlanItem(
         affects_time: true,
         affects_safety: false,
         clarifier_type: 'PRICING',
+    };
+}
+
+function safetyScopeBool(id: string, question: string): PlannedClarifier {
+    return {
+        id,
+        question,
+        inputType: 'boolean',
+        required: true,
+        options: [],
+        affects_time: true,
+        affects_safety: true,
+        clarifier_type: 'SAFETY',
     };
 }
 
@@ -232,24 +241,13 @@ export function planClarifiersForExtraction(
         );
     }
 
-    const anyHomeClean = jobs.some(
-        (j) => j.job === 'home_cleaning_standard' || j.job === 'home_cleaning_deep',
-    );
+    const anyHomeClean = jobs.some((j) => isWholeHomeCleanJobId(j.job));
     const anyCleaningJob = jobs.some((j) =>
-        [
-            'home_cleaning_standard',
-            'home_cleaning_deep',
-            'bathroom_cleaning',
-            'kitchen_cleaning',
-        ].includes(j.job),
+        isWholeHomeCleanJobId(j.job) || j.job === 'bathroom_cleaning' || j.job === 'kitchen_cleaning',
     );
 
     if (anyHomeClean) {
-        const needsPropertySize = jobs.some(
-            (j) =>
-                (j.job === 'home_cleaning_standard' || j.job === 'home_cleaning_deep') &&
-                !mentionsPropertySize(j.part),
-        );
+        const needsPropertySize = jobs.some((j) => isWholeHomeCleanJobId(j.job) && !mentionsPropertySize(j.part));
         if (needsPropertySize) {
             addPlanned(
                 map,
@@ -261,6 +259,14 @@ export function planClarifiersForExtraction(
                 ),
             );
         }
+        addPlanned(
+            map,
+            safetyScopeBool('CLEANING_INCLUDE_HALL', 'Include hallway / corridors in the clean?'),
+        );
+        addPlanned(
+            map,
+            safetyScopeBool('CLEANING_INCLUDE_KITCHEN', 'Include kitchen in the clean?'),
+        );
     }
 
     if (anyCleaningJob) {
@@ -416,9 +422,7 @@ export function planClarifiersForVisitJobIds(
         );
     }
 
-    const anyHomeCleanId = ids.some(
-        (id) => id === 'home_cleaning_standard' || id === 'home_cleaning_deep',
-    );
+    const anyHomeCleanId = ids.some(isWholeHomeCleanJobId);
     const anyCleaningId = ids.some(isCleaningPricingJobId);
 
     if (anyHomeCleanId && !mentionsPropertySize(text)) {
@@ -430,6 +434,17 @@ export function planClarifiersForVisitJobIds(
                 'select',
                 ['1 BHK / Studio', '2 BHK', '3 BHK', 'Larger / custom'],
             ),
+        );
+    }
+
+    if (ids.some(isWholeHomeCleanJobId)) {
+        addPlanned(
+            map,
+            safetyScopeBool('CLEANING_INCLUDE_HALL', 'Include hallway / corridors in the clean?'),
+        );
+        addPlanned(
+            map,
+            safetyScopeBool('CLEANING_INCLUDE_KITCHEN', 'Include kitchen in the clean?'),
         );
     }
 
@@ -581,6 +596,11 @@ export function computeClarifierPricingEffects(
         } else         if (flat.includes('part')) {
             extraMinutes += 8;
         }
+    }
+
+    if (ids.some(isWholeHomeCleanJobId)) {
+        if (truthyCleaningScopeYes(answers.CLEANING_INCLUDE_HALL)) extraMinutes += 20;
+        if (truthyCleaningScopeYes(answers.CLEANING_INCLUDE_KITCHEN)) extraMinutes += 25;
     }
 
     const anyCleaning = ids.some(isCleaningPricingJobId);

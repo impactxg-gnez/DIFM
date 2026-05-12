@@ -1,5 +1,6 @@
 import { parseTvDetails } from './bookingSignals';
 import { inferTvScreenInches } from './matrixV2/clarifierHydration';
+import { parseBhkFromText } from './cleaningIntent';
 import { preprocessBookingInput } from './inputPreprocess';
 
 /** Browser-safe mirror of intentMapper.normalizeInput (avoid importing intentMapper → visitEngine → excel fs). */
@@ -91,6 +92,9 @@ export function inferScopeAnswersFromDescription(
                 (qt.includes('tv') && (qt.includes('inch') || qt.includes('size') || qt.includes('diagonal')));
             if (tvSizeQ) {
                 if (inchFromText !== undefined) out[q.id] = String(inchFromText);
+            } else if (/\bbhk\b|rooms\s*\/\s*bhk|how many rooms/i.test(qt) || /\bROOM|BHK\b/.test(id)) {
+                const bhk = parseBhkFromText(plain);
+                if (bhk !== null) out[q.id] = String(bhk);
             } else if (id.includes('SHELF') && (id.includes('COUNT') || qt.includes('how many'))) {
                 const m = plain.match(/\b(\d+)\s*(?:shelf|shelves)\b/i);
                 if (m) out[q.id] = String(Number(m[1]));

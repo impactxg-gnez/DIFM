@@ -1,6 +1,7 @@
 import { calculateTierAndPrice, getMatrixTime, getPriceByTier } from './visitEngine';
 import { excelSource } from './excelLoader';
 import { computeClarifierPricingEffects } from './dynamicClarifiers';
+import { cleaningTierBhkFromRoomClarifierValue } from './wholeHomeCleaningScope';
 import type { MatrixV2Model } from './matrixV2/types';
 
 // Keep overflow copy local to avoid hard dependency on review modules in builds
@@ -99,8 +100,7 @@ function inferCleaningRoomsBhk(
         if (!looksRoom || isDeepQuestion) continue;
         const n = parseInt(v.replace(/[^\d]/g, ''), 10);
         if (!Number.isFinite(n) || n < 1) continue;
-        const rooms = Math.min(20, Math.max(1, n));
-        const inferredBhk = Math.max(1, Math.min(4, rooms - 2));
+        const inferredBhk = cleaningTierBhkFromRoomClarifierValue(n);
         return { inferredBhk };
     }
 

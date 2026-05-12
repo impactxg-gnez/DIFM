@@ -3,6 +3,7 @@
  */
 
 import type { BookingMappingMeta, MatrixV2ParserTrace } from '../bookingRoutingTypes';
+import { cleaningTierBhkFromRoomClarifierValue, isWholeHomeCleanJobId } from '../wholeHomeCleaningScope';
 import { preprocessBookingInput } from '../inputPreprocess';
 import type { GeneratedVisit } from '../visitEngine';
 import type { MatrixV2Model, MatrixV2JobRow } from './types';
@@ -169,7 +170,7 @@ function formatMatrixV2Clarifiers(
     affects_time: boolean;
     affects_safety: boolean;
 }> {
-    return mergeClarifiers(model, jobIds).map((c) => {
+    const rows = mergeClarifiers(model, jobIds).map((c) => {
         const dv = clarifierUiValue(c.tag, hydratedFromText, clientAnswers);
         let inputType = c.inputType;
         let options = c.options;
@@ -190,6 +191,33 @@ function formatMatrixV2Clarifiers(
             affects_safety: false,
         };
     });
+
+    const primaryId = jobIds[0];
+    const primaryRow = primaryId ? model.jobs.get(primaryId) : undefined;
+    if (primaryRow?.category === 'CLEANING' && primaryId && isWholeHomeCleanJobId(primaryId)) {
+        const hallV = clarifierUiValue('CLEANING_INCLUDE_HALL', hydratedFromText, clientAnswers);
+        const kitV = clarifierUiValue('CLEANING_INCLUDE_KITCHEN', hydratedFromText, clientAnswers);
+        rows.push(
+            {
+                tag: 'CLEANING_INCLUDE_HALL',
+                question: 'Include hallway / corridors in the clean?',
+                inputType: 'boolean',
+                affects_time: true,
+                affects_safety: true,
+                ...(hallV !== undefined ? { value: hallV } : {}),
+            },
+            {
+                tag: 'CLEANING_INCLUDE_KITCHEN',
+                question: 'Include kitchen in the clean?',
+                inputType: 'boolean',
+                affects_time: true,
+                affects_safety: true,
+                ...(kitV !== undefined ? { value: kitV } : {}),
+            },
+        );
+    }
+
+    return rows;
 }
 
 function mergeKnownJobIds(model: MatrixV2Model, lists: string[][]): string[] {
@@ -417,21 +445,18 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         totalPrice = t?.price_gbp ?? 0;
         displayTier = t?.tier ?? 'H1';
     } else if (category === 'CLEANING') {
-        // Read rooms from clarifiers to determine BHK
         let inferredBhk = inferCleaningBhk(normalized);
-        let rooms = inferredBhk + 2; // Default logic: 1 BHK = 3 rooms, 2 BHK = 4 rooms
-        
-        // Find if user provided a rooms value
-        const roomsCid = Object.keys(clarifierAnswersMerged).find(cid => 
-            /room|bhk/i.test(cid) || model.clarifiers.get(cid)?.question.toLowerCase().includes('how many rooms')
+
+        const roomsCid = Object.keys(clarifierAnswersMerged).find(cid =>
+            /room|bhk/i.test(cid) || model.clarifiers.get(cid)?.question.toLowerCase().includes('how many rooms'),
         );
         if (roomsCid && clarifierAnswersMerged[roomsCid]) {
             const val = parseInt(String(clarifierAnswersMerged[roomsCid]), 10);
             if (!isNaN(val)) {
-                rooms = val;
-                inferredBhk = Math.max(1, rooms - 2);
+                inferredBhk = cleaningTierBhkFromRoomClarifierValue(val);
             }
         }
+        inferredBhk = Math.min(4, Math.max(1, inferredBhk));
 
         const baseCleaningPrice = jobIds.reduce((sum, id) => sum + cleaningPrice(model.jobs.get(id)!, model, inferredBhk), 0);
         
