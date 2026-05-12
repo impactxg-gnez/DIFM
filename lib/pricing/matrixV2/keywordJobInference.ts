@@ -26,7 +26,25 @@ const SHELF_TOKEN = /\b(shelves|shelf)\b/;
 const MIRROR_TOKEN = /\bmirrors?\b/;
 const PICTURE_TOKEN = /\b(pictures|picture|photos|photo|frames|frame)\b/;
 const CURTAIN_TOKEN = /\b(curtains?|curtain\s+rail|rail\s+rod|pole)\b/;
-const ASSEMBLY_TOKEN = /\b(flatpack|flat\s*pack|ikea|assemble|assembly|rta)\b/;
+const ASSEMBLY_TOKEN = /\b(flatpack|flat\s*pack|ikea|assemble|assembled|assembly|rta)\b/i;
+/** Furniture items + multi-unit phrasing (“50 desks”) even without explicit “assemble”. */
+const FURNITURE_ITEM_TOKEN =
+    /\b(desks?|chairs?|tables?|wardrobes?|bookshelves?|shelving\s+units?|cabinet(?:s|r)?|office\s+furniture|furniture|flat\s*pack\s+(?:furniture|units?))\b/i;
+
+function inferFurnitureAssembly(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
+    const hasItem = FURNITURE_ITEM_TOKEN.test(t);
+    const hasAssemblyCue = ASSEMBLY_TOKEN.test(t);
+    const hasBuildOrFit =
+        /\b(build|rebuild|construct|fabricate|install|fitting|fitted|mount|put\s+together|knock\s+together)\b/i.test(t);
+    if (!hasItem) return null;
+    if (!(hasAssemblyCue || hasBuildOrFit)) return null;
+    const id = firstExistingId(model, ['furniture_assembly', 'flat_pack_assembly']);
+    if (!id) return null;
+    scores[id] = (scores[id] ?? 0) + 30;
+    signals.push('keyword:furniture_assembly');
+    return id;
+}
+
 const WASHER_TOKEN = /\b(washing\s+machine|washer)\b/;
 const DW_TOKEN = /\b(dishwasher)\b/;
 const CABLE_TOKEN = /\b(hide|conceal|chase|cable\s+management)\b.*\b(cables?|wires?|hdmi)\b|\b(cables?|wires?)\s+(hide|conceal)\b/;
@@ -113,15 +131,6 @@ function inferCurtain(model: MatrixV2Model, t: string, signals: string[], scores
     if (!id) return null;
     scores[id] = (scores[id] ?? 0) + 32;
     signals.push('keyword:curtain');
-    return id;
-}
-
-function inferFurnitureAssembly(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
-    if (!ASSEMBLY_TOKEN.test(t)) return null;
-    const id = firstExistingId(model, ['furniture_assembly', 'flat_pack_assembly']);
-    if (!id) return null;
-    scores[id] = (scores[id] ?? 0) + 30;
-    signals.push('keyword:furniture_assembly');
     return id;
 }
 
