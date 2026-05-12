@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build --webpack",
+    "build": "node scripts/migrate-deploy-or-recover.js",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
