@@ -5,6 +5,7 @@ import type { MatrixV2Model } from './matrixV2/types';
 import { parseMatrixV2Workbook } from './matrixV2/loadFromWorkbook';
 import { applySyntheticResidentialPlumbingToModel } from './matrixV2/syntheticResidentialPlumbing';
 import { applySyntheticResidentialElectricalToModel } from './matrixV2/syntheticResidentialElectrical';
+import { applySyntheticResidentialPaintingToModel } from './matrixV2/syntheticResidentialPainting';
 
 export interface PhraseMappingExcel {
     pattern_id?: number;
@@ -211,7 +212,9 @@ class ExcelSource {
                       ? 'PLUMBING'
                       : row.category === 'ELECTRICAL'
                         ? 'ELECTRICAL'
-                        : 'HANDYMAN';
+                        : row.category === 'PAINTER'
+                          ? 'PAINTER'
+                          : 'HANDYMAN';
             this._jobItems.set(id, {
                 job_item_id: id,
                 display_name:
@@ -223,7 +226,9 @@ class ExcelSource {
                             ? 'Ceiling light / fitting install'
                             : id === 'install_ceiling_fan'
                               ? 'Ceiling fan install'
-                              : id.replace(/_/g, ' '),
+                              : id === 'room_painting'
+                                ? 'Interior room painting'
+                                : id.replace(/_/g, ' '),
                 capability_tag: cap,
                 default_time_weight_minutes: row.max_minutes,
                 pricing_ladder: 'MATRIX_V2_HANDYMAN',
@@ -278,6 +283,7 @@ class ExcelSource {
                     this._matrixV2Model = parseMatrixV2Workbook(workbook);
                     applySyntheticResidentialPlumbingToModel(this._matrixV2Model);
                     applySyntheticResidentialElectricalToModel(this._matrixV2Model);
+                    applySyntheticResidentialPaintingToModel(this._matrixV2Model);
                     this.populateLegacyCachesFromV2();
                     console.log(
                         `[ExcelSource] MATRIX V2 loaded: ${this._matrixV2Model.jobs.size} jobs, ${this._matrixV2Model.phrases.length} phrase rows`,

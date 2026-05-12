@@ -223,6 +223,33 @@ function inferResidentialElectrical(
     return null;
 }
 
+function inferResidentialPainting(
+    model: MatrixV2Model,
+    t: string,
+    signals: string[],
+    scores: Record<string, number>,
+): string | null {
+    const id = firstExistingId(model, ['room_painting']);
+    if (!id) return null;
+
+    if (/\b(remove|stripping|strip|scraping|sand(?:ing)?|scrape(?:s|d|r)?)\b/i.test(t) && /\bpaint\b/i.test(t)) {
+        return null;
+    }
+    const paintCue =
+        /\b(paint(?:ing)?|repaints?|repaint(?:ed|ing)?|decorat(?:e|ing)|emulsion(?:ed)?)\b/i.test(t) || /\bpainters?\b/i.test(t);
+    if (!paintCue) return null;
+
+    const spaceCue =
+        /\b(room|rooms|bedroom|bedrooms|kitchen|bathroom|lounge|living|living\s+room|hall|hallway|landing|study|office|flat|flats|apartment|house|home|interior|inside|wall|walls|ceiling|ceilings|skirting|doors?)\b/i.test(
+            t,
+        );
+    if (!spaceCue) return null;
+
+    scores[id] = (scores[id] ?? 0) + 46;
+    signals.push('keyword:interior_painting');
+    return id;
+}
+
 function inferCableConceal(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!CABLE_TOKEN.test(t)) return null;
     const id =
@@ -276,6 +303,7 @@ const INFERENCES: Array<{
     { infer: inferCurtain },
     { infer: inferAppliances },
     { infer: inferResidentialElectrical },
+    { infer: inferResidentialPainting },
     { infer: inferPlumbing },
     { infer: inferFurnitureAssembly },
     { infer: inferCableConceal },

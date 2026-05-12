@@ -83,6 +83,18 @@ export function explicitItemQuantityFromText(jobId: string, normalized: string):
     if (jobId === 'washing_machine_install' || jobId === 'dishwasher_install') {
         return pick(/\b(\d+)\s*(machines?|dishwashers?|washers?)\b/i);
     }
+    if (jobId === 'room_painting') {
+        const digitFirst =
+            qtyFromDigitOrWordMatch(n, /\b(?:paint|painting|repaint)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:rooms?|bedrooms?)\b/i) ??
+            qtyFromDigitOrWordMatch(n, /\b(?:paint|painting|repaint)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+walls?\b/i);
+        if (digitFirst !== null) return digitFirst;
+        const rest =
+            pick(/\bpaint(?:ing)?\s+(\d+)\s+(?:rooms?|bedrooms?)\b/i) ??
+            pick(/\b(?:paint|painting)\s+(\d+)\s+walls?\b/i) ??
+            qtyFromDigitOrWordMatch(n, /\b(\d+|one|two|three|four|five)\s+(?:rooms?|bedrooms?)\s+(?:to\s+paints?|paints?|painting)\b/i);
+        if (rest !== null && rest !== undefined) return rest;
+        return undefined;
+    }
     return undefined;
 }
 
