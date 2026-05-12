@@ -20,7 +20,7 @@ function firstExistingId(model: MatrixV2Model, candidates: string[]): string | n
     return null;
 }
 
-const TV_TOKEN = /\b(tv|television|telly|flat\s*[- ]?\s*screen)\b/;
+const TV_TOKEN = /\b(tvs?|televisions?|television|telly|flat\s*[- ]?\s*screens?)\b/i;
 const BLIND_TOKEN = /\bblinds?\b/;
 const SHELF_TOKEN = /\b(shelves|shelf)\b/;
 const MIRROR_TOKEN = /\bmirrors?\b/;
