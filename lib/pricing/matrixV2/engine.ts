@@ -439,8 +439,9 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
         const typeCid = Object.keys(clarifierAnswersMerged).find(cid => 
             model.clarifiers.get(cid)?.question.toLowerCase().includes('standard or deep')
         );
-        const isDeep = typeCid && String(clarifierAnswersMerged[typeCid]).toLowerCase() === 'deep';
-        
+        const rawCleaningType = typeCid ? String(clarifierAnswersMerged[typeCid] ?? '') : '';
+        const isDeep = /\bdeep\b/i.test(rawCleaningType);
+
         totalPrice = isDeep ? baseCleaningPrice * 1.5 : baseCleaningPrice;
         displayTier = `C${Math.min(4, Math.max(1, inferredBhk))}`;
     }

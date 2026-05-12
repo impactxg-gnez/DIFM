@@ -39,6 +39,20 @@ function parseImpactFlags(impacts: unknown): { affectsTime: boolean; affectsSafe
     };
 }
 
+/** Workbook text question “Standard or Deep…” must be two choices, not free text. */
+function ensureCleaningStandardDeepOptions(q: ClarifierQuestion): ClarifierQuestion {
+    const qt = (q.question || '').toLowerCase();
+    if (!/standard\s+or\s+deep/.test(qt)) return q;
+    const opts = Array.isArray(q.options) && q.options.length > 0 ? q.options : ['Standard', 'Deep'];
+    const inputType =
+        opts.length > 0 && (q.inputType === 'number' || q.inputType === 'text') ? 'select' : q.inputType;
+    return {
+        ...q,
+        options: opts,
+        inputType,
+    };
+}
+
 function mergePlannedWithExcel(planned: PlannedClarifier, def?: ClarifierExcel): ClarifierQuestion {
     const impactFlags = def ? parseImpactFlags(def.impacts) : { affectsTime: true, affectsSafety: false };
     const affectsTime = impactFlags.affectsTime || planned.affects_time;
@@ -96,7 +110,7 @@ export function getClarifierSchemaForVisit(
     const planned = planClarifiersForVisitJobIds(normalizedDesc, primary, addons);
     const plannedIds = new Set(planned.map((p) => p.id));
     const questions: ClarifierQuestion[] = planned.map((p) =>
-        mergePlannedWithExcel(p, excelSource.clarifierDefinitions.get(p.id)),
+        ensureCleaningStandardDeepOptions(mergePlannedWithExcel(p, excelSource.clarifierDefinitions.get(p.id))),
     );
 
     for (const jobId of jobIds) {
@@ -105,7 +119,7 @@ export function getClarifierSchemaForVisit(
         for (const clarifierId of item.clarifier_ids) {
             if (plannedIds.has(clarifierId)) continue;
             const q = excelOnlyQuestion(clarifierId, item.capability_tag || capabilityTag);
-            if (q && !questions.some((x) => x.id === q.id)) questions.push(q);
+            if (q && !questions.some((x) => x.id === q.id)) questions.push(ensureCleaningStandardDeepOptions(q));
         }
     }
 

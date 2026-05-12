@@ -1,6 +1,7 @@
 import { calculateTierAndPrice, getMatrixTime, getPriceByTier } from './visitEngine';
 import { excelSource } from './excelLoader';
 import { computeClarifierPricingEffects } from './dynamicClarifiers';
+import type { MatrixV2Model } from './matrixV2/types';
 
 // Keep overflow copy local to avoid hard dependency on review modules in builds
 // where review workflow files are not deployed yet.
@@ -69,6 +70,72 @@ function getSelectedClarifiers(answers: Record<string, string>): string[] {
         .map(([key]) => key);
 }
 
+function parseVisitClarifierDefs(visit: any): Array<{ id: string; question: string }> {
+    const raw = visit?.clarifiers;
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((c: any) => ({
+            id: String(c?.id ?? c?.tag ?? '').trim(),
+            question: String(c?.question ?? ''),
+        }))
+        .filter((r: { id: string }) => r.id.length > 0);
+}
+
+/** Align with matrixV2/engine cleaning: infer BHK band from explicit room/BHK clarifier answers */
+function inferCleaningRoomsBhk(
+    defs: Array<{ id: string; question: string }>,
+    ans: Record<string, string>,
+): { inferredBhk: number } {
+    for (const d of defs) {
+        const v = String(ans[d.id] ?? '').trim();
+        if (!v) continue;
+        const cid = d.id.toLowerCase();
+        const qt = (d.question || '').toLowerCase();
+        const isDeepQuestion = /standard\s+or\s+deep/.test(qt);
+        const looksRoom =
+            /room|bhk/.test(cid) ||
+            /\b(room|bhk)s?\b/.test(qt) ||
+            /\bhow many\b.*\b(room|bhk)\b/.test(qt);
+        if (!looksRoom || isDeepQuestion) continue;
+        const n = parseInt(v.replace(/[^\d]/g, ''), 10);
+        if (!Number.isFinite(n) || n < 1) continue;
+        const rooms = Math.min(20, Math.max(1, n));
+        const inferredBhk = Math.max(1, Math.min(4, rooms - 2));
+        return { inferredBhk };
+    }
+
+    return { inferredBhk: 1 };
+}
+
+function inferCleaningDeep(
+    defs: Array<{ id: string; question: string }>,
+    ans: Record<string, string>,
+): boolean {
+    for (const d of defs) {
+        const v = String(ans[d.id] ?? '').trim();
+        if (!v) continue;
+        const qt = (d.question || '').toLowerCase();
+        if (/standard\s+or\s+deep/.test(qt) && /\bdeep\b/i.test(v)) return true;
+    }
+    for (const [key, raw] of Object.entries(ans)) {
+        if (!/^clean(?:ing)?_?type$/i.test(key)) continue;
+        if (/\bdeep\b/i.test(String(raw))) return true;
+    }
+    return false;
+}
+
+function matrixV2CleaningLinePrice(jobItemId: string, model: MatrixV2Model, inferredBhk: number): number {
+    const row = model.jobs.get(String(jobItemId));
+    if (!row) return 0;
+    const bhk = Math.min(4, Math.max(1, inferredBhk));
+    const tierByBhk = `C${bhk}`;
+    const sizeRow = model.cleaningTiers.find((r) => r.tier === tierByBhk);
+    if (sizeRow && Number(sizeRow.price_gbp) > 0) return Number(sizeRow.price_gbp);
+    const baseKey = String(row.base_tier || '').trim().toUpperCase();
+    const baseRow = model.cleaningTiers.find((r) => r.tier === baseKey);
+    return baseRow ? Number(baseRow.price_gbp) : 0;
+}
+
 export function computeScopePricing(visit: any, answers: Record<string, string>): ScopePricingResult {
     let bufferTime = 0;
     let clarifierTime = 0;
@@ -88,14 +155,6 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
         capability,
         visitBaseMinutes
     });
-
-    if (visit.item_class === 'CLEANING') {
-        const beds = parseInt(answers.CLEAN_BEDROOMS || answers.bedrooms || '1', 10);
-        const baths = parseInt(answers.CLEAN_BATHROOMS || answers.bathrooms || '1', 10);
-        const extraBeds = Math.max(0, beds - 1);
-        const extraBaths = Math.max(0, baths - 1);
-        clarifierTime += (extraBeds * 30) + (extraBaths * 20);
-    }
 
     const addonItems = (visit.addon_job_item_ids || []).map((itemId: string) => excelSource.jobItems.get(itemId));
     const allItems = [primaryItem, ...addonItems].filter(Boolean);
@@ -229,15 +288,29 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     }
 
     if (visit.item_class === 'CLEANING') {
-        const beds = parseInt(answers.CLEAN_BEDROOMS || answers.bedrooms || '1', 10);
-        const baths = parseInt(answers.CLEAN_BATHROOMS || answers.bathrooms || '1', 10);
-        const totalRooms = beds + baths;
+        const defs = parseVisitClarifierDefs(visit);
+        const { inferredBhk } = inferCleaningRoomsBhk(defs, answers);
+        const deep = inferCleaningDeep(defs, answers);
+        const tierLabel = `C${Math.min(4, Math.max(1, inferredBhk))}`;
+        finalTier = tierLabel;
 
-        if (totalRooms <= 2) finalTier = 'C1';
-        else if (totalRooms <= 4) finalTier = 'C2';
-        else finalTier = 'C3';
-
-        finalPrice = calculateTierAndPrice(effectiveMinutes, 'CLEANING').price;
+        let cleaningPrice = 0;
+        const model = excelSource.getMatrixV2Model();
+        if (model && excelSource.isMatrixV2()) {
+            const primaryId = String(visit.primary_job_item_id || '');
+            cleaningPrice += matrixV2CleaningLinePrice(primaryId, model, inferredBhk);
+            for (const aid of visit.addon_job_item_ids || []) {
+                cleaningPrice += matrixV2CleaningLinePrice(String(aid), model, inferredBhk);
+            }
+        }
+        if (!cleaningPrice || cleaningPrice <= 0) {
+            cleaningPrice = getPriceByTier(tierLabel, 'CLEANING');
+        }
+        if (!cleaningPrice || cleaningPrice <= 0) {
+            cleaningPrice = calculateTierAndPrice(effectiveMinutes, 'CLEANING').price;
+        }
+        finalPrice = deep && cleaningPrice > 0 ? cleaningPrice * 1.5 : cleaningPrice;
+        finalPrice = Math.round(finalPrice * 100) / 100;
     }
 
     console.log('[ScopePricingDebug]', {

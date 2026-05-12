@@ -118,17 +118,27 @@ function buildQuestionsFromVisit(visit: any): Question[] {
     const matrixQuestions = Array.isArray(visit?.clarifiers) ? visit.clarifiers : [];
     if (matrixQuestions.length === 0) return [];
     return matrixQuestions
-        .map((q: any) => ({
-            id: String(q.id || q.tag || '').trim(),
-            text: q.question,
-            type: normalizeInputType(q.inputType),
-            required: !!q.required,
-            options: Array.isArray(q.options) ? q.options : [],
-            affects_time: q.affects_time !== false,
-            affects_safety: q.affects_safety === true,
-            clarifier_type: q.clarifier_type || (q.affects_time === false ? 'SAFETY' : 'PRICING'),
-            capability_tag: q.capability_tag,
-        }))
+        .map((q: any) => {
+            const text = String(q.question || '');
+            const isStandardDeep = /standard\s+or\s+deep/i.test(text);
+            const rawOpts = Array.isArray(q.options) ? q.options : [];
+            const options = isStandardDeep && rawOpts.length === 0 ? ['Standard', 'Deep'] : rawOpts;
+            let inputType = q.inputType;
+            if (isStandardDeep && options.length > 0) {
+                inputType = 'select';
+            }
+            return {
+                id: String(q.id || q.tag || '').trim(),
+                text,
+                type: normalizeInputType(inputType),
+                required: !!q.required,
+                options,
+                affects_time: q.affects_time !== false,
+                affects_safety: q.affects_safety === true,
+                clarifier_type: q.clarifier_type || (q.affects_time === false ? 'SAFETY' : 'PRICING'),
+                capability_tag: q.capability_tag,
+            };
+        })
         .filter((row: Question) => row.id.length > 0);
 }
 
@@ -454,7 +464,9 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                         ? q.options
                         : /wall|substrate|surface|mount/i.test(q.id)
                           ? ['stud', 'brick', 'concrete', 'tile', 'unsure']
-                          : [];
+                          : /standard\s+or\s+deep/i.test(q.text)
+                            ? ['Standard', 'Deep']
+                            : [];
                     if (opts.length === 0) {
                         return (
                             <Input
