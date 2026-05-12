@@ -1,5 +1,8 @@
 export type BookingRouting = 'FIXED_PRICE' | 'REVIEW_QUOTE' | 'REJECT';
 
+export type IntentConfidenceLabel = 'HIGH' | 'MEDIUM' | 'LOW' | 'BLOCKED';
+export type ParserStageUsed = 'exact' | 'flex' | 'keyword' | 'category' | 'none';
+
 export interface BookingMappingMeta {
     distinctRuleJobCount: number;
     allResolutionSpecific: boolean;
@@ -24,6 +27,13 @@ export interface BookingMappingMeta {
     clarifierAnswers?: Record<string, string | number>;
     /** MATRIX V2: values inferred only from raw text before user edits. */
     clarifierHydration?: Record<string, string | number>;
+
+    /** Intent classifier (preview, admin, logs). */
+    intentConfidence?: IntentConfidenceLabel;
+    numericConfidence?: number;
+    inferredCategory?: string | null;
+    blockedReason?: string | null;
+    parserStageUsed?: ParserStageUsed | null;
 }
 
 /** Matrix V2 flexible parser audit fields (persisted in BOOKING_PIPELINE logs). */

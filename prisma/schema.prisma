@@ -504,15 +504,19 @@ model PendingReview {
   quantity          Int      @default(1)
   estimated_minutes Int      @default(0)
   confidence_score  Float    @default(0)
-  
+  inferred_category String?
+  confidence_label  String?
+  parser_stage_used String?
+  blocked_reason    String?
+
   user_name         String
   email             String
   phone             String
   notes             String?
   uploaded_photos   String?
-  
+
   review_status     String   @default("NEW") // "NEW", "REVIEWED", "QUOTED", "REJECTED"
-  
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

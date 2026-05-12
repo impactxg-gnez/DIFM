@@ -1291,7 +1291,32 @@ export function AdminView({ user }: { user: any }) {
                                 <div className="grid grid-cols-3 gap-2 text-xs text-gray-400 pt-1">
                                     <div>Qty: <span className="text-white">{r.quantity}</span></div>
                                     <div>Est. mins: <span className="text-white">{r.estimated_minutes}</span></div>
+                                    <div>Score: <span className="text-white">{r.confidence_score}</span></div>
                                 </div>
+                                {(r.confidence_label || r.inferred_category || r.parser_stage_used || r.blocked_reason) && (
+                                    <div className="flex flex-wrap gap-1.5 pt-2">
+                                        {r.confidence_label && (
+                                            <Badge variant="secondary" className="text-[10px] uppercase">
+                                                {String(r.confidence_label)}
+                                            </Badge>
+                                        )}
+                                        {r.inferred_category && (
+                                            <Badge variant="outline" className="text-[10px] font-mono text-indigo-200 border-indigo-500/35">
+                                                {String(r.inferred_category)}
+                                            </Badge>
+                                        )}
+                                        {r.parser_stage_used && (
+                                            <Badge variant="outline" className="text-[10px] text-gray-300 border-white/15">
+                                                stage: {String(r.parser_stage_used)}
+                                            </Badge>
+                                        )}
+                                        {r.blocked_reason && (
+                                            <Badge variant="destructive" className="text-[10px]">
+                                                {String(r.blocked_reason)}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="border-t border-white/5 pt-2 mt-1 space-y-0.5">
                                     <div className="text-sm font-semibold text-white">{r.user_name}</div>
                                     <div className="text-xs text-gray-400">{r.email} · {r.phone}</div>

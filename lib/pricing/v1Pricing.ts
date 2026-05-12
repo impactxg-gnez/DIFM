@@ -2,7 +2,13 @@ import { GeneratedVisit } from './visitEngine';
 import { runExtractionPipeline } from './extractionEngine';
 import { matchesExtendedOutOfScope, matchesKeywordOutOfScope } from './bookingGuards';
 import { computeBookingRouting, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
-import type { BookingMappingMeta, BookingRouting } from './bookingRoutingTypes';
+import type {
+    BookingMappingMeta,
+    BookingRouting,
+    IntentConfidenceLabel,
+    ParserStageUsed,
+} from './bookingRoutingTypes';
+import { classifyBlockedUnsafeRequest, BLOCKED_UNSUPPORTED_MESSAGE } from './intentSafety';
 import { persistBookingPipelineLog } from './bookingPipelineLog';
 
 export interface V1PricingResult {
@@ -33,6 +39,11 @@ export interface V1PricingResult {
     clarifier_answers?: Record<string, string | number>;
     /** MATRIX V2 text-only hydration snapshot. */
     clarifier_hydration?: Record<string, string | number>;
+    intentConfidence?: IntentConfidenceLabel | null;
+    numericIntentConfidence?: number;
+    inferredCategory?: string | null;
+    blockedReason?: string | null;
+    parserStageUsed?: ParserStageUsed | null;
 }
 
 function applyRoutingToPublicPricing(pricing: V1PricingResult, routing: BookingRouting): V1PricingResult {
@@ -72,6 +83,46 @@ export async function calculateV1Pricing(
     options?: CalculateV1PricingOptions,
 ): Promise<V1PricingResult> {
     const lower = description.toLowerCase();
+
+    const blockedHit = classifyBlockedUnsafeRequest(lower);
+    if (blockedHit) {
+        return finalizePipelineLog(description, undefined, {
+            visits: [],
+            totalPrice: 0,
+            confidence: 0,
+            primaryCategory: 'HANDYMAN',
+            warnings: ['BLOCKED_UNSUPPORTED'],
+            isOutOfScope: false,
+            suggestedServices: SUPPORTED_SERVICES,
+            clarifyMessage: BLOCKED_UNSUPPORTED_MESSAGE,
+            routing: 'REJECT',
+            confidenceLevel: 'LOW',
+            mappingMeta: {
+                distinctRuleJobCount: 0,
+                allResolutionSpecific: false,
+                usedGenericFallback: false,
+                partClauseCount: 0,
+                distinctPricingJobCount: 0,
+                quantityByJob: {},
+                estimatedTotalMinutes: 0,
+                distinctRoutingBucketCount: 0,
+                intentConfidence: 'BLOCKED',
+                numericConfidence: 0,
+                inferredCategory: null,
+                blockedReason: blockedHit.reason_code,
+                parserStageUsed: 'none',
+            },
+            canSubmitQuoteRequest: false,
+            finalJobs: [],
+            quantitiesByJob: {},
+            pipeline: 'MATRIX_V2',
+            intentConfidence: 'BLOCKED',
+            numericIntentConfidence: 0,
+            inferredCategory: null,
+            blockedReason: blockedHit.reason_code,
+            parserStageUsed: 'none',
+        });
+    }
 
     // 1. Out-of-scope: phrase list + heuristics (no naive single-substring "tax" / "class" / "pet" matching).
     const isOutOfScope = matchesKeywordOutOfScope(lower) || matchesExtendedOutOfScope(lower);
@@ -119,7 +170,7 @@ export async function calculateV1Pricing(
             clarifiers: extraction.clarifiers,
             clarifyMessage: extraction.message || REVIEW_QUOTE_MESSAGE,
             routing: 'REVIEW_QUOTE',
-            confidenceLevel: 'LOW',
+            confidenceLevel: extraction.mappingMeta?.intentConfidence === 'HIGH' ? 'HIGH' : 'LOW',
             mappingMeta: extraction.mappingMeta ?? null,
             canSubmitQuoteRequest: true,
             finalJobs: Object.keys(qb),
@@ -127,6 +178,11 @@ export async function calculateV1Pricing(
             pipeline: pipelineFlag,
             clarifier_answers: extraction.clarifier_answers ?? extraction.mappingMeta?.clarifierAnswers,
             clarifier_hydration: extraction.clarifier_hydration ?? extraction.mappingMeta?.clarifierHydration,
+            intentConfidence: extraction.mappingMeta?.intentConfidence ?? null,
+            numericIntentConfidence: extraction.mappingMeta?.numericConfidence,
+            inferredCategory: extraction.mappingMeta?.inferredCategory ?? null,
+            blockedReason: extraction.mappingMeta?.blockedReason ?? null,
+            parserStageUsed: extraction.mappingMeta?.parserStageUsed ?? null,
         };
         return finalizePipelineLog(description, extraction, base);
     }
@@ -149,6 +205,7 @@ export async function calculateV1Pricing(
         if (first.required_capability_tags.includes('PLUMBING')) primaryCategory = 'PLUMBER';
         else if (first.required_capability_tags.includes('ELECTRICAL')) primaryCategory = 'ELECTRICIAN';
         else if (first.item_class === 'CLEANING') primaryCategory = 'CLEANING';
+        else if (first.required_capability_tags.includes('APPLIANCE')) primaryCategory = 'HANDYMAN';
         else if (first.item_class === 'SPECIALIST') primaryCategory = 'SPECIALIST';
     }
 
@@ -173,11 +230,19 @@ export async function calculateV1Pricing(
         pipeline: pipelineFlag,
         clarifier_answers: extraction.clarifier_answers ?? extraction.mappingMeta?.clarifierAnswers,
         clarifier_hydration: extraction.clarifier_hydration ?? extraction.mappingMeta?.clarifierHydration,
+        intentConfidence: extraction.mappingMeta?.intentConfidence ?? null,
+        numericIntentConfidence: extraction.mappingMeta?.numericConfidence,
+        inferredCategory: extraction.mappingMeta?.inferredCategory ?? null,
+        blockedReason: extraction.mappingMeta?.blockedReason ?? null,
+        parserStageUsed: extraction.mappingMeta?.parserStageUsed ?? null,
     };
 
     const { routing, confidenceLevel, reviewMessage } = computeBookingRouting(raw, extraction.mappingMeta ?? null);
     raw.routing = routing;
     raw.confidenceLevel = confidenceLevel;
+    if (routing === 'FIXED_PRICE') {
+        raw.confidenceLevel = extraction.mappingMeta?.intentConfidence === 'HIGH' ? 'HIGH' : 'LOW';
+    }
     if (reviewMessage && (routing === 'REVIEW_QUOTE' || !raw.clarifyMessage)) {
         raw.clarifyMessage = reviewMessage;
     }

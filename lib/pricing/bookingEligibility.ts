@@ -9,6 +9,7 @@ export const V1_PRICING_BLOCK_WARNINGS = new Set<string>([
     'NEEDS_CLARIFICATION',
     'MATRIX_V2_NO_MATCH',
     'MATRIX_V2_JOB_UNKNOWN',
+    'BLOCKED_UNSUPPORTED',
     'COMMERCIAL_QUOTE_REQUIRED',
     'BUNDLE_COMPLEX_QUOTE_REQUIRED',
     'CONTRADICTION_CLARIFY',
@@ -20,6 +21,7 @@ export const V1_PRICING_BLOCK_WARNINGS = new Set<string>([
  */
 export function isV1PricingBookable(pricing: V1PricingResult): boolean {
     if (pricing.isOutOfScope) return false;
+    if (pricing.routing === 'REJECT') return false;
     if (pricing.routing !== 'FIXED_PRICE') return false;
     const warnings = pricing.warnings ?? [];
     if (warnings.some((w) => V1_PRICING_BLOCK_WARNINGS.has(w))) return false;

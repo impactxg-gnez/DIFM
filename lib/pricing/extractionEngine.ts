@@ -9,11 +9,79 @@ import {
     splitInput,
 } from './intentMapper';
 import { aggregateCleaningTier, isCleaningRuleJob } from './cleaningIntent';
-import type { BookingMappingMeta } from './bookingRoutingTypes';
+import type { BookingMappingMeta, ParserStageUsed } from './bookingRoutingTypes';
 import { evaluateBookingConfidence, REVIEW_QUOTE_MESSAGE } from './bookingRouter';
 import { computeBundleSignals } from './bundleRouting';
-import { routeAndPriceMatrixV2 } from './matrixV2/engine';
+import { routeAndPriceMatrixV2, normalizeV2Input } from './matrixV2/engine';
 import { isVagueBookingRequest } from './bookingGuards';
+import {
+    confidenceForResolvedJob,
+    deriveParserStageFromTrace,
+    numericConfidence,
+    inferReviewLeadFromText,
+} from './intentClassifier';
+import type { MatrixV2Model } from './matrixV2/types';
+import type { ConfidenceLabel } from './intentClassifier';
+
+function enrichMatrixV2PipelineResult(
+    model: MatrixV2Model | null,
+    raw: ExtractionPipelineResult,
+    userInput: string,
+): ExtractionPipelineResult {
+    if (!model || !raw.mappingMeta) return raw;
+
+    const norm = normalizeV2Input(userInput);
+    const trace = raw.mappingMeta.matrixV2?.parser;
+    const nextMeta = { ...raw.mappingMeta };
+
+    if (raw.jobs.length > 0 && raw.jobs[0]) {
+        const row = model.jobs.get(raw.jobs[0]);
+        const res = trace?.resolution ?? 'none';
+        const ic: ConfidenceLabel = confidenceForResolvedJob(trace, res);
+        nextMeta.intentConfidence = ic;
+        nextMeta.numericConfidence = numericConfidence(ic);
+        nextMeta.parserStageUsed = deriveParserStageFromTrace(trace, true);
+        nextMeta.inferredCategory = row?.category ?? null;
+        nextMeta.blockedReason = null;
+        return { ...raw, mappingMeta: nextMeta };
+    }
+
+    const lead = inferReviewLeadFromText(norm);
+    let ic: ConfidenceLabel;
+    let inferredCategory: string | null;
+    let stage: ParserStageUsed;
+    let msg = raw.message;
+
+    if (lead) {
+        ic = lead.confidence;
+        inferredCategory = lead.inferredCategory;
+        stage = 'category';
+        msg =
+            "We'll follow up with a quote. " +
+            `You mentioned ${inferredCategory.replace(/_/g, ' ').toLowerCase()} — add any extra detail below.`;
+    } else if (isVagueBookingRequest(normalizeInput(userInput))) {
+        ic = 'LOW';
+        inferredCategory = 'GENERAL_HOME';
+        stage = 'none';
+        msg =
+            "We'll follow up with a quote. " +
+            'Tell us which room, appliance, or fitting you need help with (e.g. leaky tap, fridge, or lock).';
+    } else {
+        ic = 'LOW';
+        inferredCategory = 'UNKNOWN';
+        stage = 'none';
+        msg = raw.message ?? "We'll follow up with a quote for this request.";
+    }
+
+    nextMeta.intentConfidence = ic;
+    nextMeta.numericConfidence = numericConfidence(ic);
+    nextMeta.inferredCategory = inferredCategory;
+    nextMeta.parserStageUsed = stage;
+    nextMeta.blockedReason = null;
+
+    return { ...raw, message: msg, mappingMeta: nextMeta };
+}
+
 
 export interface ExtractionPipelineResult {
     jobs: string[];
@@ -159,20 +227,9 @@ export async function runExtractionPipeline(
         if (cached && cached.expiresAt > Date.now()) {
             return cached.result;
         }
-        const normalizedForGuards = normalizeInput(userInput);
-        if (normalizedForGuards.trim() && isVagueBookingRequest(normalizedForGuards)) {
-            const parts = splitInput(normalizedForGuards);
-            const clarifyResult = buildClarifyResult(
-                userInput,
-                parts,
-                warningsForClarifyReason('VAGUE_INPUT'),
-                'Please describe the specific task (for example what to mount, fix, or install).',
-            );
-            extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result: clarifyResult });
-            return clarifyResult;
-        }
         const v2Result = routeAndPriceMatrixV2(v2, userInput, { clarifierAnswers: options?.clarifierAnswers });
-        const result: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };
+        const merged: ExtractionPipelineResult = { ...v2Result, pipeline: 'MATRIX_V2' };
+        const result = enrichMatrixV2PipelineResult(v2, merged, userInput);
         extractionCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
         return result;
     }

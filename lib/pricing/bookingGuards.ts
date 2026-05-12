@@ -41,10 +41,6 @@ export function matchesExtendedOutOfScope(normalizedLower: string): boolean {
 
 /** Multiword — substring match is safe (no "syntax"/"tax" style issues). */
 const OUT_OF_SCOPE_PHRASE_HINTS: string[] = [
-    'dog walk',
-    'walk the dog',
-    'pet sitting',
-    'cat sitting',
     'child care',
     'personal train',
     'food delivery',
@@ -66,8 +62,6 @@ export function matchesKeywordOutOfScope(normalizedLower: string): boolean {
         if (n.includes(phrase)) return true;
     }
     const patterns: RegExp[] = [
-        /\bwalk(?:ing)?\s+(?:my|the|a)\s+dog\b|\bwalk\s+(?:your|their)?\s*dogs?\b|\bdog\s+walk(?:er|ing)?\b/,
-        /\b(hack(?:ing)?|crack(?:ing)?|bypass(?:ing)?|steal(?:ing)?)\s+.*\b(wifi|wi-?fi|wlan|router|wpa|network\s+(?:password|key)|neighbours?\s+(?:wifi|wi-?fi|internet))\b/,
         /\b(babysit|babysitting|childcare)\b/,
         /\b(tutors?|tutoring|teach(?:er|ing)?|homework help)\b/,
         /\b(uber|taxi|lyft)\b.*\b(airport|station|ride|pick me|drive me|pickup)\b/i,
@@ -77,8 +71,6 @@ export function matchesKeywordOutOfScope(normalizedLower: string): boolean {
         /\b(massage|reiki|acupuncture|chiroprac)\w*\b/,
         /\b(therapist|counsell(?:or|ing)|psychiatr)\w*\b/,
         /\b(legal|solicitor|attorney|accountant|tax return|vat return)\b/,
-        /\b(dog|cat|pet)\b.*\b(sit|sitting|walk|walking|groom)\w*\b/,
-        /\b(pet|dog|cat)\b.*\b(kennel|daycare|walkers?)\b/,
         /\b(gardening|landscap(?:e|ing)|lawn care|grounds maintenance)\b/,
         /\b(mow(ing|er)?\s+(lawn|grass)|cut(ting)?\s+the grass)\b/,
         /\b(snow|path)\b.*\b(shovel|clear(ing|ance))\b/,

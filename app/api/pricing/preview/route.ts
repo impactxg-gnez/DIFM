@@ -44,6 +44,11 @@ export async function POST(request: Request) {
             clarifier_answers: pricing.clarifier_answers ?? {},
             clarifier_hydration: pricing.clarifier_hydration ?? {},
             inferred_values: pricing.clarifier_hydration ?? {},
+            intentConfidence: pricing.intentConfidence ?? null,
+            numericIntentConfidence: pricing.numericIntentConfidence,
+            inferredCategory: pricing.inferredCategory ?? null,
+            blockedReason: pricing.blockedReason ?? null,
+            parserStageUsed: pricing.parserStageUsed ?? null,
         });
     } catch (error) {
         console.error('Price preview error', error);

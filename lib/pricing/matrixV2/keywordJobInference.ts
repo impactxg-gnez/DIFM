@@ -61,13 +61,15 @@ function hasInstallCue(t: string): boolean {
 
 function inferTvMount(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!TV_TOKEN.test(t)) return null;
-    if (!hasInstallCue(t)) {
+    const tvPutUp = /\bput\b/i.test(t) && /\bup\b/i.test(t);
+    const effectiveMountCue = hasInstallCue(t) || tvPutUp;
+    if (!effectiveMountCue) {
         const tvWall = /\btv\b.*\bwall\b|\bwall\b.*\btv\b/i.test(t);
         const tvBrick = /\btv\b.*\bbrick\b|\bbrick\b.*\btv\b/i.test(t);
         if (!tvWall && !tvBrick && !/\bbracket\b/i.test(t)) return null;
         signals.push('keyword:tv+wall_context');
     } else {
-        signals.push('keyword:tv+mount');
+        signals.push(tvPutUp ? 'keyword:tv+put_up' : 'keyword:tv+mount');
     }
     const id =
         firstExistingId(model, ['tv_mount', 'tv_mount_standard', 'tv_wall_mount', 'wall_mount_tv']) ||
@@ -80,7 +82,7 @@ function inferTvMount(model: MatrixV2Model, t: string, signals: string[], scores
 
 function inferBlinds(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
     if (!BLIND_TOKEN.test(t)) return null;
-    if (!(hasInstallCue(t) || /\b(replace|new|roller|venetian)\b/i.test(t))) return null;
+    if (!(hasInstallCue(t) || /\b(replace|new|roller|venetian|installed|installation)\b/i.test(t))) return null;
     const id =
         firstExistingId(model, ['blind_install', 'blinds_install', 'window_blinds']) ||
         [...model.jobs.keys()].find((k) => /\bblind/i.test(k)) ||
@@ -132,6 +134,141 @@ function inferCurtain(model: MatrixV2Model, t: string, signals: string[], scores
     scores[id] = (scores[id] ?? 0) + 32;
     signals.push('keyword:curtain');
     return id;
+}
+
+function inferExtendedHomeRepairInstall(
+    model: MatrixV2Model,
+    t: string,
+    signals: string[],
+    scores: Record<string, number>,
+): string | null {
+    const fixCue =
+        /\b(repair|repairs|fixed|fixing|\bfix\b|servic(?:e|ing)|maintain(?:ance)?|broken|faulty|not\s+working|won'?t\s+work)\b/i.test(t);
+    const installCue = /\b(install(?:ation|ing)?|fit(?:ted|ting)?|plumb(?:ing)?|connect)\b/i.test(t);
+
+    const smartLockId = firstExistingId(model, ['smart_lock_install']);
+    if (
+        smartLockId &&
+        /\b(smart\s+lock|digital\s+lock|electronic\s+lock|keypad\s+lock)\b/i.test(t) &&
+        (installCue || /\b(fit|fitting|mounted)\b/i.test(t))
+    ) {
+        scores[smartLockId] = (scores[smartLockId] ?? 0) + 50;
+        signals.push('keyword:smart_lock_install');
+        return smartLockId;
+    }
+
+    const doorLockId = firstExistingId(model, ['door_lock_install']);
+    if (doorLockId && /\bdoor\b/i.test(t) && /\block\b/i.test(t) && installCue && !/\bwindow\b/i.test(t)) {
+        scores[doorLockId] = (scores[doorLockId] ?? 0) + 46;
+        signals.push('keyword:door_lock_install');
+        return doorLockId;
+    }
+
+    const doorRepairId = firstExistingId(model, ['door_repair']);
+    if (
+        doorRepairId &&
+        /\bdoor\b/i.test(t) &&
+        fixCue &&
+        !installCue &&
+        !/\bwindow\b/i.test(t) &&
+        (!/\block\b/i.test(t) || /\b(hinge|frame|wood|sticking|squeak)\b/i.test(t))
+    ) {
+        scores[doorRepairId] = (scores[doorRepairId] ?? 0) + 40;
+        signals.push('keyword:door_repair');
+        return doorRepairId;
+    }
+
+    const windowRepairId = firstExistingId(model, ['window_repair']);
+    if (windowRepairId && /\bwindow\b/i.test(t) && fixCue) {
+        scores[windowRepairId] = (scores[windowRepairId] ?? 0) + 43;
+        signals.push('keyword:window_repair');
+        return windowRepairId;
+    }
+
+    const curtainRepairId = firstExistingId(model, ['curtain_repair']);
+    if (curtainRepairId && /\bcurtain\b/i.test(t) && fixCue) {
+        scores[curtainRepairId] = (scores[curtainRepairId] ?? 0) + 35;
+        signals.push('keyword:curtain_repair');
+        return curtainRepairId;
+    }
+
+    const cabinetRepairId = firstExistingId(model, ['cabinet_repair']);
+    if (cabinetRepairId && /\b(cabinet|cupboards?|kitchen\s+cupboards?)\b/i.test(t) && fixCue) {
+        scores[cabinetRepairId] = (scores[cabinetRepairId] ?? 0) + 38;
+        signals.push('keyword:cabinet_repair');
+        return cabinetRepairId;
+    }
+
+    const thermId = firstExistingId(model, ['thermostat_install']);
+    if (thermId && /\bthermostat\b/i.test(t) && installCue) {
+        scores[thermId] = (scores[thermId] ?? 0) + 46;
+        signals.push('keyword:thermostat_install');
+        return thermId;
+    }
+
+    const dwId = firstExistingId(model, ['dishwasher_install']);
+    if (dwId && DW_TOKEN.test(t) && installCue && !fixCue) {
+        scores[dwId] = (scores[dwId] ?? 0) + 43;
+        signals.push('keyword:dishwasher_install_x');
+        return dwId;
+    }
+
+    const wmRepairId = firstExistingId(model, ['washing_machine_repair']);
+    if (wmRepairId && WASHER_TOKEN.test(t) && fixCue) {
+        scores[wmRepairId] = (scores[wmRepairId] ?? 0) + 45;
+        signals.push('keyword:washing_machine_repair');
+        return wmRepairId;
+    }
+
+    const fridgeId = firstExistingId(model, ['fridge_repair']);
+    if (fridgeId && /\b(fridge|refrigerator|freezer)\b/i.test(t) && fixCue) {
+        scores[fridgeId] = (scores[fridgeId] ?? 0) + 46;
+        signals.push('keyword:fridge_repair');
+        return fridgeId;
+    }
+
+    const microId = firstExistingId(model, ['microwave_repair']);
+    if (microId && /\bmicro(?:\s*waves?)?\b/i.test(t) && fixCue) {
+        scores[microId] = (scores[microId] ?? 0) + 43;
+        signals.push('keyword:microwave_repair');
+        return microId;
+    }
+
+    const wps = firstExistingId(model, ['water_purifier_service']);
+    const wpr = firstExistingId(model, ['water_purifier_repair']);
+    const purCue = /\b(purifier|purifiers|reverse osmosis|\bro\s+system\b)\b/i.test(t) || /\bro\b/i.test(t);
+    const waterCue = /\bwater\b/i.test(t);
+    if ((wps || wpr) && waterCue && purCue) {
+        const servicePrefer = /\bservice\b/i.test(t) && !/\brepair\b|\bfix\b|\bbroken\b/i.test(t);
+        if (wps && servicePrefer && !fixCue) {
+            scores[wps] = (scores[wps] ?? 0) + 44;
+            signals.push('keyword:purifier_service');
+            return wps;
+        }
+        if (wpr && fixCue) {
+            scores[wpr] = (scores[wpr] ?? 0) + 44;
+            signals.push('keyword:purifier_repair');
+            return wpr;
+        }
+    }
+
+    const gRepair = firstExistingId(model, ['geyser_repair']);
+    const gInstall = firstExistingId(model, ['geyser_install']);
+    const gCue = /\b(geyser|water\s+heater|hot\s+water\s+cylinder)\b/i.test(t);
+    if (gCue) {
+        if (gInstall && installCue && !fixCue) {
+            scores[gInstall] = (scores[gInstall] ?? 0) + 48;
+            signals.push('keyword:geyser_install');
+            return gInstall;
+        }
+        if (gRepair && fixCue) {
+            scores[gRepair] = (scores[gRepair] ?? 0) + 46;
+            signals.push('keyword:geyser_repair');
+            return gRepair;
+        }
+    }
+
+    return null;
 }
 
 function inferAppliances(model: MatrixV2Model, t: string, signals: string[], scores: Record<string, number>): string | null {
@@ -350,6 +487,7 @@ const INFERENCES: Array<{
     { infer: inferMirror },
     { infer: inferPictures },
     { infer: inferCurtain },
+    { infer: inferExtendedHomeRepairInstall },
     { infer: inferAppliances },
     { infer: inferResidentialElectrical },
     { infer: inferResidentialHvac },

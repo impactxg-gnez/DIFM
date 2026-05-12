@@ -328,7 +328,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
 
     /** Step 5: vague / no mapping */
     if (!normalized.trim()) {
-        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'NEEDS_CLARIFICATION'], [], {
+        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'REVIEW_QUOTE_LEAD'], [], {
             parser: parserTrace,
         });
     }
@@ -339,7 +339,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                 parser: parserTrace,
             });
         }
-        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'NEEDS_CLARIFICATION'], [], {
+        return buildReviewResult(parts, MATRIX_V2_CLARIFY_NO_MATCH, ['MATRIX_V2_NO_MATCH', 'REVIEW_QUOTE_LEAD'], [], {
             parser: parserTrace,
         });
     }
@@ -350,7 +350,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
             return buildReviewResult(
                 parts,
                 MATRIX_V2_CLARIFY_NO_MATCH,
-                ['MATRIX_V2_JOB_UNKNOWN', 'NEEDS_CLARIFICATION'],
+                ['MATRIX_V2_JOB_UNKNOWN', 'REVIEW_QUOTE_LEAD'],
                 [],
                 {
                     parser: parserTrace,
@@ -465,6 +465,7 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
 
     if (
         category === 'HANDYMAN' ||
+        category === 'APPLIANCE' ||
         category === 'PLUMBING' ||
         category === 'ELECTRICAL' ||
         category === 'PAINTER' ||
@@ -559,8 +560,10 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
                     ? 'ELECTRICAL'
                     : category === 'PAINTER'
                       ? 'PAINTER'
-                      : category === 'HVAC'
-                        ? 'HVAC'
+                    : category === 'HVAC'
+                      ? 'HVAC'
+                      : category === 'APPLIANCE'
+                        ? 'APPLIANCE'
                         : 'HANDYMAN',
         ],
         quantities: { ...qtyMap },
@@ -603,7 +606,9 @@ function buildVisits(
                   ? 'PAINTER'
                   : category === 'HVAC'
                     ? 'HVAC'
-                    : 'HANDYMAN';
+                    : category === 'APPLIANCE'
+                      ? 'APPLIANCE'
+                      : 'HANDYMAN';
     const itemClass =
         category === 'CLEANING'
             ? 'CLEANING'
@@ -621,7 +626,9 @@ function buildVisits(
                   ? 'Painting'
                   : category === 'HVAC'
                     ? 'Air conditioning'
-                    : 'Handyman';
+                    : category === 'APPLIANCE'
+                      ? 'Appliance'
+                      : 'Handyman';
     return [
         {
             visit_id: '',

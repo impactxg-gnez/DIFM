@@ -148,6 +148,7 @@ function inferVisitTypeLabel(itemClass: GeneratedVisit['item_class'], capability
         if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
         if (capabilityTags.includes('PAINTER')) return 'Painting';
         if (capabilityTags.includes('HVAC')) return 'Air conditioning';
+        if (capabilityTags.includes('APPLIANCE')) return 'Appliance';
         return 'Specialist';
     }
     // STANDARD (default)
@@ -155,6 +156,7 @@ function inferVisitTypeLabel(itemClass: GeneratedVisit['item_class'], capability
     if (capabilityTags.includes('ELECTRICAL')) return 'Electrical';
     if (capabilityTags.includes('PAINTER')) return 'Painting';
     if (capabilityTags.includes('HVAC')) return 'Air conditioning';
+    if (capabilityTags.includes('APPLIANCE')) return 'Appliance';
     return 'Handyman';
 }
 

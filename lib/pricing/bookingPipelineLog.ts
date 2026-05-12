@@ -14,6 +14,11 @@ export interface BookingPipelinePricingResultSlice {
     warnings?: string[];
     isOutOfScope?: boolean;
     pipeline?: 'MATRIX_V2' | 'LEGACY' | null;
+    intentConfidence?: string | null;
+    numericIntentConfidence?: number;
+    inferredCategory?: string | null;
+    blockedReason?: string | null;
+    parserStageUsed?: string | null;
 }
 
 /** Human-facing routing label (API / admin). */
@@ -88,8 +93,22 @@ export async function persistBookingPipelineLog(args: PersistBookingPipelineLogA
         clarifier_hydration: { ...(result.clarifier_hydration ?? {}) },
         routing: routingLabelForLog(result.routing),
         routing_detail: result.routing,
-        pricing: {
-            tier,
+        ...(result.intentConfidence != null ||
+        result.numericIntentConfidence !== undefined ||
+        result.inferredCategory != null ||
+        result.blockedReason != null ||
+        result.parserStageUsed != null
+            ? {
+                  intent: {
+                      confidence_label: result.intentConfidence ?? null,
+                      numeric: result.numericIntentConfidence ?? null,
+                      inferred_category: result.inferredCategory ?? null,
+                      blocked_reason: result.blockedReason ?? null,
+                      parser_stage_used: result.parserStageUsed ?? null,
+                  },
+              }
+            : {}),
+        pricing: {            tier,
             price: Number(result.totalPrice ?? 0),
         },
         warnings: result.warnings ?? [],

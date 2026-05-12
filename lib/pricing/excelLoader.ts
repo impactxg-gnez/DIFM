@@ -7,7 +7,26 @@ import { applySyntheticResidentialPlumbingToModel } from './matrixV2/syntheticRe
 import { applySyntheticResidentialElectricalToModel } from './matrixV2/syntheticResidentialElectrical';
 import { applySyntheticResidentialPaintingToModel } from './matrixV2/syntheticResidentialPainting';
 import { applySyntheticResidentialHvacToModel } from './matrixV2/syntheticResidentialHvac';
+import { applySyntheticExtendedHomeServicesToModel } from './matrixV2/syntheticExtendedHomeServices';
 
+/** Matrix V2 synthetic SKU display names (beyond plumbing/electrical specials). */
+const MATRIX_V2_SYNTH_DISPLAY_NAMES: Record<string, string> = {
+    water_purifier_service: 'Water purifier service',
+    water_purifier_repair: 'Water purifier repair',
+    geyser_repair: 'Water heater / geyser repair',
+    geyser_install: 'Water heater / geyser installation',
+    microwave_repair: 'Microwave repair',
+    fridge_repair: 'Fridge / refrigerator repair',
+    washing_machine_repair: 'Washing machine repair',
+    dishwasher_install: 'Dishwasher installation',
+    thermostat_install: 'Thermostat installation',
+    door_lock_install: 'Door lock installation',
+    smart_lock_install: 'Smart lock installation',
+    door_repair: 'Door repair',
+    window_repair: 'Window repair',
+    curtain_repair: 'Curtain repair',
+    cabinet_repair: 'Cabinet repair',
+};
 export interface PhraseMappingExcel {
     pattern_id?: number;
     phrase: string;
@@ -217,7 +236,9 @@ class ExcelSource {
                           ? 'PAINTER'
                           : row.category === 'HVAC'
                             ? 'HVAC'
-                            : 'HANDYMAN';
+                            : row.category === 'APPLIANCE'
+                              ? 'APPLIANCE'
+                              : 'HANDYMAN';
             this._jobItems.set(id, {
                 job_item_id: id,
                 display_name:
@@ -235,7 +256,8 @@ class ExcelSource {
                                   ? 'Wall / split AC install'
                                   : id === 'ac_unit_service'
                                     ? 'AC service visit'
-                                    : id.replace(/_/g, ' '),
+                                    : MATRIX_V2_SYNTH_DISPLAY_NAMES[id] ??
+                                      id.replace(/_/g, ' '),
                 capability_tag: cap,
                 default_time_weight_minutes: row.max_minutes,
                 pricing_ladder: 'MATRIX_V2_HANDYMAN',
@@ -292,6 +314,7 @@ class ExcelSource {
                     applySyntheticResidentialElectricalToModel(this._matrixV2Model);
                     applySyntheticResidentialPaintingToModel(this._matrixV2Model);
                     applySyntheticResidentialHvacToModel(this._matrixV2Model);
+                    applySyntheticExtendedHomeServicesToModel(this._matrixV2Model);
                     this.populateLegacyCachesFromV2();
                     console.log(
                         `[ExcelSource] MATRIX V2 loaded: ${this._matrixV2Model.jobs.size} jobs, ${this._matrixV2Model.phrases.length} phrase rows`,

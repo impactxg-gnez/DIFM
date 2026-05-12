@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Search, Mic, Camera, CheckCircle, FileQuestion } from 'lucide-react';
+import { Search, Mic, Camera, CheckCircle, FileQuestion, ShieldAlert } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
 import { ReviewQuoteModal } from '@/components/ReviewQuoteModal';
-import { REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingCopy';
 
 export type HomeBookingFlow = 'fixed' | 'quote';
 
@@ -51,6 +50,20 @@ const JOB_LABELS: Record<string, string> = {
     bathroom_cleaning: 'Bathroom Cleaning',
     kitchen_cleaning: 'Kitchen Cleaning',
     tap_leak_fix: 'Tap / Sink / Small plumbing',
+    water_purifier_service: 'Water purifier service',
+    water_purifier_repair: 'Water purifier repair',
+    geyser_repair: 'Geyser / water heater repair',
+    geyser_install: 'Geyser / water heater install',
+    microwave_repair: 'Microwave repair',
+    fridge_repair: 'Fridge repair',
+    washing_machine_repair: 'Washing machine repair',
+    thermostat_install: 'Thermostat install',
+    door_lock_install: 'Door lock install',
+    smart_lock_install: 'Smart lock install',
+    door_repair: 'Door repair',
+    window_repair: 'Window repair',
+    curtain_repair: 'Curtain repair',
+    cabinet_repair: 'Cabinet repair',
     replace_socket: 'Socket replacement',
     install_light_fitting: 'Ceiling light / fitting',
     install_ceiling_fan: 'Ceiling fan install',
@@ -75,6 +88,8 @@ const BOOKING_BLOCK_WARNINGS = new Set([
     'BUNDLE_COMPLEX_QUOTE_REQUIRED',
     'CONTRADICTION_CLARIFY',
     'PARTIAL_PARSE_CLARIFY',
+    'BLOCKED_UNSUPPORTED',
+    'REVIEW_QUOTE_LEAD',
 ]);
 
 /** Show “add detail” banner (not custom-quote flow, not out-of-scope). */
@@ -155,10 +170,26 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     const data = await res.json();
                     setPricePreview(data);
                     const warnList = Array.isArray(data?.warnings) ? data.warnings : [];
+                    const routing = typeof data.routing === 'string' ? data.routing : '';
+                    const warnSet = warnList.map((w: unknown) => String(w));
+                    const blocked =
+                        routing === 'REJECT' || warnSet.includes('BLOCKED_UNSUPPORTED');
+                    const outOfScopeLanding =
+                        warnSet.includes('OUT_OF_SCOPE') || Boolean(data?.isOutOfScope);
+                    const needsIntentLeadLanding =
+                        !blocked &&
+                        !outOfScopeLanding &&
+                        warnSet.some((w: string) => w === 'REVIEW_QUOTE_LEAD') &&
+                        routing === 'REVIEW_QUOTE' &&
+                        data.canSubmitQuoteRequest !== false;
+
                     const needsCommercialQuoteLanding = warnList.some((w: unknown) =>
                         COMMERCIAL_QUOTE_LANDING_WARNINGS.has(String(w)),
                     );
-                    if (needsCommercialQuoteLanding && lastAutoOpenedRoutingRef.current !== debouncedDesc) {
+                    if (
+                        (needsCommercialQuoteLanding || needsIntentLeadLanding) &&
+                        lastAutoOpenedRoutingRef.current !== debouncedDesc
+                    ) {
                         lastAutoOpenedRoutingRef.current = debouncedDesc;
                         setIsReviewModalOpen(true);
                     }
@@ -327,14 +358,25 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const hasBookableVisits = Array.isArray(pricePreview?.visits) && pricePreview.visits.length > 0;
     const routing = pricePreview?.routing as string | undefined;
     const isOut = previewWarnings.includes('OUT_OF_SCOPE') || pricePreview?.isOutOfScope;
+    const isBlockedSafety =
+        routing === 'REJECT' || previewWarnings.some((w) => w === 'BLOCKED_UNSUPPORTED');
+    const quoteRequestAllowed = pricePreview?.canSubmitQuoteRequest !== false;
     const needsCommercialQuoteOnLanding = previewWarnings.some((w) =>
         COMMERCIAL_QUOTE_LANDING_WARNINGS.has(w),
     );
+    const needsIntentLeadForReview =
+        previewWarnings.some((w) => w === 'REVIEW_QUOTE_LEAD') &&
+        routing === 'REVIEW_QUOTE' &&
+        quoteRequestAllowed &&
+        !isBlockedSafety;
+    const prioritizeLeadOverClarify =
+        needsIntentLeadForReview && !needsCommercialQuoteOnLanding && !isOut;
     const showClarifyOnLanding =
         pricePreview != null &&
         !isPricingLoading &&
         !isOut &&
         !needsCommercialQuoteOnLanding &&
+        !prioritizeLeadOverClarify &&
         previewWarnings.some((w) => CLARIFY_LANDING_WARNINGS.has(String(w)));
     const clarifyBannerText =
         typeof pricePreview?.clarifyMessage === 'string' && pricePreview.clarifyMessage.trim()
@@ -343,7 +385,9 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     /** Fixed banner: show estimate when not blocked — even if API uses REVIEW_QUOTE routing for matrix bookkeeping. */
     const showFixedPath =
         !isOut &&
+        !isBlockedSafety &&
         !needsCommercialQuoteOnLanding &&
+        !needsIntentLeadForReview &&
         hasDisplayPrice &&
         hasBookableVisits &&
         !blocksBookableQuote &&
@@ -351,8 +395,12 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             routing === 'FIXED_PRICE' ||
             routing === 'REVIEW_QUOTE' ||
             routing == null);
-    /** Review / quote on landing — commercial quantity / bulk only (full scope lock stays after sign-in). */
-    const showReviewPath = !isOut && needsCommercialQuoteOnLanding && pricePreview != null;
+    /** Review / quote on landing — commercial bulk or matrix review-queue lead paths. */
+    const showReviewPath =
+        !isOut &&
+        !isBlockedSafety &&
+        pricePreview != null &&
+        (needsCommercialQuoteOnLanding || needsIntentLeadForReview);
     const addressOk = Boolean(selectedAddress?.trim());
     const quoteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quoteContactEmail.trim());
     const quotePhoneDigits = quoteContactPhone.replace(/\D/g, '');
@@ -362,6 +410,10 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     if (pricePreview && showFixedPath && !hasDisplayPrice) {
         console.error('Missing backend display_price', pricePreview);
     }
+
+    const reviewQuoteBannerBody = needsCommercialQuoteOnLanding
+        ? 'This looks like a large commercial or high-quantity job. Share your details and we’ll follow up with a quote.'
+        : "We couldn’t match this to an instant fixed-price task. Share your details and our team will review and send a quote.";
 
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
@@ -469,6 +521,21 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                         </div>
                     </div>
 
+                    {/* Unsafe / unsupported — cannot request quote */}
+                    {pricePreview && !isPricingLoading && isBlockedSafety && (
+                        <div className="bg-red-950/50 border border-red-500/40 rounded-[24px] p-4 text-red-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="font-semibold text-sm mb-2 flex items-center gap-2 text-red-300">
+                                <ShieldAlert className="w-4 h-4 shrink-0" />
+                                <span>{`Can't proceed with this request`}</span>
+                            </div>
+                            <div className="text-xs leading-relaxed text-red-100/85">
+                                {typeof pricePreview?.clarifyMessage === 'string' && pricePreview.clarifyMessage.trim()
+                                    ? pricePreview.clarifyMessage.trim()
+                                    : 'That type of request isn’t something we can book through the app.'}
+                            </div>
+                        </div>
+                    )}
+
                     {/* No match / need more detail — priced home tasks only */}
                     {showClarifyOnLanding && (
                         <div className="bg-blue-600/15 border border-blue-500/35 rounded-[24px] p-4 text-blue-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -505,7 +572,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 <span className="text-amber-300">Custom Quote Required</span>
                             </div>
                             <p className="text-xs text-amber-100/80 leading-relaxed mb-3">
-                                This looks like a large commercial or high-quantity job. Share your details and we’ll follow up with a quote.
+                                {reviewQuoteBannerBody}
                             </p>
                             <button
                                 onClick={() => setIsReviewModalOpen(true)}
@@ -599,11 +666,37 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 isOpen={isReviewModalOpen}
                 onClose={() => setIsReviewModalOpen(false)}
                 rawInput={description}
-                detectedJob={pricePreview?.jobs?.[0]}
-                parsedEntities={pricePreview?.quantities}
-                quantity={pricePreview?.quantitiesList?.[0] ?? 1}
-                estimatedMinutes={pricePreview?.total_minutes ?? 0}
-                confidenceScore={0}
+                detectedJob={
+                    Array.isArray(pricePreview?.finalJobs) && pricePreview.finalJobs.length > 0
+                        ? pricePreview.finalJobs[0]
+                        : undefined
+                }
+                parsedEntities={pricePreview?.quantitiesByJob ?? undefined}
+                quantity={
+                    (() => {
+                        const qb = pricePreview?.quantitiesByJob;
+                        if (!qb || typeof qb !== 'object') return 1;
+                        const ids = Array.isArray(pricePreview?.finalJobs) ? pricePreview.finalJobs : [];
+                        const only = ids.length === 1 ? qb[ids[0]!] : undefined;
+                        if (typeof only === 'number') return only;
+                        const vals = Object.values(qb).filter((n) => typeof n === 'number') as number[];
+                        return vals[0] ?? 1;
+                    })()
+                }
+                estimatedMinutes={
+                    Array.isArray(pricePreview?.visits)
+                        ? pricePreview.visits.reduce(
+                              (acc: number, v: { total_minutes?: number }) =>
+                                  acc + (Number(v?.total_minutes) || 0),
+                              0,
+                          )
+                        : 0
+                }
+                confidenceScore={typeof pricePreview?.confidence === 'number' ? pricePreview.confidence : 0}
+                numericIntentConfidence={pricePreview?.numericIntentConfidence}
+                confidenceLabel={pricePreview?.intentConfidence ?? null}
+                inferredCategory={pricePreview?.inferredCategory ?? null}
+                parserStageUsed={pricePreview?.parserStageUsed ?? null}
             />
         </div>
     );

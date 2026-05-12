@@ -13,6 +13,12 @@ interface ReviewQuoteModalProps {
     quantity?: number;
     estimatedMinutes?: number;
     confidenceScore?: number;
+    numericIntentConfidence?: number;
+    confidenceLabel?: string | null;
+    inferredCategory?: string | null;
+    parserStageUsed?: string | null;
+    /** Only for audit trail if ever submitted alongside a blocked tooling path; omit for normal leads. */
+    blockedReason?: string | null;
     /** Pre-fill name/email from logged-in user if available */
     prefilledName?: string;
     prefilledEmail?: string;
@@ -29,6 +35,11 @@ export function ReviewQuoteModal({
     quantity = 1,
     estimatedMinutes = 0,
     confidenceScore = 0,
+    numericIntentConfidence,
+    confidenceLabel,
+    inferredCategory,
+    parserStageUsed,
+    blockedReason,
     prefilledName = '',
     prefilledEmail = '',
 }: ReviewQuoteModalProps) {
@@ -71,6 +82,10 @@ export function ReviewQuoteModal({
         setPhase('submitting');
         setError('');
         try {
+            const numericConf =
+                numericIntentConfidence != null && Number.isFinite(Number(numericIntentConfidence))
+                    ? Number(numericIntentConfidence)
+                    : Number(confidenceScore) || 0;
             const res = await fetch('/api/admin/pending-reviews', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -80,7 +95,11 @@ export function ReviewQuoteModal({
                     parsed_entities: parsedEntities ?? null,
                     quantity,
                     estimated_minutes: estimatedMinutes,
-                    confidence_score: confidenceScore,
+                    confidence_score: numericConf,
+                    confidence_label: confidenceLabel ?? null,
+                    inferred_category: inferredCategory ?? null,
+                    parser_stage_used: parserStageUsed ?? null,
+                    blocked_reason: blockedReason ?? null,
                     user_name: name.trim(),
                     email: email.trim(),
                     phone: phone.trim(),
