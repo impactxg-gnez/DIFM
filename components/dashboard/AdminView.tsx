@@ -1297,6 +1297,19 @@ export function AdminView({ user }: { user: any }) {
                                     <div className="text-xs text-gray-400">{r.email} · {r.phone}</div>
                                     {r.notes && <div className="text-xs text-gray-400 italic mt-1">"{r.notes}"</div>}
                                 </div>
+                                {r.uploaded_photos && (
+                                    <div className="flex gap-2 mt-3">
+                                        {r.uploaded_photos.split(',').map((p: string, i: number) => (
+                                            <div key={i} className="relative group">
+                                                <img 
+                                                    src={p} 
+                                                    className="w-16 h-16 rounded-lg object-cover border border-white/10 cursor-zoom-in hover:border-indigo-500/50 transition-colors" 
+                                                    onClick={() => window.open(p, '_blank')}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex flex-col gap-2 shrink-0">
                                 <Button

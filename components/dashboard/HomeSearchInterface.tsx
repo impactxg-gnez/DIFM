@@ -92,8 +92,10 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
     const [quoteContactEmail, setQuoteContactEmail] = useState('');
     const [quoteContactPhone, setQuoteContactPhone] = useState('');
+    const [clarifierAnswers, setClarifierAnswers] = useState<Record<string, string | number>>({});
     // Track last routing to avoid re-opening modal on every re-render
     const lastAutoOpenedRoutingRef = useRef<string | null>(null);
+    const lastDescriptionRef = useRef<string>('');
 
     // Debounce description input
     useEffect(() => {
@@ -111,7 +113,15 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             if (!debouncedDesc.trim()) {
                 setPricePreview(null);
                 lastAutoOpenedRoutingRef.current = null;
+                setClarifierAnswers({});
                 return;
+            }
+
+            // If description changed, reset answers (unless we want to preserve them?)
+            // Usually, a new search means new context.
+            if (lastDescriptionRef.current !== debouncedDesc) {
+                setClarifierAnswers({});
+                lastDescriptionRef.current = debouncedDesc;
             }
 
             setIsPricingLoading(true);
@@ -119,7 +129,11 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 const res = await fetch('/api/pricing/preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ category: 'HANDYMAN', description: debouncedDesc }),
+                    body: JSON.stringify({ 
+                        category: 'HANDYMAN', 
+                        description: debouncedDesc,
+                        clarifierAnswers 
+                    }),
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -145,7 +159,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         };
 
         fetchPrice();
-    }, [debouncedDesc]);
+    }, [debouncedDesc, clarifierAnswers]);
 
     const applyGeocodedAddress = (displayName: string) => {
         const full = displayName
@@ -458,7 +472,9 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 {pricePreview?.suggestedServices?.join(', ') || 'Plumbing, Electrical, Handyman, Cleaning, Painting, TV Mounting, and more home services'}
                             </div>
                         </div>
-                                {/* Review / custom-quote banner — shown instead of fixed price card */}
+                    )}
+
+                    {/* Review / custom-quote banner — shown instead of fixed price card */}
                     {(pricePreview || isPricingLoading) && showReviewPath && (
                         <div className="bg-amber-500/10 border border-amber-500/30 rounded-[24px] p-4 text-amber-50 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="font-semibold text-sm flex items-center gap-2 mb-2">
@@ -499,8 +515,57 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                                 </div>
                             </div>
 
+                            {/* Interactive Clarifier Controls (e.g. Rooms, Cleaning Tier) */}
+                            {Array.isArray(pricePreview?.clarifiers) && pricePreview.clarifiers.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-black/5 space-y-3">
+                                    {pricePreview.clarifiers.map((c: any) => (
+                                        <div key={c.tag} className="flex items-center justify-between gap-4">
+                                            <span className="text-[10px] font-bold text-black/60 uppercase tracking-wider leading-tight max-w-[60%]">
+                                                {c.question}
+                                            </span>
+                                            <div className="flex items-center">
+                                                {c.inputType === 'select' || (Array.isArray(c.options) && c.options.length > 0) ? (
+                                                    <select
+                                                        value={c.value}
+                                                        onChange={(e) => setClarifierAnswers(prev => ({ ...prev, [c.tag]: e.target.value }))}
+                                                        className="bg-black/5 border border-black/15 rounded-lg px-2 py-1.5 text-[11px] font-bold text-black/80 focus:outline-none focus:border-[#007AFF]/30 transition-colors"
+                                                    >
+                                                        {c.options.map((opt: string) => (
+                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (c.inputType === 'number' || typeof c.value === 'number') ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => setClarifierAnswers(prev => ({ ...prev, [c.tag]: Math.max(0, (Number(c.value) || 0) - 1) }))}
+                                                            className="w-6 h-6 flex items-center justify-center rounded-full bg-black/5 hover:bg-black/10 text-black/60 font-bold"
+                                                        >
+                                                            -
+                                                        </button>
+                                                        <span className="text-[11px] font-bold text-black/80 w-4 text-center">{c.value}</span>
+                                                        <button 
+                                                            onClick={() => setClarifierAnswers(prev => ({ ...prev, [c.tag]: (Number(c.value) || 0) + 1 }))}
+                                                            className="w-6 h-6 flex items-center justify-center rounded-full bg-black/5 hover:bg-black/10 text-black/60 font-bold"
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <input
+                                                        type="text"
+                                                        value={c.value || ''}
+                                                        onChange={(e) => setClarifierAnswers(prev => ({ ...prev, [c.tag]: e.target.value }))}
+                                                        className="w-20 bg-black/5 border border-black/15 rounded-lg px-2 py-1 text-[11px] font-bold text-black/80 focus:outline-none focus:border-[#007AFF]/30"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {/* Pricing note — address lives on the top-left of the screen */}
-                            <div className="w-full min-h-[48px] rounded-[16px] flex items-center justify-center px-3 bg-black/[0.06] border border-black/10">
+                            <div className="w-full min-h-[48px] rounded-[16px] flex items-center justify-center px-3 bg-black/[0.06] border border-black/10 mt-4">
                                 <span className="font-bold text-sm text-black/80 text-center leading-snug">
                                     Final price after Scope Lock
                                 </span>

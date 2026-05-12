@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { X, CheckCircle, Send, Loader2, Camera } from 'lucide-react';
 
 interface ReviewQuoteModalProps {
     isOpen: boolean;
@@ -37,9 +37,29 @@ export function ReviewQuoteModal({
     const [email, setEmail] = useState(prefilledEmail);
     const [phone, setPhone] = useState('');
     const [notes, setNotes] = useState('');
+    const [photos, setPhotos] = useState<string[]>([]);
     const [error, setError] = useState('');
 
     if (!isOpen) return null;
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (photos.length >= 3) {
+            setError('Maximum 3 photos allowed');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPhotos(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const removePhoto = (index: number) => {
+        setPhotos(prev => prev.filter((_, i) => i !== index));
+    };
 
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
     const phoneDigits = phone.replace(/\D/g, '');
@@ -65,6 +85,7 @@ export function ReviewQuoteModal({
                     email: email.trim(),
                     phone: phone.trim(),
                     notes: notes.trim() || null,
+                    uploaded_photos: photos.length > 0 ? photos.join(',') : null,
                 }),
             });
             if (!res.ok) {
@@ -206,6 +227,35 @@ export function ReviewQuoteModal({
                                     rows={3}
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
                                 />
+                            </div>
+
+                            {/* Optional Photos */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Photos <span className="text-white/30">(optional, max 3)</span>
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {photos.map((p, i) => (
+                                        <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-white/10 group">
+                                            <img src={p} className="w-full h-full object-cover" />
+                                            <button 
+                                                onClick={() => removePhoto(i)}
+                                                className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {photos.length < 3 && (
+                                        <label className="w-20 h-20 rounded-xl bg-white/5 border border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-colors">
+                                            <div className="bg-white/10 p-2 rounded-full mb-1">
+                                                <Camera className="w-4 h-4 text-white/60" />
+                                            </div>
+                                            <span className="text-[9px] text-white/40 font-bold uppercase">Add</span>
+                                            <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                                        </label>
+                                    )}
+                                </div>
                             </div>
 
                             {error && (

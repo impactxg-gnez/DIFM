@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 /** PATCH /api/admin/pending-reviews/[id] — update status, quote, provider assignment */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const body = await req.json();
         const { review_status, custom_quote, provider_id, rejection_note } = body;
 
@@ -13,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         }
 
         const updated = await prisma.pendingReview.update({
-            where: { id: params.id },
+            where: { id },
             data: {
                 ...(review_status ? { review_status } : {}),
                 ...(custom_quote !== undefined ? { notes: `Quote: £${custom_quote}${rejection_note ? ` | ${rejection_note}` : ''}` } : {}),

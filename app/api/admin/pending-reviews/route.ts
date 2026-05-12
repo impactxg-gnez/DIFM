@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 /** POST /api/admin/pending-reviews — create a new pending review lead */
 export async function POST(req: NextRequest) {
