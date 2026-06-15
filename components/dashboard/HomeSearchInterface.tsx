@@ -135,16 +135,14 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
     const [quoteContactEmail, setQuoteContactEmail] = useState('');
     const [quoteContactPhone, setQuoteContactPhone] = useState('');
-    // Track last routing to avoid re-opening modal on every re-render
-    const lastAutoOpenedRoutingRef = useRef<string | null>(null);
 
-    // Debounce description input
+    // Debounce description input — wait for a pause before pricing preview (avoids mid-typing commercial flashes).
     useEffect(() => {
         const timer = setTimeout(() => {
             const normalized = description.trim();
             // Stability guard: do not trigger extraction for very short partial input.
             setDebouncedDesc(normalized.length >= 6 ? normalized : '');
-        }, 400);
+        }, 750);
         return () => clearTimeout(timer);
     }, [description]);
 
@@ -153,7 +151,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
         const fetchPrice = async () => {
             if (!debouncedDesc.trim()) {
                 setPricePreview(null);
-                lastAutoOpenedRoutingRef.current = null;
                 return;
             }
 
@@ -170,30 +167,6 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 if (res.ok) {
                     const data = await res.json();
                     setPricePreview(data);
-                    const warnList = Array.isArray(data?.warnings) ? data.warnings : [];
-                    const routing = typeof data.routing === 'string' ? data.routing : '';
-                    const warnSet = warnList.map((w: unknown) => String(w));
-                    const blocked =
-                        routing === 'REJECT' || warnSet.includes('BLOCKED_UNSUPPORTED');
-                    const outOfScopeLanding =
-                        warnSet.includes('OUT_OF_SCOPE') || Boolean(data?.isOutOfScope);
-                    const needsIntentLeadLanding =
-                        !blocked &&
-                        !outOfScopeLanding &&
-                        warnSet.some((w: string) => w === 'REVIEW_QUOTE_LEAD') &&
-                        routing === 'REVIEW_QUOTE' &&
-                        data.canSubmitQuoteRequest !== false;
-
-                    const needsCommercialQuoteLanding = warnList.some((w: unknown) =>
-                        COMMERCIAL_QUOTE_LANDING_WARNINGS.has(String(w)),
-                    );
-                    if (
-                        (needsCommercialQuoteLanding || needsIntentLeadLanding) &&
-                        lastAutoOpenedRoutingRef.current !== debouncedDesc
-                    ) {
-                        lastAutoOpenedRoutingRef.current = debouncedDesc;
-                        setIsReviewModalOpen(true);
-                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch price:', error);
@@ -362,10 +335,16 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const isBlockedSafety =
         routing === 'REJECT' || previewWarnings.some((w) => w === 'BLOCKED_UNSUPPORTED');
     const quoteRequestAllowed = pricePreview?.canSubmitQuoteRequest !== false;
-    const needsCommercialQuoteOnLanding = previewWarnings.some((w) =>
-        COMMERCIAL_QUOTE_LANDING_WARNINGS.has(w),
-    );
+    /** Preview is for the text in the box now — not an in-flight or stale debounced fetch. */
+    const previewStableForCurrentInput =
+        !isPricingLoading &&
+        trimmedDescription.length >= 6 &&
+        trimmedDescription === debouncedDesc;
+    const needsCommercialQuoteOnLanding =
+        previewStableForCurrentInput &&
+        previewWarnings.some((w) => COMMERCIAL_QUOTE_LANDING_WARNINGS.has(w));
     const needsIntentLeadForReview =
+        previewStableForCurrentInput &&
         previewWarnings.some((w) => w === 'REVIEW_QUOTE_LEAD') &&
         routing === 'REVIEW_QUOTE' &&
         quoteRequestAllowed &&
@@ -373,8 +352,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     const prioritizeLeadOverClarify =
         needsIntentLeadForReview && !needsCommercialQuoteOnLanding && !isOut;
     const showClarifyOnLanding =
+        previewStableForCurrentInput &&
         pricePreview != null &&
-        !isPricingLoading &&
         !isOut &&
         !needsCommercialQuoteOnLanding &&
         !prioritizeLeadOverClarify &&
@@ -385,6 +364,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             : 'Please add more detail about the task so we can match it to a priced home service.';
     /** Fixed banner: show estimate when not blocked — even if API uses REVIEW_QUOTE routing for matrix bookkeeping. */
     const showFixedPath =
+        previewStableForCurrentInput &&
         !isOut &&
         !isBlockedSafety &&
         !needsCommercialQuoteOnLanding &&
@@ -396,11 +376,12 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
             routing === 'FIXED_PRICE' ||
             routing === 'REVIEW_QUOTE' ||
             routing == null);
-    /** Review / quote on landing — commercial bulk or matrix review-queue lead paths. */
+    /** Review / quote banner + CTA — user opens the modal explicitly (no auto-popup). */
     const showReviewPath =
         !isOut &&
         !isBlockedSafety &&
         pricePreview != null &&
+        routing === 'REVIEW_QUOTE' &&
         (needsCommercialQuoteOnLanding || needsIntentLeadForReview);
     const addressOk = Boolean(selectedAddress?.trim());
     const quoteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quoteContactEmail.trim());
@@ -523,7 +504,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                     </div>
 
                     {/* Unsafe / unsupported — cannot request quote */}
-                    {pricePreview && !isPricingLoading && isBlockedSafety && (
+                    {previewStableForCurrentInput && isBlockedSafety && (
                         <div className="bg-red-950/50 border border-red-500/40 rounded-[24px] p-4 text-red-100 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="font-semibold text-sm mb-2 flex items-center gap-2 text-red-300">
                                 <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -547,7 +528,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             <p className="text-xs text-blue-100/85 leading-relaxed">{clarifyBannerText}</p>
                         </div>
                     )}
-                    {pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
+                    {previewStableForCurrentInput && pricePreview?.warnings?.includes('OUT_OF_SCOPE') && (
                         <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-[24px] p-4 text-yellow-200 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="font-semibold text-sm mb-2 flex items-center gap-2">
                                 <span>⚠️</span>
