@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import { advanceSequentialDispatch } from '@/lib/dispatch/matcher';
 
 export async function POST(
     request: Request,
@@ -16,14 +17,28 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await prisma.job.update({
-            where: { id: jobId },
-            data: {
-                declinedProviderIds: {
-                    push: userId
-                }
-            } as any
-        });
+        const job = await prisma.job.findUnique({ where: { id: jobId } });
+        if (!job) {
+            return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+        }
+
+        const declined = job.declinedProviderIds ?? [];
+        if (!declined.includes(userId)) {
+            await prisma.job.update({
+                where: { id: jobId },
+                data: {
+                    declinedProviderIds: { set: [...declined, userId] },
+                },
+            });
+        }
+
+        if (job.status === 'ASSIGNING') {
+            try {
+                await advanceSequentialDispatch(jobId);
+            } catch (dispatchErr) {
+                console.error('[Decline] advanceSequentialDispatch failed', dispatchErr);
+            }
+        }
 
         console.log(`[Decline] Provider ${userId} declined job ${jobId}`);
 

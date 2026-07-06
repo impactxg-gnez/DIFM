@@ -179,18 +179,26 @@ export function ProviderView({ user }: { user: any }) {
         if (!window.confirm('Are you sure you want to decline this job? You will not be able to accept it later if you do.')) {
             return;
         }
+        const snapshot = jobs;
+        await mutate(
+            (current: any[] | undefined) =>
+                Array.isArray(current) ? current.filter((j) => j.id !== jobId) : current,
+            { revalidate: false },
+        );
         try {
             const res = await fetch(`/api/jobs/${jobId}/decline`, {
-                method: 'POST'
+                method: 'POST',
             });
             if (res.ok) {
-                mutate();
+                await mutate();
             } else {
+                await mutate(snapshot, { revalidate: true });
                 const err = await res.json();
                 alert(`Failed to decline: ${err.error}`);
             }
         } catch (e) {
             console.error(e);
+            await mutate(snapshot, { revalidate: true });
         }
     };
 
