@@ -10,6 +10,8 @@ import { ensureDispatchProgress, activateBookedJobs } from '@/lib/dispatch/dispa
 import { normalizeTier, normalizeJobForUi } from '@/lib/pricing/tierNormalization';
 import { attachClarifiersToVisits } from '@/lib/pricing/clarifierEngine';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         const cookieStore = await cookies();
@@ -399,7 +401,11 @@ export async function GET(request: Request) {
             return { ...normalizeJobForUi(job), isStuck, stuckReason: reason };
         });
 
-        return NextResponse.json(processedJobs);
+        return NextResponse.json(processedJobs, {
+            headers: {
+                'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+            },
+        });
 
     } catch (error) {
         const err = error as { code?: string; message?: string; meta?: unknown };

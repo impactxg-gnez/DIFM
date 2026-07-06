@@ -1,6 +1,6 @@
 
 import { prisma } from '../prisma';
-import { advanceSequentialDispatch } from './matcher';
+import { advanceSequentialDispatch, broadcastDispatchJob } from './matcher';
 
 /**
  * Checks all jobs in ASSIGNING state and advances dispatch if current offer has expired (>10s)
@@ -40,8 +40,8 @@ export async function ensureDispatchProgress() {
 
     for (const job of unofferedJobs) {
         console.log(`[DispatchTracker] Job ${job.id} is ASSIGNING but has no active offer. Starting dispatch.`);
-        const nextProviderId = await advanceSequentialDispatch(job.id);
-        results.push({ jobId: job.id, action: 'STARTED', nextProviderId });
+        const offered = await broadcastDispatchJob(job.id);
+        results.push({ jobId: job.id, action: 'STARTED', nextProviderId: offered[0] ?? null });
     }
 
     return results;
@@ -105,6 +105,12 @@ export async function activateBookedJobs() {
             });
 
             results.push({ jobId: job.id, action: 'ACTIVATED' });
+
+            try {
+                await broadcastDispatchJob(job.id);
+            } catch (dispatchErr) {
+                console.error(`[DispatchTracker] Initial broadcast failed for job ${job.id}`, dispatchErr);
+            }
         }
     }
 

@@ -227,9 +227,57 @@ export async function advanceSequentialDispatch(jobId: string): Promise<string |
 /**
  * Trigger or Refresh dispatch for a job
  */
+export async function broadcastDispatchJob(jobId: string): Promise<string[]> {
+  const matches = await findEligibleProviders(jobId);
+  if (matches.length === 0) return [];
+
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.job.findUnique({ where: { id: jobId } });
+    if (!job || job.status !== 'ASSIGNING') return [];
+
+    const declinedIds = job.declinedProviderIds ?? [];
+    const flaggedById = job.flaggedById;
+    const eligible = matches.filter(
+      (m) => !declinedIds.includes(m.providerId) && m.providerId !== flaggedById,
+    );
+    if (eligible.length === 0) return [];
+
+    const now = new Date();
+    const newIds = eligible.map((m) => m.providerId);
+    const merged = [...new Set([...(job.offeredToIds ?? []), ...newIds])];
+
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        offeredToId: merged[0] ?? newIds[0],
+        offeredToIds: merged,
+        offeredAt: now,
+        statusUpdatedAt: now,
+      },
+    });
+
+    console.log(
+      `[Dispatch] Broadcast job ${jobId} to ${newIds.length} eligible provider(s): ${newIds.join(', ')}`,
+    );
+    return newIds;
+  });
+}
+
+/**
+ * Trigger or Refresh dispatch for a job
+ */
 export async function dispatchJob(jobId: string): Promise<string | null> {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job) return null;
+
+  const hasOffer =
+    Boolean(job.offeredToId) || (Array.isArray(job.offeredToIds) && job.offeredToIds.length > 0);
+
+  // First dispatch: offer all eligible online providers at once (broadcast).
+  if (job.status === 'ASSIGNING' && !hasOffer) {
+    const ids = await broadcastDispatchJob(jobId);
+    return ids[0] ?? null;
+  }
 
   // Rolling mode: If already assigning, check if 10s passed since LAST offer
   if (job.status === 'ASSIGNING' && job.offeredAt) {
@@ -239,6 +287,6 @@ export async function dispatchJob(jobId: string): Promise<string | null> {
     }
   }
 
-  // Expand to next provider
+  // Expand to next provider not yet in the offer list
   return advanceSequentialDispatch(jobId);
 }

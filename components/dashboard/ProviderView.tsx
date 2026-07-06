@@ -14,7 +14,13 @@ import { MapPin, AlertTriangle, Timer, Plus, Trash2 } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { RemoteImage } from '@/components/ui/RemoteImage';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const jobsFetcher = async (url: string) => {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch jobs');
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('Invalid jobs response');
+    return data;
+};
 
 function getCustomerScopeDescriptionFromVisit(visit: any): string | null {
     const raw = visit?.scopeSummary?.scope_lock_answers;
@@ -55,8 +61,21 @@ function TimerDisplay({ startTime }: { startTime: string | Date }) {
 export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
 
-    // API automatically filters for provider's category and dispatch radius
-    const { data: jobs, mutate } = useSWR('/api/jobs', fetcher, { refreshInterval: 2000 });
+    // Poll frequently; GET /api/jobs also runs dispatch for new ASSIGNING jobs.
+    const { data: jobs, mutate } = useSWR('/api/jobs', jobsFetcher, {
+        refreshInterval: 3000,
+        refreshWhenHidden: true,
+        revalidateOnFocus: true,
+        revalidateOnReconnect: true,
+        dedupingInterval: 1000,
+    });
+
+    useEffect(() => {
+        const poll = setInterval(() => {
+            mutate();
+        }, 3000);
+        return () => clearInterval(poll);
+    }, [mutate]);
 
     useEffect(() => {
         // Request location permission on mount for Providers too
