@@ -24,14 +24,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        // Update location and set providers online
-        const updated = await prisma.user.update({
+        // Update coordinates only — online status is controlled separately via /api/user/online-status
+        await prisma.user.update({
             where: { id: userId },
             data: {
                 latitude: parseFloat(latitude),
                 longitude: parseFloat(longitude),
-                // Set providers online when they update location
-                ...(user.role === 'PROVIDER' ? { isOnline: true } : {})
             }
         });
 

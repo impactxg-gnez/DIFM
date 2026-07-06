@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { CustomerView } from '@/components/dashboard/CustomerView';
 import { ProviderView } from '@/components/dashboard/ProviderView';
 import { AdminView } from '@/components/dashboard/AdminView';
+import { shouldPersistProviderLocation } from '@/lib/geo/location';
 
 const fetcher = (url: string) => fetch(url).then((res) => {
     if (!res.ok) throw new Error('Unauthorized');
@@ -18,7 +19,7 @@ export default function DashboardPage() {
     const [locationRequested, setLocationRequested] = useState(false);
 
     // Use SWR for real-time user data updates (poll every 3 seconds)
-    const { data: user, error, isLoading } = useSWR('/api/user/me', fetcher, {
+    const { data: user, error, isLoading, mutate } = useSWR('/api/user/me', fetcher, {
         refreshInterval: 3000, // Poll every 3 seconds for real-time updates
         revalidateOnFocus: true,
         revalidateOnReconnect: true,
@@ -41,20 +42,24 @@ export default function DashboardPage() {
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 const { latitude, longitude, accuracy } = position.coords;
-                // Only save if accuracy is reasonable
-                if (accuracy > 100) {
-                    console.warn(`Initial location accuracy is poor: ${accuracy}m`);
+                if (
+                    !shouldPersistProviderLocation({
+                        storedLat: user.latitude,
+                        storedLng: user.longitude,
+                        gpsLat: latitude,
+                        gpsLng: longitude,
+                        accuracyM: accuracy,
+                    })
+                ) {
+                    return;
                 }
                 try {
                     await fetch('/api/user/location', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            latitude,
-                            longitude,
-                        }),
+                        body: JSON.stringify({ latitude, longitude }),
                     });
-                    console.log(`Initial location saved: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy?.toFixed(0)}m)`);
+                    await mutate();
                 } catch (e) {
                     console.error('Failed to save location', e);
                 }
@@ -68,7 +73,7 @@ export default function DashboardPage() {
                 maximumAge: 0 // Always get fresh position on initial load
             }
         );
-    }, [user, locationRequested]);
+    }, [user, locationRequested, mutate]);
 
     const handleLogout = async () => {
         await fetch('/api/auth/logout', { method: 'POST' });

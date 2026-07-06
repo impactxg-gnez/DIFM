@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import useSWR from 'swr';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
+import { haversineDistanceKm, shouldPersistProviderLocation } from '@/lib/geo/location';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ProviderMap } from './ProviderMap';
 import { UserLocationMap } from './UserLocationMap';
-import { MapPin, AlertTriangle, Timer, Plus, Trash2 } from 'lucide-react';
+import { MapPin, AlertTriangle, Timer, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { RemoteImage } from '@/components/ui/RemoteImage';
 
@@ -48,18 +49,7 @@ function scopePhotoPaths(visit: any): string[] {
 /** Jobs within this radius get a "Nearby" badge on the provider board. */
 const NEARBY_KM = 5;
 
-function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371;
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
+const HISTORY_JOB_STATUSES = new Set(['COMPLETED', 'PAID_OUT']);
 
 function formatProviderJobDistance(
     providerLat?: number | null,
@@ -113,6 +103,52 @@ function TimerDisplay({ startTime }: { startTime: string | Date }) {
 export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
 
+    const { mutate: mutateUser } = useSWRConfig();
+    const lastPersistedRef = useRef<{ lat: number; lng: number } | null>(
+        user.latitude != null && user.longitude != null
+            ? { lat: user.latitude, lng: user.longitude }
+            : null,
+    );
+    const [displayLocation, setDisplayLocation] = useState<{ lat: number; lng: number } | null>(
+        user.latitude != null && user.longitude != null
+            ? { lat: user.latitude, lng: user.longitude }
+            : null,
+    );
+    const [isOnline, setIsOnline] = useState(Boolean(user.isOnline));
+    const [isTogglingOnline, setIsTogglingOnline] = useState(false);
+    const [showCompletedJobs, setShowCompletedJobs] = useState(false);
+
+    useEffect(() => {
+        setIsOnline(Boolean(user.isOnline));
+    }, [user.isOnline]);
+
+    useEffect(() => {
+        if (user.latitude == null || user.longitude == null) return;
+        setDisplayLocation((prev) => prev ?? { lat: user.latitude, lng: user.longitude });
+        if (!lastPersistedRef.current) {
+            lastPersistedRef.current = { lat: user.latitude, lng: user.longitude };
+        }
+    }, [user.latitude, user.longitude]);
+
+    const providerLat = displayLocation?.lat ?? user.latitude;
+    const providerLng = displayLocation?.lng ?? user.longitude;
+
+    const persistProviderLocation = useCallback(async (latitude: number, longitude: number) => {
+        try {
+            const response = await fetch('/api/user/location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ latitude, longitude }),
+            });
+            if (response.ok) {
+                lastPersistedRef.current = { lat: latitude, lng: longitude };
+                await mutateUser('/api/user/me');
+            }
+        } catch (e) {
+            console.error('Failed to heart-beat location', e);
+        }
+    }, [mutateUser]);
+
     // Poll frequently; GET /api/jobs also runs dispatch for new ASSIGNING jobs.
     const { data: jobs = [], error: jobsError, isLoading: jobsLoading, mutate } = useSWR(
         '/api/jobs',
@@ -130,102 +166,59 @@ export function ProviderView({ user }: { user: any }) {
     );
 
     useEffect(() => {
-        // Request location permission on mount for Providers too
-        if (navigator.geolocation) {
-            // Heartbeat location update
-            const updateLocation = async () => {
-                // Simulation Logic: If this is the simulator account, move towards the job
-                if (user.email === 'simulator@demo.com') {
-                    // Find active job
-                    const activeJob = jobs?.find((j: any) => ['ACCEPTED', 'IN_PROGRESS'].includes(j.status));
-                    if (activeJob && activeJob.latitude && activeJob.longitude) {
-                        const currentLat = user.latitude || 51.5874;
-                        const currentLng = user.longitude || -0.0478;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
-                        // Move 20% closer every update
-                        const newLat = currentLat + (activeJob.latitude - currentLat) * 0.2;
-                        const newLng = currentLng + (activeJob.longitude - currentLng) * 0.2;
-
-                        try {
-                            await fetch('/api/user/location', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ latitude: newLat, longitude: newLng })
-                            });
-                        } catch (e) { }
-                        return; // Skip normal geolocation update
-                    }
+        const updateLocation = async () => {
+            if (user.email === 'simulator@demo.com') {
+                const activeJob = jobs?.find((j: any) => ['ACCEPTED', 'IN_PROGRESS'].includes(j.status));
+                if (activeJob && activeJob.latitude && activeJob.longitude) {
+                    const currentLat = lastPersistedRef.current?.lat ?? activeJob.latitude;
+                    const currentLng = lastPersistedRef.current?.lng ?? activeJob.longitude;
+                    const newLat = currentLat + (activeJob.latitude - currentLat) * 0.2;
+                    const newLng = currentLng + (activeJob.longitude - currentLng) * 0.2;
+                    setDisplayLocation({ lat: newLat, lng: newLng });
+                    await persistProviderLocation(newLat, newLng);
                 }
+                return;
+            }
 
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        const { latitude, longitude, accuracy } = position.coords;
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    setDisplayLocation({ lat: latitude, lng: longitude });
 
-                        // Only update if accuracy is reasonable (within 100m) and location has changed significantly (>10m)
-                        if (accuracy > 100) {
-                            console.warn(`Location accuracy is poor: ${accuracy}m, skipping update`);
-                            return;
-                        }
-
-                        // Check if location has changed significantly (more than ~10 meters)
-                        const currentLat = user.latitude;
-                        const currentLng = user.longitude;
-                        if (currentLat && currentLng) {
-                            // Calculate distance in meters using Haversine formula
-                            const R = 6371e3; // Earth radius in meters
-                            const φ1 = currentLat * Math.PI / 180;
-                            const φ2 = latitude * Math.PI / 180;
-                            const Δφ = (latitude - currentLat) * Math.PI / 180;
-                            const Δλ = (longitude - currentLng) * Math.PI / 180;
-                            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                                Math.cos(φ1) * Math.cos(φ2) *
-                                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                            const distance = R * c; // Distance in meters
-
-                            // Only update if moved more than 10 meters
-                            if (distance < 10) {
-                                console.log(`Location unchanged (${distance.toFixed(1)}m), skipping update`);
-                                return;
-                            }
-                        }
-
-                        try {
-                            const response = await fetch('/api/user/location', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ latitude, longitude })
-                            });
-                            if (response.ok) {
-                                console.log(`Location updated: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy?.toFixed(0)}m)`);
-                            }
-                        } catch (e) {
-                            console.error("Failed to heart-beat location", e);
-                        }
-                    },
-                    (error) => {
-                        console.error("Location error", error);
-                        // Don't spam errors if permission denied
-                        if (error.code !== error.PERMISSION_DENIED) {
-                            console.warn("Geolocation error:", error.message);
-                        }
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000, // 10 second timeout
-                        maximumAge: 5000 // Don't use cached positions older than 5 seconds
+                    const stored = lastPersistedRef.current;
+                    if (
+                        !shouldPersistProviderLocation({
+                            storedLat: stored?.lat,
+                            storedLng: stored?.lng,
+                            gpsLat: latitude,
+                            gpsLng: longitude,
+                            accuracyM: accuracy,
+                        })
+                    ) {
+                        return;
                     }
-                );
-            };
 
-            // Run immediately on mount
-            updateLocation();
+                    await persistProviderLocation(latitude, longitude);
+                },
+                (error) => {
+                    if (error.code !== error.PERMISSION_DENIED) {
+                        console.warn('Geolocation error:', error.message);
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 5000,
+                },
+            );
+        };
 
-            // Then run every 10s
-            const interval = setInterval(updateLocation, 10000);
-            return () => clearInterval(interval);
-        }
-    }, [user, jobs]);
+        updateLocation();
+        const interval = setInterval(updateLocation, 10000);
+        return () => clearInterval(interval);
+    }, [user.email, jobs, persistProviderLocation]);
 
     const acceptJob = async (jobId: string) => {
         try {
@@ -511,12 +504,12 @@ export function ProviderView({ user }: { user: any }) {
                             We are tracking your location to match you with nearby jobs.
                         </p>
                         <p className="text-xs text-mono text-gray-400">
-                            {user.latitude?.toFixed(4)}, {user.longitude?.toFixed(4)}
+                            {providerLat?.toFixed(4)}, {providerLng?.toFixed(4)}
                         </p>
                     </div>
                     <div className="w-full md:w-[250px] shrink-0">
-                        {(user.latitude && user.longitude) ? (
-                            <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
+                        {(providerLat != null && providerLng != null) ? (
+                            <UserLocationMap latitude={providerLat} longitude={providerLng} />
                         ) : (
                             <div className="h-[150px] bg-zinc-800/50 text-gray-400">
                                 Waiting for location...
@@ -558,25 +551,41 @@ export function ProviderView({ user }: { user: any }) {
     const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING');
     // V1: My jobs are those assigned to me or in progress or flagged by me
     const myJobs = jobs.filter((j: any) => j.providerId === user.id || (j.status === 'FLAGGED_REVIEW' && j.flaggedById === user.id));
+    const scheduleJobs = myJobs.filter((j: any) => !HISTORY_JOB_STATUSES.has(j.status));
+    const completedJobs = myJobs.filter((j: any) => HISTORY_JOB_STATUSES.has(j.status));
 
-    // Toggle online status
-    const toggleOnlineStatus = async (newStatus: boolean) => {
+    const toggleOnlineStatus = async () => {
+        const newStatus = !isOnline;
+        setIsOnline(newStatus);
+        setIsTogglingOnline(true);
         try {
             const res = await fetch('/api/user/online-status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ isOnline: newStatus })
+                body: JSON.stringify({ isOnline: newStatus }),
             });
             if (res.ok) {
-                // Refresh user data
-                window.location.reload();
+                await mutateUser('/api/user/me');
+                if (!newStatus) {
+                    await mutate(
+                        (current: any[] | undefined) =>
+                            Array.isArray(current)
+                                ? current.filter((j) => j.status !== 'ASSIGNING')
+                                : current,
+                        { revalidate: true },
+                    );
+                }
             } else {
+                setIsOnline(!newStatus);
                 const error = await res.json();
                 alert(`Failed to update status: ${error.error}`);
             }
         } catch (e) {
+            setIsOnline(!newStatus);
             console.error('Failed to toggle online status', e);
             alert('Failed to update online status');
+        } finally {
+            setIsTogglingOnline(false);
         }
     };
 
@@ -586,21 +595,36 @@ export function ProviderView({ user }: { user: any }) {
             <div className="space-y-4">
                 {/* Online Status Toggle */}
                 <div className="bg-zinc-900 border-blue-500/20 shadow-sm shadow-blue-900/10 mb-4 p-4 rounded-lg">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center gap-4">
                         <div>
                             <h3 className="font-semibold text-white">Online Status</h3>
                             <p className="text-sm text-gray-400">
-                                {user.isOnline ? 'You are online and receiving job offers' : 'You are offline and will not receive new job offers'}
+                                {isOnline
+                                    ? 'You are online and receiving job offers'
+                                    : 'You are offline and will not receive new job offers'}
                             </p>
                         </div>
-                        <Button
-                            onClick={() => toggleOnlineStatus(!user.isOnline)}
-                            variant={user.isOnline ? "default" : "outline"}
-                            className={user.isOnline ? "bg-green-600 hover:bg-green-700" : ""}
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isOnline}
+                            aria-label={isOnline ? 'Go offline' : 'Go online'}
+                            disabled={isTogglingOnline}
+                            onClick={toggleOnlineStatus}
+                            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                isOnline ? 'bg-green-600' : 'bg-zinc-600'
+                            }`}
                         >
-                            {user.isOnline ? "🟢 Online" : "🔴 Offline"}
-                        </Button>
+                            <span
+                                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                                    isOnline ? 'translate-x-7' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
                     </div>
+                    <p className={`text-xs mt-2 font-medium ${isOnline ? 'text-green-400' : 'text-gray-500'}`}>
+                        {isOnline ? '🟢 Online' : '🔴 Offline'}
+                    </p>
                 </div>
 
                 {/* Location Tracker */}
@@ -612,12 +636,12 @@ export function ProviderView({ user }: { user: any }) {
                                 My Location
                             </h3>
                             <p className="text-xs text-mono text-gray-400">
-                                {user.latitude?.toFixed(4)}, {user.longitude?.toFixed(4)}
+                                {providerLat?.toFixed(4)}, {providerLng?.toFixed(4)}
                             </p>
                         </div>
                     </div>
-                    {(user.latitude && user.longitude) ? (
-                        <UserLocationMap latitude={user.latitude} longitude={user.longitude} />
+                    {(providerLat != null && providerLng != null) ? (
+                        <UserLocationMap latitude={providerLat} longitude={providerLng} />
                     ) : (
                         <div className="h-[150px] bg-zinc-800/50 text-gray-400">
                             Waiting for location...
@@ -625,14 +649,16 @@ export function ProviderView({ user }: { user: any }) {
                     )}
                 </div>
 
-                <h2 className="text-xl font-semibold flex items-center gap-2 text-white">
-                    Available Jobs
-                    <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-black">{availableJobs.length}</span>
-                </h2>
-                {availableJobs.map((job: any) => {
+                {isOnline ? (
+                    <>
+                        <h2 className="text-xl font-semibold flex items-center gap-2 text-white">
+                            Available Jobs
+                            <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-black">{availableJobs.length}</span>
+                        </h2>
+                        {availableJobs.map((job: any) => {
                     const jobDistance = formatProviderJobDistance(
-                        user.latitude,
-                        user.longitude,
+                        providerLat,
+                        providerLng,
                         job.latitude,
                         job.longitude,
                     );
@@ -725,13 +751,24 @@ export function ProviderView({ user }: { user: any }) {
                     </Card>
                     );
                 })}
-                {availableJobs.length === 0 && <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>}
+                        {availableJobs.length === 0 && (
+                            <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>
+                        )}
+                    </>
+                ) : (
+                    <div className="rounded-lg border border-white/10 bg-zinc-900/50 p-4 text-sm text-gray-400">
+                        Available jobs are hidden while you are offline. Toggle online above to receive new offers.
+                    </div>
+                )}
             </div>
 
             {/* My Active Jobs Column */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-white">My Schedule</h2>
-                {myJobs.map((job: any) => (
+                {scheduleJobs.length === 0 && (
+                    <p className="text-gray-400 text-sm">No active jobs on your schedule.</p>
+                )}
+                {scheduleJobs.map((job: any) => (
                     <Card key={job.id} className="p-4 border-l-4 border-blue-500">
                         <div className="flex justify-between items-center mb-2">
                             <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
@@ -933,6 +970,59 @@ export function ProviderView({ user }: { user: any }) {
                         </div>
                     </Card>
                 ))}
+
+                {completedJobs.length > 0 && (
+                    <div className="mt-6 border-t border-white/10 pt-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowCompletedJobs((open) => !open)}
+                            className="flex w-full items-center justify-between rounded-lg bg-zinc-900/60 px-4 py-3 text-left transition-colors hover:bg-zinc-900"
+                            aria-expanded={showCompletedJobs}
+                        >
+                            <span className="font-semibold text-white">
+                                Completed & Paid Out
+                                <span className="ml-2 text-xs font-normal text-gray-400">({completedJobs.length})</span>
+                            </span>
+                            <ChevronDown
+                                className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${showCompletedJobs ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+                        {showCompletedJobs && (
+                            <div className="mt-3 space-y-4">
+                                {completedJobs.map((job: any) => (
+                                    <Card key={job.id} className="p-4 border-l-4 border-l-emerald-500/50 bg-zinc-900/40 opacity-90">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <Badge status={job.status}>{job.status.replace('_', ' ')}</Badge>
+                                            <div className="flex flex-wrap justify-end gap-2">
+                                                {(Array.isArray(job.visits) ? job.visits : []).map((visit: any, idx: number) => {
+                                                    const displayPrice = Number(visit?.display_price ?? job?.display_price);
+                                                    if (!Number.isFinite(displayPrice)) return null;
+                                                    return (
+                                                        <Badge
+                                                            key={`${job.id}-history-visit-${visit.id || idx}`}
+                                                            variant="outline"
+                                                            className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono"
+                                                        >
+                                                            V{idx + 1} {visit.tier}: £{displayPrice.toFixed(2)}
+                                                        </Badge>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <h3 className="font-semibold mb-1 text-white">{job.description}</h3>
+                                        <p className="text-sm text-gray-400 mb-2 flex items-start gap-1">
+                                            <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                                            {job.location}
+                                        </p>
+                                        <div className="w-full text-center text-sm text-green-600 font-medium py-2">
+                                            Job Done / Recorded
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Completion Dialog */}

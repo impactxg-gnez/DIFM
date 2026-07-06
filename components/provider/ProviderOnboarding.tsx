@@ -165,7 +165,7 @@ export function ProviderOnboarding({ user, onComplete }: ProviderOnboardingProps
                         <Input
                             value={serviceArea}
                             onChange={(e) => setServiceArea(e.target.value)}
-                            placeholder="e.g. London, Greater London area"
+                            placeholder="e.g. Pune West — descriptive only; dispatch uses live GPS"
                         />
                     </div>
 
