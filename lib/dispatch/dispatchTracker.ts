@@ -34,8 +34,9 @@ export async function ensureDispatchProgress() {
     const unofferedJobs = await prisma.job.findMany({
         where: {
             status: 'ASSIGNING',
-            offeredToId: null
-        }
+            offeredToId: null,
+            offeredToIds: { isEmpty: true },
+        },
     });
 
     for (const job of unofferedJobs) {

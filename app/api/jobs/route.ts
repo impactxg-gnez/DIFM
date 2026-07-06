@@ -1,5 +1,5 @@
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { calculateV1Pricing } from '@/lib/pricing/v1Pricing';
@@ -257,17 +257,19 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // ⏱️ Auto-advance dispatch — must not fail the whole list if dispatch logic errors
-        try {
-            await activateBookedJobs();
-        } catch (e) {
-            console.error('[GET /api/jobs] activateBookedJobs failed', e);
-        }
-        try {
-            await ensureDispatchProgress();
-        } catch (e) {
-            console.error('[GET /api/jobs] ensureDispatchProgress failed', e);
-        }
+        // Run dispatch after the response so provider/customer job lists are not blocked.
+        after(async () => {
+            try {
+                await activateBookedJobs();
+            } catch (e) {
+                console.error('[GET /api/jobs] activateBookedJobs failed', e);
+            }
+            try {
+                await ensureDispatchProgress();
+            } catch (e) {
+                console.error('[GET /api/jobs] ensureDispatchProgress failed', e);
+            }
+        });
 
         // Get User to check categories if Provider
         const user = await prisma.user.findUnique({ where: { id: userId } });

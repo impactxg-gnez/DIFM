@@ -16,9 +16,17 @@ import { RemoteImage } from '@/components/ui/RemoteImage';
 
 const jobsFetcher = async (url: string) => {
     const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch jobs');
-    const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('Invalid jobs response');
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+        const msg =
+            data && typeof data === 'object' && 'error' in data
+                ? String((data as { error: unknown }).error)
+                : `Failed to fetch jobs (${res.status})`;
+        throw new Error(msg);
+    }
+    if (!Array.isArray(data)) {
+        throw new Error('Invalid jobs response');
+    }
     return data;
 };
 
@@ -106,20 +114,20 @@ export function ProviderView({ user }: { user: any }) {
     console.log('ProviderView user:', user);
 
     // Poll frequently; GET /api/jobs also runs dispatch for new ASSIGNING jobs.
-    const { data: jobs, mutate } = useSWR('/api/jobs', jobsFetcher, {
-        refreshInterval: 3000,
-        refreshWhenHidden: true,
-        revalidateOnFocus: true,
-        revalidateOnReconnect: true,
-        dedupingInterval: 1000,
-    });
-
-    useEffect(() => {
-        const poll = setInterval(() => {
-            mutate();
-        }, 3000);
-        return () => clearInterval(poll);
-    }, [mutate]);
+    const { data: jobs = [], error: jobsError, isLoading: jobsLoading, mutate } = useSWR(
+        '/api/jobs',
+        jobsFetcher,
+        {
+            refreshInterval: 5000,
+            refreshWhenHidden: true,
+            revalidateOnFocus: true,
+            revalidateOnReconnect: true,
+            dedupingInterval: 2000,
+            fallbackData: [],
+            shouldRetryOnError: true,
+            errorRetryInterval: 5000,
+        },
+    );
 
     useEffect(() => {
         // Request location permission on mount for Providers too
@@ -530,7 +538,20 @@ export function ProviderView({ user }: { user: any }) {
         );
     }
 
-    if (!jobs) return <div>Loading jobs...</div>;
+    if (jobsLoading && jobs.length === 0 && !jobsError) {
+        return <div className="text-gray-400 p-4">Loading jobs…</div>;
+    }
+
+    if (jobsError && jobs.length === 0) {
+        return (
+            <div className="space-y-3 p-4">
+                <p className="text-red-300 text-sm">Could not load jobs: {jobsError.message}</p>
+                <Button type="button" variant="outline" onClick={() => mutate()}>
+                    Retry
+                </Button>
+            </div>
+        );
+    }
 
     // V1: Available jobs are those in ASSIGNING status
     // The backend already filters by category/capabilities, so show all ASSIGNING jobs returned
