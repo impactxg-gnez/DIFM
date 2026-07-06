@@ -304,6 +304,9 @@ export async function POST(
                             offeredToId: null,
                             offeredAt: null,
                             triedProviderIds: null,
+                            offeredToIds: { set: [] },
+                            declinedProviderIds: { set: [] },
+                            reviewType: null,
                         } : {}),
 
                         // Update completion evidence

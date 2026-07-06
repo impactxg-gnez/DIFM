@@ -67,6 +67,9 @@ function getUiTaskCount(uiVisit: Visit): number {
 }
 
 function getCustomerStatus(job: any): string {
+    if (job.reviewType === 'NO_PROS_AVAILABLE') {
+        return 'No pros available currently';
+    }
     if (job.status === 'DISPATCHED' && !job.providerId) {
         return 'Looking for provider';
     }
@@ -96,6 +99,10 @@ function getCustomerStatus(job: any): string {
         'REVIEW_REQUIRED': 'Awaiting custom quote review'
     };
     return statusMap[job.status] || job.status.replace('_', ' ');
+}
+
+function isNoProsAvailableJob(job: any): boolean {
+    return job?.reviewType === 'NO_PROS_AVAILABLE';
 }
 
 export function CustomerView({ user }: { user: any }) {
@@ -601,31 +608,42 @@ export function CustomerView({ user }: { user: any }) {
                 {jobsList.map((job: any) => {
                     const jobVisits = (job.visits || []).map(dbVisitToUiVisit);
                     const isReschedule = job.status === 'RESCHEDULE_REQUIRED';
+                    const noProsAvailable = isNoProsAvailableJob(job);
 
                     return (
                         <div key={job.id} className="space-y-6">
                             {/* 1️⃣ Job identification / Status indicator */}
-                            <div className="flex items-center gap-2 px-2">
+                            <div className="flex items-center gap-2 px-2 flex-wrap">
                                 <Badge variant="outline" className="border-white/10 text-gray-400">
                                     Job Reference: {job.id.slice(0, 8)}
                                 </Badge>
                                 <Badge status={job.status}>
                                     {getCustomerStatus(job)}
                                 </Badge>
+                                {noProsAvailable && (
+                                    <Badge className="bg-orange-500/15 text-orange-200 border-orange-500/40 uppercase text-[10px] tracking-wide">
+                                        No pros available currently
+                                    </Badge>
+                                )}
                             </div>
 
                             {isReschedule ? (
-                                <Card className="bg-amber-500/10 border-amber-500/20 text-white overflow-hidden">
+                                <Card className={`text-white overflow-hidden ${noProsAvailable ? 'bg-orange-500/10 border-orange-500/30' : 'bg-amber-500/10 border-amber-500/20'}`}>
                                     <CardContent className="p-6 space-y-4">
                                         <div className="flex items-start gap-3">
-                                            <div className="p-2 bg-amber-500/20 rounded-full">
-                                                <MapPin className="w-5 h-5 text-amber-500" />
+                                            <div className={`p-2 rounded-full ${noProsAvailable ? 'bg-orange-500/20' : 'bg-amber-500/20'}`}>
+                                                <MapPin className={`w-5 h-5 ${noProsAvailable ? 'text-orange-400' : 'text-amber-500'}`} />
                                             </div>
                                             <div className="space-y-1">
-                                                <h3 className="text-lg font-bold text-amber-500">Reschedule Required</h3>
+                                                <h3 className={`text-lg font-bold ${noProsAvailable ? 'text-orange-300' : 'text-amber-500'}`}>
+                                                    {noProsAvailable
+                                                        ? 'No pros available currently'
+                                                        : 'Reschedule Required'}
+                                                </h3>
                                                 <p className="text-sm text-gray-300">
-                                                    We couldn’t find an available provider for your selected time.
-                                                    Please choose a new time or cancel your booking.
+                                                    {noProsAvailable
+                                                        ? 'All available providers for this job declined or are unavailable right now. Try a different time or cancel — we will search again when you reschedule.'
+                                                        : 'We couldn’t find an available provider for your selected time. Please choose a new time or cancel your booking.'}
                                                 </p>
                                             </div>
                                         </div>

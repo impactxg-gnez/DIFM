@@ -167,6 +167,51 @@ export async function findEligibleProviders(jobId: string): Promise<JobMatchResu
   });
 }
 
+/** When every eligible provider has declined (or flagged), surface NO_PROS to the customer. */
+export async function markDispatchExhaustedIfNeeded(jobId: string): Promise<boolean> {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job || job.status !== 'ASSIGNING') return false;
+  if (job.reviewType === 'NO_PROS_AVAILABLE') return true;
+
+  const matches = await findEligibleProviders(jobId);
+  if (matches.length === 0) return false;
+
+  const declined = new Set(job.declinedProviderIds ?? []);
+  const flagged = job.flaggedById;
+  const remaining = matches.filter(
+    (m) => !declined.has(m.providerId) && m.providerId !== flagged,
+  );
+  if (remaining.length > 0) return false;
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.job.findUnique({ where: { id: jobId } });
+    if (!current || current.status !== 'ASSIGNING') return;
+
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        status: 'RESCHEDULE_REQUIRED',
+        reviewType: 'NO_PROS_AVAILABLE',
+        statusUpdatedAt: now,
+      },
+    });
+    await tx.jobStateChange.create({
+      data: {
+        jobId,
+        fromStatus: 'ASSIGNING',
+        toStatus: 'RESCHEDULE_REQUIRED',
+        reason: 'NO_PROS_AVAILABLE',
+        changedById: 'SYSTEM',
+        changedByRole: 'SYSTEM',
+      },
+    });
+  });
+
+  console.log(`[Dispatch] Job ${jobId} — all eligible providers declined/unavailable (NO_PROS_AVAILABLE)`);
+  return true;
+}
+
 /**
  * Sequential Dispatch: Move to the next provider in the queue
  */

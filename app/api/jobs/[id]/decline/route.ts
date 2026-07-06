@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
-import { advanceSequentialDispatch } from '@/lib/dispatch/matcher';
+import { advanceSequentialDispatch, markDispatchExhaustedIfNeeded } from '@/lib/dispatch/matcher';
 
 export async function POST(
     request: Request,
@@ -35,8 +35,9 @@ export async function POST(
         if (job.status === 'ASSIGNING') {
             try {
                 await advanceSequentialDispatch(jobId);
+                await markDispatchExhaustedIfNeeded(jobId);
             } catch (dispatchErr) {
-                console.error('[Decline] advanceSequentialDispatch failed', dispatchErr);
+                console.error('[Decline] dispatch after decline failed', dispatchErr);
             }
         }
 
