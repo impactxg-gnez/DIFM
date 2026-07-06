@@ -37,6 +37,50 @@ function scopePhotoPaths(visit: any): string[] {
     return s.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
+/** Jobs within this radius get a "Nearby" badge on the provider board. */
+const NEARBY_KM = 5;
+
+function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function formatProviderJobDistance(
+    providerLat?: number | null,
+    providerLng?: number | null,
+    jobLat?: number | null,
+    jobLng?: number | null,
+): { label: string; isNearby: boolean } | null {
+    if (
+        providerLat == null ||
+        providerLng == null ||
+        jobLat == null ||
+        jobLng == null ||
+        !Number.isFinite(providerLat) ||
+        !Number.isFinite(providerLng) ||
+        !Number.isFinite(jobLat) ||
+        !Number.isFinite(jobLng)
+    ) {
+        return null;
+    }
+
+    const km = haversineDistanceKm(providerLat, providerLng, jobLat, jobLng);
+    const isNearby = km <= NEARBY_KM;
+    if (km < 1) {
+        const metres = Math.max(1, Math.round(km * 1000));
+        return { label: `${metres} m away`, isNearby };
+    }
+    return { label: `${km.toFixed(1)} km away`, isNearby };
+}
+
 function TimerDisplay({ startTime }: { startTime: string | Date }) {
     const [elapsed, setElapsed] = useState('');
 
@@ -564,12 +608,30 @@ export function ProviderView({ user }: { user: any }) {
                     Available Jobs
                     <span className="text-xs bg-gray-200 px-2 py-1 rounded-full text-black">{availableJobs.length}</span>
                 </h2>
-                {availableJobs.map((job: any) => (
+                {availableJobs.map((job: any) => {
+                    const jobDistance = formatProviderJobDistance(
+                        user.latitude,
+                        user.longitude,
+                        job.latitude,
+                        job.longitude,
+                    );
+                    return (
                     <Card key={job.id} className="p-4 border-l-4 border-l-yellow-500/50 bg-zinc-900/50">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="font-semibold text-white">{job.category} - {job.description}</h3>
                                 <p className="text-sm text-gray-400">{job.location}</p>
+                                {jobDistance && (
+                                    <p className="text-sm text-gray-300 flex items-center gap-2 mt-1.5 flex-wrap">
+                                        <MapPin className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                                        <span>{jobDistance.label}</span>
+                                        {jobDistance.isNearby && (
+                                            <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/35 text-[10px] uppercase tracking-wide">
+                                                Nearby
+                                            </Badge>
+                                        )}
+                                    </p>
+                                )}
 
                                 {(job.visits || []).map((v: any, vIdx: number) => {
                                     const scopeDesc = getCustomerScopeDescriptionFromVisit(v);
@@ -640,7 +702,8 @@ export function ProviderView({ user }: { user: any }) {
                             </Button>
                         </div>
                     </Card>
-                ))}
+                    );
+                })}
                 {availableJobs.length === 0 && <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>}
             </div>
 
