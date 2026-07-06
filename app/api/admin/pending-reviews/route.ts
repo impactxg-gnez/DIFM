@@ -21,11 +21,20 @@ export async function POST(req: NextRequest) {
             phone,
             notes,
             uploaded_photos,
+            location,
+            latitude,
+            longitude,
         } = body;
 
         if (!raw_input || !user_name || !email || !phone) {
             return NextResponse.json(
                 { error: 'raw_input, user_name, email, and phone are required' },
+                { status: 400 },
+            );
+        }
+        if (!location || !String(location).trim()) {
+            return NextResponse.json(
+                { error: 'location is required' },
                 { status: 400 },
             );
         }
@@ -47,6 +56,9 @@ export async function POST(req: NextRequest) {
                 phone: String(phone),
                 notes: notes ? String(notes) : null,
                 uploaded_photos: uploaded_photos ? String(uploaded_photos) : null,
+                location: String(location).trim(),
+                latitude: latitude != null && Number.isFinite(Number(latitude)) ? Number(latitude) : null,
+                longitude: longitude != null && Number.isFinite(Number(longitude)) ? Number(longitude) : null,
                 review_status: 'NEW',
             },
         });

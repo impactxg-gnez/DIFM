@@ -525,7 +525,9 @@ model PendingReview {
   job               Job?     @relation(fields: [job_id], references: [id])
   assignment_mode   String?  // "DIRECT", "FIND_PROVIDER"
   assigned_provider_id String?
-  admin_location    String?
+  location          String?  // Customer-provided job address
+  latitude          Float?
+  longitude         Float?
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

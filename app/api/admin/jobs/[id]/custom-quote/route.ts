@@ -22,9 +22,6 @@ export async function POST(
             custom_quote,
             assignment_mode,
             provider_id,
-            location,
-            latitude,
-            longitude,
         } = body;
 
         const quote = Number(custom_quote);
@@ -37,9 +34,6 @@ export async function POST(
             customQuote: quote,
             assignmentMode: (assignment_mode || 'FIND_PROVIDER') as AssignmentMode,
             providerId: provider_id ?? null,
-            location: location ?? null,
-            latitude: latitude != null ? Number(latitude) : null,
-            longitude: longitude != null ? Number(longitude) : null,
             adminUserId: userId,
         });
 

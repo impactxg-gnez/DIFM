@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle, Send, Loader2, Camera } from 'lucide-react';
 
 interface ReviewQuoteModalProps {
@@ -22,6 +22,10 @@ interface ReviewQuoteModalProps {
     /** Pre-fill name/email from logged-in user if available */
     prefilledName?: string;
     prefilledEmail?: string;
+    /** Pre-fill job address from search / booking context */
+    prefilledLocation?: string;
+    prefilledLatitude?: number | null;
+    prefilledLongitude?: number | null;
 }
 
 type Phase = 'form' | 'submitting' | 'success';
@@ -42,14 +46,33 @@ export function ReviewQuoteModal({
     blockedReason,
     prefilledName = '',
     prefilledEmail = '',
+    prefilledLocation = '',
+    prefilledLatitude = null,
+    prefilledLongitude = null,
 }: ReviewQuoteModalProps) {
     const [phase, setPhase] = useState<Phase>('form');
     const [name, setName] = useState(prefilledName);
     const [email, setEmail] = useState(prefilledEmail);
     const [phone, setPhone] = useState('');
+    const [location, setLocation] = useState(prefilledLocation);
+    const [latitude, setLatitude] = useState<number | null>(prefilledLatitude);
+    const [longitude, setLongitude] = useState<number | null>(prefilledLongitude);
     const [notes, setNotes] = useState('');
     const [photos, setPhotos] = useState<string[]>([]);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setName(prefilledName);
+        setEmail(prefilledEmail);
+        if (prefilledLocation?.trim()) {
+            setLocation(prefilledLocation.trim());
+        }
+        if (prefilledLatitude != null && prefilledLongitude != null) {
+            setLatitude(prefilledLatitude);
+            setLongitude(prefilledLongitude);
+        }
+    }, [isOpen, prefilledName, prefilledEmail, prefilledLocation, prefilledLatitude, prefilledLongitude]);
 
     if (!isOpen) return null;
 
@@ -75,7 +98,34 @@ export function ReviewQuoteModal({
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
     const phoneDigits = phone.replace(/\D/g, '');
     const phoneOk = phoneDigits.length >= 8 && phoneDigits.length <= 15;
-    const canSubmit = name.trim().length > 0 && emailOk && phoneOk;
+    const canSubmit = name.trim().length > 0 && emailOk && phoneOk && location.trim().length > 0;
+
+    const useCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            setError('Location is not available on this device');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude: lat, longitude: lng } = position.coords;
+                setLatitude(lat);
+                setLongitude(lng);
+                try {
+                    const res = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+                    );
+                    const data = await res.json();
+                    const label = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                    setLocation(label);
+                    setError('');
+                } catch {
+                    setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                }
+            },
+            () => setError('Could not detect your location. Please enter the address manually.'),
+            { enableHighAccuracy: true, timeout: 10000 },
+        );
+    };
 
     const handleSubmit = async () => {
         if (!canSubmit) return;
@@ -103,6 +153,9 @@ export function ReviewQuoteModal({
                     user_name: name.trim(),
                     email: email.trim(),
                     phone: phone.trim(),
+                    location: location.trim(),
+                    latitude,
+                    longitude,
                     notes: notes.trim() || null,
                     uploaded_photos: photos.length > 0 ? photos.join(',') : null,
                 }),
@@ -123,6 +176,9 @@ export function ReviewQuoteModal({
         setName(prefilledName);
         setEmail(prefilledEmail);
         setPhone('');
+        setLocation(prefilledLocation);
+        setLatitude(prefilledLatitude);
+        setLongitude(prefilledLongitude);
         setNotes('');
         setError('');
         onClose();
@@ -232,6 +288,28 @@ export function ReviewQuoteModal({
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors"
                                 />
                                 <p className="text-[9px] text-white/30 mt-1">We'll use this to contact you with your quote.</p>
+                            </div>
+
+                            {/* Job location */}
+                            <div>
+                                <label className="text-[10px] font-semibold text-white/60 uppercase tracking-wider block mb-1.5">
+                                    Job Location <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    autoComplete="street-address"
+                                    value={location}
+                                    onChange={(e) => setLocation(e.target.value)}
+                                    placeholder="Full address where the work is needed"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/50 transition-colors"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={useCurrentLocation}
+                                    className="mt-2 text-[11px] font-semibold text-amber-400 hover:text-amber-300"
+                                >
+                                    Use my current location
+                                </button>
                             </div>
 
                             {/* Notes */}

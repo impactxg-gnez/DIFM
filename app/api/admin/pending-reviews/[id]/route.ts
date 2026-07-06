@@ -24,9 +24,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             rejection_note,
             assignment_mode,
             provider_id,
-            location,
-            latitude,
-            longitude,
         } = body;
 
         const allowed_statuses = ['NEW', 'REVIEWED', 'QUOTED', 'REJECTED', 'FULFILLED'];
@@ -55,19 +52,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             if (!Number.isFinite(quote) || quote <= 0) {
                 return NextResponse.json({ error: 'custom_quote is required to fulfill' }, { status: 400 });
             }
-            if (!location || !String(location).trim()) {
-                return NextResponse.json({ error: 'location is required to create the job' }, { status: 400 });
-            }
-
             const mode = (assignment_mode || 'FIND_PROVIDER') as AssignmentMode;
             const result = await fulfillPendingReviewAsJob({
                 pendingReviewId: id,
                 customQuote: quote,
                 assignmentMode: mode,
                 providerId: provider_id ?? null,
-                location: String(location),
-                latitude: latitude != null ? Number(latitude) : null,
-                longitude: longitude != null ? Number(longitude) : null,
                 adminUserId: userId,
             });
 

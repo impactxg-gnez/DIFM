@@ -52,7 +52,6 @@ export function AdminView({ user }: { user: any }) {
     const [jobCustomQuoteDialog, setJobCustomQuoteDialog] = useState<{ open: boolean; job?: any }>({ open: false });
     const [reviewQuoteAmount, setReviewQuoteAmount] = useState('');
     const [reviewRejectNote, setReviewRejectNote] = useState('');
-    const [reviewLocation, setReviewLocation] = useState('');
     const [reviewAssignmentMode, setReviewAssignmentMode] = useState<'DIRECT' | 'FIND_PROVIDER'>('FIND_PROVIDER');
     const [reviewProviderId, setReviewProviderId] = useState('');
     const { data: jobs, mutate: mutateJobs } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
@@ -1255,7 +1254,6 @@ export function AdminView({ user }: { user: any }) {
     const resetReviewQuoteForm = () => {
         setReviewQuoteAmount('');
         setReviewRejectNote('');
-        setReviewLocation('');
         setReviewAssignmentMode('FIND_PROVIDER');
         setReviewProviderId('');
     };
@@ -1292,10 +1290,6 @@ export function AdminView({ user }: { user: any }) {
             alert('Enter a valid quote amount');
             return;
         }
-        if (!reviewLocation.trim()) {
-            alert('Enter a job location');
-            return;
-        }
         if (reviewAssignmentMode === 'DIRECT' && !reviewProviderId) {
             alert('Select a provider for direct assignment');
             return;
@@ -1305,24 +1299,21 @@ export function AdminView({ user }: { user: any }) {
             const url = opts.pendingReviewId
                 ? `/api/admin/pending-reviews/${opts.pendingReviewId}`
                 : `/api/admin/jobs/${opts.jobId}/custom-quote`;
-            const method = 'PATCH';
             const body = opts.pendingReviewId
                 ? {
                     review_status: 'FULFILLED',
                     custom_quote: quote,
                     assignment_mode: reviewAssignmentMode,
                     provider_id: reviewAssignmentMode === 'DIRECT' ? reviewProviderId : undefined,
-                    location: reviewLocation.trim(),
                 }
                 : {
                     custom_quote: quote,
                     assignment_mode: reviewAssignmentMode,
                     provider_id: reviewAssignmentMode === 'DIRECT' ? reviewProviderId : undefined,
-                    location: reviewLocation.trim(),
                 };
 
             const res = await fetch(url, {
-                method: opts.jobId ? 'POST' : method,
+                method: opts.jobId ? 'POST' : 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
@@ -1430,6 +1421,12 @@ export function AdminView({ user }: { user: any }) {
                                 <div className="border-t border-white/5 pt-2 mt-1 space-y-0.5">
                                     <div className="text-sm font-semibold text-white">{r.user_name}</div>
                                     <div className="text-xs text-gray-400">{r.email} · {r.phone}</div>
+                                    {r.location && (
+                                        <div className="text-xs text-gray-300 flex items-start gap-1 mt-1">
+                                            <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
+                                            {r.location}
+                                        </div>
+                                    )}
                                     {r.notes && <div className="text-xs text-gray-400 italic mt-1">"{r.notes}"</div>}
                                 </div>
                                 {r.uploaded_photos && (
@@ -1450,11 +1447,11 @@ export function AdminView({ user }: { user: any }) {
                                 <Button
                                     size="sm"
                                     className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
-                                    onClick={() => {
-                                        resetReviewQuoteForm();
-                                        setReviewActionDialog({ open: true, record: r, action: 'quote' });
-                                    }}
-                                    disabled={r.review_status === 'REJECTED' || r.review_status === 'FULFILLED' || Boolean(r.job_id)}
+                                                onClick={() => {
+                                                    resetReviewQuoteForm();
+                                                    setReviewActionDialog({ open: true, record: r, action: 'quote' });
+                                                }}
+                                                disabled={r.review_status === 'REJECTED' || r.review_status === 'FULFILLED' || Boolean(r.job_id) || !r.location?.trim()}
                                 >
                                     <DollarSign className="w-3 h-3" /> Set Quote & Assign
                                 </Button>
@@ -1944,7 +1941,6 @@ export function AdminView({ user }: { user: any }) {
                                                 className="w-full bg-teal-600 hover:bg-teal-700 h-11"
                                                 onClick={() => {
                                                     resetReviewQuoteForm();
-                                                    setReviewLocation(jobDetailDialog.job.location || '');
                                                     setJobCustomQuoteDialog({ open: true, job: jobDetailDialog.job });
                                                 }}
                                             >
@@ -2243,16 +2239,15 @@ export function AdminView({ user }: { user: any }) {
                                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-gray-400 uppercase">Job Location</label>
-                                    <input
-                                        type="text"
-                                        value={reviewLocation}
-                                        onChange={(e) => setReviewLocation(e.target.value)}
-                                        placeholder="Full address for the job"
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
-                                    />
-                                </div>
+                                {reviewActionDialog.record.location && (
+                                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-200 flex items-start gap-2">
+                                        <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-blue-400" />
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Customer Location</p>
+                                            <p>{reviewActionDialog.record.location}</p>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="space-y-2">
                                     <label className="text-xs font-semibold text-gray-400 uppercase">Assignment</label>
                                     <div className="grid grid-cols-2 gap-2">
@@ -2298,7 +2293,7 @@ export function AdminView({ user }: { user: any }) {
                                 )}
                                 <Button
                                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
-                                    disabled={!reviewQuoteAmount || isNaN(Number(reviewQuoteAmount)) || !reviewLocation.trim()}
+                                    disabled={!reviewQuoteAmount || isNaN(Number(reviewQuoteAmount)) || !reviewActionDialog.record.location?.trim()}
                                     onClick={() => handleFulfillCustomQuote({ pendingReviewId: reviewActionDialog.record!.id })}
                                 >
                                     Create Job & {reviewAssignmentMode === 'DIRECT' ? 'Assign Provider' : 'Find Provider'}
@@ -2348,15 +2343,15 @@ export function AdminView({ user }: { user: any }) {
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
                                 />
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-gray-400 uppercase">Job Location</label>
-                                <input
-                                    type="text"
-                                    value={reviewLocation}
-                                    onChange={(e) => setReviewLocation(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
-                                />
-                            </div>
+                            {jobCustomQuoteDialog.job.location && (
+                                <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-200 flex items-start gap-2">
+                                    <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-blue-400" />
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Customer Location</p>
+                                        <p>{jobCustomQuoteDialog.job.location}</p>
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-2">
                                 <Button
                                     type="button"

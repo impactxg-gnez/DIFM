@@ -679,6 +679,7 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                 confidenceLabel={pricePreview?.intentConfidence ?? null}
                 inferredCategory={pricePreview?.inferredCategory ?? null}
                 parserStageUsed={pricePreview?.parserStageUsed ?? null}
+                prefilledLocation={selectedAddress?.trim() || locationText?.trim() || undefined}
             />
         </div>
     );

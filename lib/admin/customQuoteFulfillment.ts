@@ -39,9 +39,6 @@ export async function fulfillPendingReviewAsJob(args: {
     customQuote: number;
     assignmentMode: AssignmentMode;
     providerId?: string | null;
-    location: string;
-    latitude?: number | null;
-    longitude?: number | null;
     adminUserId: string;
 }) {
     const {
@@ -49,17 +46,11 @@ export async function fulfillPendingReviewAsJob(args: {
         customQuote,
         assignmentMode,
         providerId,
-        location,
-        latitude,
-        longitude,
         adminUserId,
     } = args;
 
     if (!Number.isFinite(customQuote) || customQuote <= 0) {
         throw new Error('custom_quote must be a positive number');
-    }
-    if (!location.trim()) {
-        throw new Error('location is required');
     }
     if (assignmentMode === 'DIRECT' && !providerId) {
         throw new Error('provider_id is required for direct assignment');
@@ -69,6 +60,13 @@ export async function fulfillPendingReviewAsJob(args: {
     if (!review) throw new Error('Pending review not found');
     if (review.job_id) throw new Error('This request already has a linked job');
     if (review.review_status === 'REJECTED') throw new Error('Cannot fulfill a rejected request');
+    if (!review.location?.trim()) {
+        throw new Error('Customer job location is missing on this request');
+    }
+
+    const location = review.location.trim();
+    const latitude = review.latitude;
+    const longitude = review.longitude;
 
     const customerId = await resolveCustomerId(review.email, review.user_name);
     const category = resolveCategory(review.inferred_category, review.detected_job);
@@ -128,7 +126,6 @@ export async function fulfillPendingReviewAsJob(args: {
                 job_id: job.id,
                 assignment_mode: assignmentMode,
                 assigned_provider_id: assignmentMode === 'DIRECT' ? providerId! : null,
-                admin_location: location.trim(),
                 review_status: 'FULFILLED',
                 notes: review.notes
                     ? `${review.notes} | Admin quote: £${customQuote}`
@@ -170,12 +167,9 @@ export async function fulfillReviewRequiredJob(args: {
     customQuote: number;
     assignmentMode: AssignmentMode;
     providerId?: string | null;
-    location?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
     adminUserId: string;
 }) {
-    const { jobId, customQuote, assignmentMode, providerId, location, latitude, longitude, adminUserId } = args;
+    const { jobId, customQuote, assignmentMode, providerId, adminUserId } = args;
 
     if (!Number.isFinite(customQuote) || customQuote <= 0) {
         throw new Error('custom_quote must be a positive number');
@@ -189,6 +183,9 @@ export async function fulfillReviewRequiredJob(args: {
     if (job.status !== 'REVIEW_REQUIRED') {
         throw new Error('Job is not awaiting custom quote review');
     }
+    if (!job.location?.trim()) {
+        throw new Error('Customer job location is missing on this job');
+    }
 
     const now = new Date();
 
@@ -199,9 +196,6 @@ export async function fulfillReviewRequiredJob(args: {
             data: {
                 fixedPrice: customQuote,
                 priceOverride: customQuote,
-                location: location?.trim() || job.location,
-                latitude: latitude ?? job.latitude,
-                longitude: longitude ?? job.longitude,
                 status: nextStatus,
                 statusUpdatedAt: now,
                 needsReview: false,
