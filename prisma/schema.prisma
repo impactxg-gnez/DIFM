@@ -51,6 +51,7 @@ model User {
   customerReviews CustomerReview[] @relation("CustomerReviews")
   providerReviews CustomerReview[] @relation("ProviderReviews")
   adminReviews    AdminReview[]
+  providerQuotes  ProviderQuote[]
 }
 
 model Job {
@@ -175,6 +176,8 @@ model Job {
   stateChanges JobStateChange[]
   priceOverrides PriceOverride[]
   visitPhotos VisitPhoto[]
+  providerQuotes ProviderQuote[]
+  pendingReview PendingReview?
 }
 
 model Transaction {
@@ -515,8 +518,31 @@ model PendingReview {
   notes             String?
   uploaded_photos   String?
 
-  review_status     String   @default("NEW") // "NEW", "REVIEWED", "QUOTED", "REJECTED"
+  review_status     String   @default("NEW") // "NEW", "REVIEWED", "QUOTED", "REJECTED", "FULFILLED"
+
+  custom_quote      Float?
+  job_id            String?  @unique
+  job               Job?     @relation(fields: [job_id], references: [id])
+  assignment_mode   String?  // "DIRECT", "FIND_PROVIDER"
+  assigned_provider_id String?
+  admin_location    String?
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+model ProviderQuote {
+  id           String   @id @default(uuid())
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId   String
+  provider     User     @relation(fields: [providerId], references: [id])
+  quotedPrice  Float
+  notes        String?
+  status       String   @default("PENDING") // "PENDING", "SELECTED", "REJECTED"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([jobId, providerId])
+  @@index([jobId])
 }

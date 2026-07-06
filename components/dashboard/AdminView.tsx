@@ -48,17 +48,26 @@ export function AdminView({ user }: { user: any }) {
     const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
     const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; jobId?: string; price?: number; reason: string }>({ open: false, reason: '' });
     const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+    const [reviewActionDialog, setReviewActionDialog] = useState<{ open: boolean; record?: any; action?: 'quote' | 'reject' }>({ open: false });
+    const [jobCustomQuoteDialog, setJobCustomQuoteDialog] = useState<{ open: boolean; job?: any }>({ open: false });
+    const [reviewQuoteAmount, setReviewQuoteAmount] = useState('');
+    const [reviewRejectNote, setReviewRejectNote] = useState('');
+    const [reviewLocation, setReviewLocation] = useState('');
+    const [reviewAssignmentMode, setReviewAssignmentMode] = useState<'DIRECT' | 'FIND_PROVIDER'>('FIND_PROVIDER');
+    const [reviewProviderId, setReviewProviderId] = useState('');
     const { data: jobs, mutate: mutateJobs } = useSWR('/api/jobs', fetcher, { refreshInterval: 5000 });
     const { data: disputes, mutate: mutateDisputes } = useSWR(activeTab === 'disputes' ? '/api/admin/disputes' : null, fetcher);
-    const { data: providers, mutate: mutateProviders } = useSWR(activeTab === 'providers' ? '/api/admin/providers' : null, fetcher);
+    const { data: providers, mutate: mutateProviders } = useSWR(
+        activeTab === 'providers' || reviewActionDialog.open || jobCustomQuoteDialog.open
+            ? '/api/admin/providers'
+            : null,
+        fetcher,
+    );
     const { data: paymentsData, mutate: mutatePayments } = useSWR(activeTab === 'payments' ? '/api/admin/payments' : null, fetcher);
     const { data: pricingRules, mutate: mutatePricing } = useSWR(activeTab === 'pricing' ? '/api/admin/pricing-rules' : null, fetcher);
     const { data: patterns, mutate: mutatePatterns } = useSWR(activeTab === 'patterns' ? '/api/admin/job-patterns' : null, fetcher);
     const { data: extractionLogs, mutate: mutateExtractionLogs } = useSWR(activeTab === 'extraction' ? '/api/admin/extraction-logs' : null, fetcher);
     const { data: pendingReviews, mutate: mutatePendingReviews } = useSWR(activeTab === 'pending_reviews' ? '/api/admin/pending-reviews' : null, fetcher, { refreshInterval: 10000 });
-    const [reviewActionDialog, setReviewActionDialog] = useState<{ open: boolean; record?: any; action?: 'quote' | 'reject' }>({ open: false });
-    const [reviewQuoteAmount, setReviewQuoteAmount] = useState('');
-    const [reviewRejectNote, setReviewRejectNote] = useState('');
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -350,6 +359,11 @@ export function AdminView({ user }: { user: any }) {
                                         {job.status}
                                     </Badge>
                                     {job.needsReview && <Badge variant="destructive">Needs Review</Badge>}
+                                    {job.status === 'COLLECTING_QUOTES' && (
+                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30">
+                                            {(job.providerQuotes?.length ?? 0)} provider quote{(job.providerQuotes?.length ?? 0) === 1 ? '' : 's'}
+                                        </Badge>
+                                    )}
                                     {job.isStuck && <Badge variant="destructive">Stuck</Badge>}
                                 </div>
                                 <h3 className="font-bold text-lg text-foreground">{job.category}</h3>
@@ -1234,28 +1248,124 @@ export function AdminView({ user }: { user: any }) {
         NEW: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
         REVIEWED: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
         QUOTED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        FULFILLED: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
         REJECTED: 'bg-red-500/20 text-red-300 border-red-500/30',
     };
 
-    const handlePendingReviewAction = async (id: string, action: 'REVIEWED' | 'QUOTED' | 'REJECTED', quoteAmount?: string, rejectNote?: string) => {
+    const resetReviewQuoteForm = () => {
+        setReviewQuoteAmount('');
+        setReviewRejectNote('');
+        setReviewLocation('');
+        setReviewAssignmentMode('FIND_PROVIDER');
+        setReviewProviderId('');
+    };
+
+    const handlePendingReviewAction = async (id: string, action: 'REVIEWED' | 'REJECTED', rejectNote?: string) => {
         try {
             const res = await fetch(`/api/admin/pending-reviews/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     review_status: action,
-                    ...(quoteAmount ? { custom_quote: Number(quoteAmount) } : {}),
                     ...(rejectNote ? { rejection_note: rejectNote } : {}),
                 }),
             });
             if (res.ok) {
                 mutatePendingReviews();
                 setReviewActionDialog({ open: false });
-                setReviewQuoteAmount('');
-                setReviewRejectNote('');
+                resetReviewQuoteForm();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to update review');
             }
         } catch (e) {
             console.error('Pending review action error', e);
+        }
+    };
+
+    const handleFulfillCustomQuote = async (opts: {
+        pendingReviewId?: string;
+        jobId?: string;
+    }) => {
+        const quote = Number(reviewQuoteAmount);
+        if (!Number.isFinite(quote) || quote <= 0) {
+            alert('Enter a valid quote amount');
+            return;
+        }
+        if (!reviewLocation.trim()) {
+            alert('Enter a job location');
+            return;
+        }
+        if (reviewAssignmentMode === 'DIRECT' && !reviewProviderId) {
+            alert('Select a provider for direct assignment');
+            return;
+        }
+
+        try {
+            const url = opts.pendingReviewId
+                ? `/api/admin/pending-reviews/${opts.pendingReviewId}`
+                : `/api/admin/jobs/${opts.jobId}/custom-quote`;
+            const method = 'PATCH';
+            const body = opts.pendingReviewId
+                ? {
+                    review_status: 'FULFILLED',
+                    custom_quote: quote,
+                    assignment_mode: reviewAssignmentMode,
+                    provider_id: reviewAssignmentMode === 'DIRECT' ? reviewProviderId : undefined,
+                    location: reviewLocation.trim(),
+                }
+                : {
+                    custom_quote: quote,
+                    assignment_mode: reviewAssignmentMode,
+                    provider_id: reviewAssignmentMode === 'DIRECT' ? reviewProviderId : undefined,
+                    location: reviewLocation.trim(),
+                };
+
+            const res = await fetch(url, {
+                method: opts.jobId ? 'POST' : method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error || 'Failed to fulfill custom quote');
+                return;
+            }
+
+            mutatePendingReviews();
+            mutateJobs();
+            setReviewActionDialog({ open: false });
+            setJobCustomQuoteDialog({ open: false });
+            resetReviewQuoteForm();
+            if (data.job) {
+                setActiveTab('jobs');
+                setJobDetailDialog({ open: true, job: data.job });
+            }
+        } catch (e) {
+            console.error('Fulfill custom quote error', e);
+            alert('Failed to fulfill custom quote');
+        }
+    };
+
+    const handleSelectProviderQuote = async (jobId: string, quoteId: string) => {
+        if (!confirm('Assign this job to the selected provider at their quoted price?')) return;
+        try {
+            const res = await fetch(`/api/admin/jobs/${jobId}/select-quote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quote_id: quoteId }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error || 'Failed to select quote');
+                return;
+            }
+            mutateJobs();
+            if (data.job) {
+                setJobDetailDialog({ open: true, job: data.job });
+            }
+        } catch (e) {
+            console.error('Select provider quote error', e);
         }
     };
 
@@ -1340,11 +1450,28 @@ export function AdminView({ user }: { user: any }) {
                                 <Button
                                     size="sm"
                                     className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
-                                    onClick={() => setReviewActionDialog({ open: true, record: r, action: 'quote' })}
-                                    disabled={r.review_status === 'REJECTED'}
+                                    onClick={() => {
+                                        resetReviewQuoteForm();
+                                        setReviewActionDialog({ open: true, record: r, action: 'quote' });
+                                    }}
+                                    disabled={r.review_status === 'REJECTED' || r.review_status === 'FULFILLED' || Boolean(r.job_id)}
                                 >
-                                    <DollarSign className="w-3 h-3" /> Set Quote
+                                    <DollarSign className="w-3 h-3" /> Set Quote & Assign
                                 </Button>
+                                {r.job_id && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="border-indigo-500/30 text-indigo-300"
+                                        onClick={() => {
+                                            const linked = Array.isArray(jobs) ? jobs.find((j: any) => j.id === r.job_id) : null;
+                                            if (linked) setJobDetailDialog({ open: true, job: linked });
+                                            else setActiveTab('jobs');
+                                        }}
+                                    >
+                                        View Job
+                                    </Button>
+                                )}
                                 <Button
                                     size="sm"
                                     className="bg-blue-600 hover:bg-blue-500 text-white gap-1"
@@ -1422,6 +1549,8 @@ export function AdminView({ user }: { user: any }) {
                             <option value="ALL">All Statuses</option>
                             <option value="REQUESTED">Requested</option>
                             <option value="PRICED">Priced</option>
+                            <option value="REVIEW_REQUIRED">Review Required</option>
+                            <option value="COLLECTING_QUOTES">Collecting Quotes</option>
                             <option value="BOOKED">Booked</option>
                             <option value="ASSIGNING">Assigning</option>
                             <option value="ASSIGNED">Assigned</option>
@@ -1809,8 +1938,51 @@ export function AdminView({ user }: { user: any }) {
                                             </div>
                                         </div>
 
+                                        {jobDetailDialog.job.status === 'REVIEW_REQUIRED' && (
+                                            <Button
+                                                variant="default"
+                                                className="w-full bg-teal-600 hover:bg-teal-700 h-11"
+                                                onClick={() => {
+                                                    resetReviewQuoteForm();
+                                                    setReviewLocation(jobDetailDialog.job.location || '');
+                                                    setJobCustomQuoteDialog({ open: true, job: jobDetailDialog.job });
+                                                }}
+                                            >
+                                                💰 Set Custom Quote & Assign
+                                            </Button>
+                                        )}
+
+                                        {jobDetailDialog.job.status === 'COLLECTING_QUOTES' && (
+                                            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                                                    Provider Quotes ({jobDetailDialog.job.providerQuotes?.length ?? 0})
+                                                </p>
+                                                {(jobDetailDialog.job.providerQuotes?.length ?? 0) === 0 ? (
+                                                    <p className="text-xs text-gray-400">Waiting for providers to submit quotes…</p>
+                                                ) : (
+                                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                        {jobDetailDialog.job.providerQuotes.map((q: any) => (
+                                                            <div key={q.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-zinc-900/60 border border-white/10">
+                                                                <div>
+                                                                    <p className="text-sm font-semibold text-white">{q.provider?.name || 'Provider'}</p>
+                                                                    <p className="text-xs text-gray-400">£{Number(q.quotedPrice).toFixed(2)}{q.notes ? ` · ${q.notes}` : ''}</p>
+                                                                </div>
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+                                                                    disabled={q.status === 'SELECTED'}
+                                                                    onClick={() => handleSelectProviderQuote(jobDetailDialog.job.id, q.id)}
+                                                                >
+                                                                    {q.status === 'SELECTED' ? 'Selected' : 'Select'}
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <div className="space-y-3">
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Workflow Controls</p>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {jobDetailDialog.job.status === 'ASSIGNED' && (
                                                     <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700 h-11" onClick={() => handlePaymentAction(jobDetailDialog.job.id, 'preauth')}>
@@ -2038,38 +2210,98 @@ export function AdminView({ user }: { user: any }) {
             {/* Pending Review Action Dialog — Set Quote or Reject */}
             {reviewActionDialog.open && reviewActionDialog.record && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-[380px] space-y-4">
+                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between">
                             <h3 className="text-base font-bold text-white">
-                                {reviewActionDialog.action === 'quote' ? '💰 Set Quote' : '❌ Reject Request'}
+                                {reviewActionDialog.action === 'quote' ? '💰 Custom Quote & Assignment' : '❌ Reject Request'}
                             </h3>
-                            <button onClick={() => setReviewActionDialog({ open: false })} className="p-1 rounded hover:bg-white/10">
+                            <button
+                                onClick={() => { setReviewActionDialog({ open: false }); resetReviewQuoteForm(); }}
+                                className="p-1 rounded hover:bg-white/10"
+                            >
                                 <X className="w-4 h-4 text-white/60" />
                             </button>
                         </div>
                         <div className="text-xs text-gray-400 bg-white/5 rounded-lg px-3 py-2 italic">
                             "{reviewActionDialog.record.raw_input}"
                         </div>
-                        <div className="text-sm text-gray-300">
-                            Customer: <span className="text-white font-semibold">{reviewActionDialog.record.user_name}</span>
-                            {' '}· {reviewActionDialog.record.email}
+                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
+                            <div>Customer: <span className="text-white">{reviewActionDialog.record.user_name}</span></div>
+                            <div>Category: <span className="text-white">{reviewActionDialog.record.inferred_category || reviewActionDialog.record.detected_job || 'HANDYMAN'}</span></div>
+                            <div>Email: <span className="text-white">{reviewActionDialog.record.email}</span></div>
+                            <div>Phone: <span className="text-white">{reviewActionDialog.record.phone}</span></div>
                         </div>
                         {reviewActionDialog.action === 'quote' ? (
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-gray-400 uppercase">Quote Amount (£)</label>
-                                <input
-                                    type="number"
-                                    value={reviewQuoteAmount}
-                                    onChange={(e) => setReviewQuoteAmount(e.target.value)}
-                                    placeholder="e.g. 150"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
-                                />
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-gray-400 uppercase">Admin Quote (£)</label>
+                                    <input
+                                        type="number"
+                                        value={reviewQuoteAmount}
+                                        onChange={(e) => setReviewQuoteAmount(e.target.value)}
+                                        placeholder="e.g. 150"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-gray-400 uppercase">Job Location</label>
+                                    <input
+                                        type="text"
+                                        value={reviewLocation}
+                                        onChange={(e) => setReviewLocation(e.target.value)}
+                                        placeholder="Full address for the job"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-gray-400 uppercase">Assignment</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            type="button"
+                                            variant={reviewAssignmentMode === 'FIND_PROVIDER' ? 'default' : 'outline'}
+                                            className={reviewAssignmentMode === 'FIND_PROVIDER' ? 'bg-amber-600 hover:bg-amber-700' : ''}
+                                            onClick={() => setReviewAssignmentMode('FIND_PROVIDER')}
+                                        >
+                                            Find Provider
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={reviewAssignmentMode === 'DIRECT' ? 'default' : 'outline'}
+                                            className={reviewAssignmentMode === 'DIRECT' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                            onClick={() => setReviewAssignmentMode('DIRECT')}
+                                        >
+                                            Assign Provider
+                                        </Button>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500">
+                                        {reviewAssignmentMode === 'FIND_PROVIDER'
+                                            ? 'Job goes out as a commercial bulk request — providers submit their price.'
+                                            : 'Job is assigned directly — provider sees it in their schedule.'}
+                                    </p>
+                                </div>
+                                {reviewAssignmentMode === 'DIRECT' && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-gray-400 uppercase">Provider</label>
+                                        <select
+                                            value={reviewProviderId}
+                                            onChange={(e) => setReviewProviderId(e.target.value)}
+                                            className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                        >
+                                            <option value="">Select provider…</option>
+                                            {(Array.isArray(providers) ? providers : [])
+                                                .filter((p: any) => p.providerStatus === 'ACTIVE')
+                                                .map((p: any) => (
+                                                    <option key={p.id} value={p.id}>{p.name} ({p.email})</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <Button
                                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
-                                    disabled={!reviewQuoteAmount || isNaN(Number(reviewQuoteAmount))}
-                                    onClick={() => handlePendingReviewAction(reviewActionDialog.record!.id, 'QUOTED', reviewQuoteAmount)}
+                                    disabled={!reviewQuoteAmount || isNaN(Number(reviewQuoteAmount)) || !reviewLocation.trim()}
+                                    onClick={() => handleFulfillCustomQuote({ pendingReviewId: reviewActionDialog.record!.id })}
                                 >
-                                    Confirm Quote
+                                    Create Job & {reviewAssignmentMode === 'DIRECT' ? 'Assign Provider' : 'Find Provider'}
                                 </Button>
                             </div>
                         ) : (
@@ -2085,12 +2317,83 @@ export function AdminView({ user }: { user: any }) {
                                 <Button
                                     variant="destructive"
                                     className="w-full"
-                                    onClick={() => handlePendingReviewAction(reviewActionDialog.record!.id, 'REJECTED', undefined, reviewRejectNote)}
+                                    onClick={() => handlePendingReviewAction(reviewActionDialog.record!.id, 'REJECTED', reviewRejectNote)}
                                 >
                                     Confirm Rejection
                                 </Button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* REVIEW_REQUIRED job — custom quote dialog */}
+            {jobCustomQuoteDialog.open && jobCustomQuoteDialog.job && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-base font-bold text-white">💰 Fulfill Custom Quote</h3>
+                            <button onClick={() => { setJobCustomQuoteDialog({ open: false }); resetReviewQuoteForm(); }} className="p-1 rounded hover:bg-white/10">
+                                <X className="w-4 h-4 text-white/60" />
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-300">{jobCustomQuoteDialog.job.description}</p>
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-gray-400 uppercase">Admin Quote (£)</label>
+                                <input
+                                    type="number"
+                                    value={reviewQuoteAmount}
+                                    onChange={(e) => setReviewQuoteAmount(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-gray-400 uppercase">Job Location</label>
+                                <input
+                                    type="text"
+                                    value={reviewLocation}
+                                    onChange={(e) => setReviewLocation(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    type="button"
+                                    variant={reviewAssignmentMode === 'FIND_PROVIDER' ? 'default' : 'outline'}
+                                    onClick={() => setReviewAssignmentMode('FIND_PROVIDER')}
+                                >
+                                    Find Provider
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={reviewAssignmentMode === 'DIRECT' ? 'default' : 'outline'}
+                                    onClick={() => setReviewAssignmentMode('DIRECT')}
+                                >
+                                    Assign Provider
+                                </Button>
+                            </div>
+                            {reviewAssignmentMode === 'DIRECT' && (
+                                <select
+                                    value={reviewProviderId}
+                                    onChange={(e) => setReviewProviderId(e.target.value)}
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                >
+                                    <option value="">Select provider…</option>
+                                    {(Array.isArray(providers) ? providers : [])
+                                        .filter((p: any) => p.providerStatus === 'ACTIVE')
+                                        .map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                </select>
+                            )}
+                            <Button
+                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
+                                onClick={() => handleFulfillCustomQuote({ jobId: jobCustomQuoteDialog.job!.id })}
+                            >
+                                Confirm
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}

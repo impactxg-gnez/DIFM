@@ -344,6 +344,18 @@ export async function GET(request: Request) {
                     ]
                 });
 
+                orConditions.push({
+                    AND: [
+                        { status: 'COLLECTING_QUOTES' },
+                        {
+                            OR: [
+                                { offeredToIds: { equals: [] } },
+                                { offeredToIds: { has: userId } }
+                            ]
+                        },
+                    ]
+                });
+
                 console.log(`[Jobs API] Provider ${userId} - offering logic (exclusive of declines)`);
             }
 
@@ -357,10 +369,7 @@ export async function GET(request: Request) {
             whereClause.status = status;
         }
 
-        const rawJobs = await prisma.job.findMany({
-            where: whereClause,
-            orderBy: { createdAt: 'desc' },
-            include: {
+        const include: any = {
                 customer: { select: { name: true } },
                 provider: { select: { id: true, name: true, latitude: true, longitude: true, providerType: true, complianceConfirmed: true } },
                 visits: {
@@ -371,7 +380,22 @@ export async function GET(request: Request) {
                 },
                 stateChanges: { orderBy: { createdAt: 'asc' } },
                 priceOverrides: { orderBy: { createdAt: 'desc' } },
-            }
+            };
+
+        if (userRole === 'ADMIN') {
+            include.providerQuotes = {
+                include: {
+                    provider: { select: { id: true, name: true, email: true, providerType: true } },
+                },
+                orderBy: { quotedPrice: 'asc' },
+            };
+            include.pendingReview = true;
+        }
+
+        const rawJobs = await prisma.job.findMany({
+            where: whereClause,
+            orderBy: { createdAt: 'desc' },
+            include,
         });
 
         // Debug logging for providers

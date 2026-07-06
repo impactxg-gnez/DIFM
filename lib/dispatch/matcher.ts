@@ -278,7 +278,7 @@ export async function broadcastDispatchJob(jobId: string): Promise<string[]> {
 
   return prisma.$transaction(async (tx) => {
     const job = await tx.job.findUnique({ where: { id: jobId } });
-    if (!job || job.status !== 'ASSIGNING') return [];
+    if (!job || !['ASSIGNING', 'COLLECTING_QUOTES'].includes(job.status)) return [];
 
     const declinedIds = job.declinedProviderIds ?? [];
     const flaggedById = job.flaggedById;

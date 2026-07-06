@@ -117,6 +117,9 @@ export function ProviderView({ user }: { user: any }) {
     const [isOnline, setIsOnline] = useState(Boolean(user.isOnline));
     const [isTogglingOnline, setIsTogglingOnline] = useState(false);
     const [showCompletedJobs, setShowCompletedJobs] = useState(false);
+    const [providerQuoteInputs, setProviderQuoteInputs] = useState<Record<string, string>>({});
+    const [providerQuoteNotes, setProviderQuoteNotes] = useState<Record<string, string>>({});
+    const [submittingQuoteJobId, setSubmittingQuoteJobId] = useState<string | null>(null);
 
     useEffect(() => {
         setIsOnline(Boolean(user.isOnline));
@@ -549,6 +552,39 @@ export function ProviderView({ user }: { user: any }) {
     // V1: Available jobs are those in ASSIGNING status
     // The backend already filters by category/capabilities, so show all ASSIGNING jobs returned
     const availableJobs = jobs.filter((j: any) => j.status === 'ASSIGNING');
+    const quoteCollectionJobs = jobs.filter((j: any) => j.status === 'COLLECTING_QUOTES');
+
+    const submitProviderQuote = async (jobId: string) => {
+        const quotedPrice = Number(providerQuoteInputs[jobId]);
+        if (!Number.isFinite(quotedPrice) || quotedPrice <= 0) {
+            alert('Enter a valid quote amount');
+            return;
+        }
+        setSubmittingQuoteJobId(jobId);
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/provider-quote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    quoted_price: quotedPrice,
+                    notes: providerQuoteNotes[jobId]?.trim() || null,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error || 'Failed to submit quote');
+                return;
+            }
+            await mutate();
+            alert('Quote submitted successfully');
+        } catch (e) {
+            console.error('Submit provider quote error', e);
+            alert('Failed to submit quote');
+        } finally {
+            setSubmittingQuoteJobId(null);
+        }
+    };
+
     // V1: My jobs are those assigned to me or in progress or flagged by me
     const myJobs = jobs.filter((j: any) => j.providerId === user.id || (j.status === 'FLAGGED_REVIEW' && j.flaggedById === user.id));
     const scheduleJobs = myJobs.filter((j: any) => !HISTORY_JOB_STATUSES.has(j.status));
@@ -753,6 +789,53 @@ export function ProviderView({ user }: { user: any }) {
                 })}
                         {availableJobs.length === 0 && (
                             <p className="text-gray-400 text-sm">No new jobs matching your skills nearby.</p>
+                        )}
+
+                        {quoteCollectionJobs.length > 0 && (
+                            <>
+                                <h2 className="text-xl font-semibold flex items-center gap-2 text-white mt-6">
+                                    Commercial Quote Requests
+                                    <span className="text-xs bg-amber-200 px-2 py-1 rounded-full text-black">{quoteCollectionJobs.length}</span>
+                                </h2>
+                                {quoteCollectionJobs.map((job: any) => (
+                                    <Card key={job.id} className="p-4 border-l-4 border-l-amber-500/50 bg-zinc-900/50">
+                                        <div className="space-y-3">
+                                            <div>
+                                                <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px] uppercase mb-2">
+                                                    Submit Your Price
+                                                </Badge>
+                                                <h3 className="font-semibold text-white">{job.category} — {job.description}</h3>
+                                                <p className="text-sm text-gray-400 mt-1">{job.location}</p>
+                                                {Number(job.fixedPrice) > 0 && (
+                                                    <p className="text-xs text-gray-500 mt-1">Admin reference quote: £{Number(job.fixedPrice).toFixed(2)}</p>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="Your quote (£)"
+                                                    value={providerQuoteInputs[job.id] || ''}
+                                                    onChange={(e) => setProviderQuoteInputs((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                                                    className="bg-zinc-800 border-white/10"
+                                                />
+                                                <Input
+                                                    placeholder="Notes (optional)"
+                                                    value={providerQuoteNotes[job.id] || ''}
+                                                    onChange={(e) => setProviderQuoteNotes((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                                                    className="bg-zinc-800 border-white/10"
+                                                />
+                                                <Button
+                                                    className="bg-amber-600 hover:bg-amber-700"
+                                                    disabled={submittingQuoteJobId === job.id}
+                                                    onClick={() => submitProviderQuote(job.id)}
+                                                >
+                                                    {submittingQuoteJobId === job.id ? 'Submitting…' : 'Submit Quote'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </>
                         )}
                     </>
                 ) : (
