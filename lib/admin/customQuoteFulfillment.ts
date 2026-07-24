@@ -3,6 +3,12 @@ import { broadcastDispatchJob } from '@/lib/dispatch/matcher';
 
 export type AssignmentMode = 'DIRECT' | 'FIND_PROVIDER';
 
+/** Admin-priced jobs skip card pre-auth — provider can begin work immediately. */
+export function isAdminPricedJob(reviewType?: string | null): boolean {
+    return ['CUSTOM_QUOTE', 'COMMERCIAL_BULK', 'MANUAL_QUOTE'].includes(reviewType ?? '');
+}
+
+
 const NO_LOGIN_HASH = 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f';
 
 function resolveCategory(inferred?: string | null, detected?: string | null): string {
@@ -90,7 +96,7 @@ export async function fulfillPendingReviewAsJob(args: {
                 fixedPrice: customQuote,
                 isASAP: true,
                 customerId,
-                status: assignmentMode === 'DIRECT' ? 'ASSIGNED' : 'COLLECTING_QUOTES',
+                status: assignmentMode === 'DIRECT' ? 'PREAUTHORISED' : 'COLLECTING_QUOTES',
                 statusUpdatedAt: now,
                 needsReview: false,
                 isParsed: true,
@@ -109,7 +115,7 @@ export async function fulfillPendingReviewAsJob(args: {
             data: {
                 jobId: job.id,
                 fromStatus: 'REVIEW_REQUIRED',
-                toStatus: assignmentMode === 'DIRECT' ? 'ASSIGNED' : 'COLLECTING_QUOTES',
+                toStatus: assignmentMode === 'DIRECT' ? 'PREAUTHORISED' : 'COLLECTING_QUOTES',
                 reason:
                     assignmentMode === 'DIRECT'
                         ? `Admin custom quote £${customQuote} — assigned to provider`
@@ -190,7 +196,7 @@ export async function fulfillReviewRequiredJob(args: {
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-        const nextStatus = assignmentMode === 'DIRECT' ? 'ASSIGNED' : 'COLLECTING_QUOTES';
+        const nextStatus = assignmentMode === 'DIRECT' ? 'PREAUTHORISED' : 'COLLECTING_QUOTES';
         const updatedJob = await tx.job.update({
             where: { id: jobId },
             data: {
@@ -286,7 +292,7 @@ export async function selectProviderQuote(args: {
                 providerId: quote.providerId,
                 fixedPrice: quote.quotedPrice,
                 priceOverride: quote.quotedPrice,
-                status: 'ASSIGNED',
+                status: 'PREAUTHORISED',
                 statusUpdatedAt: now,
                 acceptedAt: now,
             },
@@ -296,7 +302,7 @@ export async function selectProviderQuote(args: {
             data: {
                 jobId,
                 fromStatus: 'COLLECTING_QUOTES',
-                toStatus: 'ASSIGNED',
+                toStatus: 'PREAUTHORISED',
                 reason: `Admin selected quote from ${quote.provider.name} — £${quote.quotedPrice}`,
                 changedById: adminUserId,
                 changedByRole: 'ADMIN',

@@ -5,6 +5,7 @@ import { canTransition, JobStatus } from '@/lib/jobStateMachine';
 import { cookies } from 'next/headers';
 import { uploadPhoto, recordPhotoMetadata, BUCKETS } from '@/lib/storage';
 import { normalizeJobForUi } from '@/lib/pricing/tierNormalization';
+import { isAdminPricedJob } from '@/lib/admin/customQuoteFulfillment';
 
 export async function POST(
     request: Request,
@@ -166,7 +167,7 @@ export async function POST(
             }
 
             // Step 6: Arrival Photo Guard for IN_PROGRESS
-            if (status === 'IN_PROGRESS' && userRole === 'PROVIDER') {
+            if (status === 'IN_PROGRESS' && userRole === 'PROVIDER' && !isAdminPricedJob(job.reviewType)) {
                 const arrivalPhoto = await tx.visitPhoto.findFirst({
                     where: {
                         jobId: id,

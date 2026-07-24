@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { haversineDistanceKm, shouldPersistProviderLocation } from '@/lib/geo/location';
+import { isAdminPricedJob } from '@/lib/admin/customQuoteFulfillment';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -963,7 +964,15 @@ export function ProviderView({ user }: { user: any }) {
                         )}
 
                         <div className="flex flex-col gap-2">
-                            {job.status === 'ASSIGNED' && (
+                            {job.status === 'ASSIGNED' && isAdminPricedJob(job.reviewType) && (
+                                <Button
+                                    onClick={() => updateStatus(job.id, 'PREAUTHORISED')}
+                                    className="w-full bg-blue-600 hover:bg-blue-700"
+                                >
+                                    Begin Job
+                                </Button>
+                            )}
+                            {job.status === 'ASSIGNED' && !isAdminPricedJob(job.reviewType) && (
                                 <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">Waiting for pre-authorization...</p>
                             )}
 
@@ -990,11 +999,26 @@ export function ProviderView({ user }: { user: any }) {
                                             Start Work
                                         </Button>
                                     )}
-                                    {!arrivalPhoto && (
+                                    {!arrivalPhoto && !isAdminPricedJob(job.reviewType) && (
                                         <p className="text-[10px] text-gray-500 italic text-center">
-                                            Please upload a photo of the property access to enable 'Start Work'
+                                            Please upload a photo of the property access to enable &apos;Start Work&apos;
                                         </p>
                                     )}
+                                    {!arrivalPhoto && isAdminPricedJob(job.reviewType) && (
+                                        <Button
+                                            onClick={() => updateStatus(job.id, 'IN_PROGRESS')}
+                                            variant="outline"
+                                            className="w-full border-blue-500/30 text-blue-300 hover:bg-blue-500/10"
+                                        >
+                                            Start Work (skip photo)
+                                        </Button>
+                                    )}
+                                    <Button
+                                        onClick={() => updateStatus(job.id, 'COMPLETED')}
+                                        className="w-full bg-green-600 hover:bg-green-700"
+                                    >
+                                        Complete Job
+                                    </Button>
                                 </div>
                             )}
 
