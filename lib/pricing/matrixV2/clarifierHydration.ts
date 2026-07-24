@@ -117,19 +117,11 @@ export function hydrateClarifiersFromText(
             !matchesTvSizeClarifierId(cid) &&
             (matchesItemCountKey(cid) || ctypeIsCount(clarifierRowType(model, cid), cid)),
     );
-    if (itemCids.length > 0) {
-        let explicitMax: number | undefined;
-        for (const jid of jobIds) {
-            const row = model.jobs.get(jid);
-            if (!row?.clarifierIds.some((c) => itemCids.includes(c))) continue;
-            const ex = explicitItemQuantityFromText(jid, normalized);
-            if (ex !== undefined) {
-                explicitMax = explicitMax === undefined ? ex : Math.max(explicitMax, ex);
-            }
-        }
-        if (explicitMax !== undefined) {
+    if (itemCids.length > 0 && jobIds.length === 1) {
+        const ex = explicitItemQuantityFromText(jobIds[0], normalized);
+        if (ex !== undefined) {
             for (const cid of itemCids) {
-                out[cid] = explicitMax;
+                out[cid] = ex;
             }
         }
     }
@@ -232,6 +224,8 @@ export function applyClarifierAnswersToQuantityMap(
         for (const cid of row.clarifierIds) {
             if (matchesTvSizeClarifierId(cid)) continue;
             if (!matchesItemCountKey(cid) && !ctypeIsCount(clarifierRowType(model, cid), cid)) continue;
+            // Multi-job bundles: per-job qty comes from quantityForJob text parse — avoid bleeding shared ITEM_COUNT.
+            if (jobIds.length > 1 && matchesItemCountKey(cid)) continue;
             const v = merged[cid];
             if (v === undefined || v === '') continue;
             const n = typeof v === 'number' ? v : parseInt(String(v).trim(), 10);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, CheckCircle, Send, Loader2, Camera } from 'lucide-react';
+import { REVIEW_QUOTE_ETA, REVIEW_QUOTE_MESSAGE } from '@/lib/pricing/bookingCopy';
 
 interface ReviewQuoteModalProps {
     isOpen: boolean;
@@ -211,7 +212,7 @@ export function ReviewQuoteModal({
                         <div>
                             <h2 className="text-xl font-bold text-white mb-2">Request Submitted!</h2>
                             <p className="text-sm text-white/60 leading-relaxed">
-                                Thanks — our team will review your request and contact you shortly with a confirmed quote.
+                                Thanks — our team will review your request and share a custom quote shortly.
                             </p>
                         </div>
                         <button
@@ -228,10 +229,10 @@ export function ReviewQuoteModal({
                         <div className="px-6 pt-6 pb-4 border-b border-white/5">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400 mb-1">Custom Quote Required</div>
                             <h2 className="text-lg font-bold text-white leading-snug">
-                                This job needs a review from our team
+                                {REVIEW_QUOTE_MESSAGE}
                             </h2>
                             <p className="text-xs text-white/50 mt-1 leading-relaxed">
-                                Due to quantity, complexity, or scope — fill in your details and we'll get back with a confirmed price.
+                                Expected review ETA: {REVIEW_QUOTE_ETA}. Fill in your details below and we&apos;ll get back to you.
                             </p>
                             {rawInput && (
                                 <div className="mt-3 px-3 py-2 bg-white/5 rounded-xl border border-white/5 text-xs text-white/40 italic truncate">

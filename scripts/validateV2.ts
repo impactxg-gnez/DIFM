@@ -36,6 +36,27 @@ async function assertClarifierCount(description: string, min: number) {
     }
 }
 
+async function assertFixedMinPrice(description: string, minPrice: number) {
+    const p = await calculateV1Pricing(description);
+    if (p.routing !== 'FIXED_PRICE') {
+        throw new Error(`Expected FIXED for "${description}" — got ${p.routing}`);
+    }
+    if (!Number.isFinite(p.totalPrice) || p.totalPrice < minPrice) {
+        throw new Error(`Expected price >= £${minPrice} for "${description}" — got £${p.totalPrice}`);
+    }
+}
+
+async function assertFixedTier(description: string, expectedTier: string) {
+    const p = await calculateV1Pricing(description);
+    if (p.routing !== 'FIXED_PRICE') {
+        throw new Error(`Expected FIXED for "${description}" — got ${p.routing}`);
+    }
+    const tier = p.visits[0]?.tier;
+    if (tier !== expectedTier) {
+        throw new Error(`Expected tier ${expectedTier} for "${description}" — got ${tier}`);
+    }
+}
+
 async function main() {
     excelSource.reload();
     if (!excelSource.isMatrixV2()) {
@@ -55,6 +76,17 @@ async function main() {
     await assertReview('install 50 desks');
     await assertReview('mount 20 tv');
     await assertReview('clean office');
+
+    // Pricing fundamentals (client green-light matrix)
+    await assertFixed('hang 9 pictures');
+    await assertFixedMinPrice('hang 9 pictures', 100);
+    await assertFixed('put up 3 shelves');
+    await assertFixed('put up 4 shelves');
+    await assertFixedMinPrice('put up 4 shelves', 100);
+    await assertQuantity('put up 4 shelves and mount tv', 'shelf_install', 4);
+    await assertQuantity('put up 4 shelves and mount tv', 'tv_mount', 1);
+    await assertReview('hang 10 pictures');
+    await assertReview('put up 5 shelves');
 
     console.log('MATRIX V2 validation: all assertions passed.');
 }

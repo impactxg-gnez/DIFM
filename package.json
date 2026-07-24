@@ -9,6 +9,7 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "validate:v2": "npx tsx scripts/validateV2.ts",
+    "validate:pricing-fundamentals": "npx tsx scripts/validateV2.ts && npx tsx scripts/verify-scope-qty-pricing.ts",
     "db:resolve-failed-pending-review": "prisma migrate resolve --rolled-back 20260512190000_pending_review_intent_fields"
   },
   "dependencies": {

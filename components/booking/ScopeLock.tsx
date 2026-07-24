@@ -8,6 +8,7 @@ import { CheckCircle2, AlertCircle, Camera, X } from 'lucide-react';
 import { CameraUpload } from '@/components/ui/CameraUpload';
 import { Input } from '@/components/ui/input';
 import { ReviewQuoteModal } from '@/components/ReviewQuoteModal';
+import { MANUAL_REVIEW_FALLBACK_CTA } from '@/lib/pricing/bookingCopy';
 
 const MIN_SCOPE_DESCRIPTION_CHARS = 10;
 
@@ -402,10 +403,9 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
         ],
     );
 
-    const reviewEstimatedMinutes =
-        preview.status === 'OVERFLOW'
-            ? Number(preview.minutesAfter || currentVisit?.total_minutes || 0)
-            : Number(currentVisit?.total_minutes || 0);
+    const reviewEstimatedMinutes = Number(
+        preview.minutesAfter || currentVisit?.total_minutes || 0,
+    );
 
     if (!currentVisit) return null;
 
@@ -732,6 +732,13 @@ export function ScopeLock({ visits, jobDescription, onComplete, onCancel }: Scop
                     <Button variant="ghost" className="w-full text-gray-500 hover:text-white" onClick={onCancel}>
                         Cancel booking
                     </Button>
+                    <button
+                        type="button"
+                        onClick={() => setReviewModalOpen(true)}
+                        className="w-full text-center text-xs text-white/50 hover:text-white/80 leading-relaxed px-2 py-1 transition-colors underline-offset-2 hover:underline"
+                    >
+                        {MANUAL_REVIEW_FALLBACK_CTA}
+                    </button>
                     {isCommercialQuantityOverflow && (
                         <p className="text-center text-sm text-amber-100/90 px-2">
                             This quantity needs a custom quote.{' '}

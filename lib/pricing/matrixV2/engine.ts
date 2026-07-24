@@ -19,8 +19,9 @@ import {
 import { buildFlexibleMatchingText, collapsedForPhraseMatch } from './flexText';
 import { inferJobsByKeywords } from './keywordJobInference';
 import { quantityForJob } from './itemQuantity';
+import { REVIEW_QUOTE_MESSAGE } from '../bookingCopy';
 
-export const MATRIX_V2_REVIEW_MESSAGE = "We'll review your request and get back with a quote.";
+export const MATRIX_V2_REVIEW_MESSAGE = REVIEW_QUOTE_MESSAGE;
 
 /** No phrase/job match — ask for a concrete home task (landing + preview UX). */
 export const MATRIX_V2_CLARIFY_NO_MATCH =
@@ -111,6 +112,22 @@ function handymanTierForMinutes(
         if (totalMin <= t.max_minutes) return t;
     }
     return sorted[sorted.length - 1] ?? null;
+}
+
+function handymanLadderMaxMinutes(tiers: MatrixV2Model['handymanTiers']): number {
+    if (tiers.length === 0) return 0;
+    return Math.max(...tiers.map((t) => Number(t.max_minutes || 0)));
+}
+
+function isHandymanLikeCategory(category: string): boolean {
+    return (
+        category === 'HANDYMAN' ||
+        category === 'APPLIANCE' ||
+        category === 'PLUMBING' ||
+        category === 'ELECTRICAL' ||
+        category === 'PAINTER' ||
+        category === 'HVAC'
+    );
 }
 
 function cleaningPrice(job: MatrixV2JobRow, model: MatrixV2Model, bhkBands: number): number {
@@ -384,33 +401,6 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
 
     const cleaningUnits = inferCleaningUnits(normalized);
 
-    /** Quantity threshold (cleaning uses property count, not BHK). */
-    for (const id of jobIds) {
-        const row = model.jobs.get(id)!;
-        const th = Number(row.quantity_threshold || 0);
-        if (th <= 0) continue;
-        let q = qtyMap[id];
-        if (row.category === 'CLEANING') q = cleaningUnits;
-        if (q > th) {
-            return buildReviewResult(
-                parts,
-                MATRIX_V2_REVIEW_MESSAGE,
-                ['MATRIX_V2_QUANTITY_REVIEW'],
-                formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
-                {
-                    detectedJobIds: [...jobIds],
-                    quantityByJob: { ...qtyMap },
-                    estimatedMinutes:
-                        computeEstimatedMinutes(jobIds, qtyMap, model) +
-                        wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged),
-                    clarifierAnswers: clarifierAnswersMerged,
-                    clarifierHydration: hydratedFromText,
-                    parser: parserTrace,
-                },
-            );
-        }
-    }
-
     for (const id of jobIds) {
         const row = model.jobs.get(id)!;
         if (row.category === 'CLEANING') qtyMap[id] = cleaningUnits;
@@ -490,18 +480,34 @@ export function routeAndPriceMatrixV2(model: MatrixV2Model, userInput: string, o
     const wallAdj = wallMinuteAdjustmentForJobs(model, jobIds, clarifierAnswersMerged);
     const totalMinutes = baseMinutes + wallAdj;
 
+    /** Minutes exceed fixed-price ladder → custom quote (replaces hard quantity_threshold). */
+    if (isHandymanLikeCategory(category)) {
+        const ladderMax = handymanLadderMaxMinutes(model.handymanTiers);
+        if (ladderMax > 0 && totalMinutes > ladderMax) {
+            return buildReviewResult(
+                parts,
+                MATRIX_V2_REVIEW_MESSAGE,
+                ['MATRIX_V2_QUANTITY_REVIEW'],
+                formatMatrixV2Clarifiers(model, jobIds, hydratedFromText, clientAnswers),
+                {
+                    detectedJobIds: [...jobIds],
+                    quantityByJob: { ...qtyMap },
+                    estimatedMinutes: totalMinutes,
+                    clarifierAnswers: clarifierAnswersMerged,
+                    clarifierHydration: hydratedFromText,
+                    parser: parserTrace,
+                },
+            );
+        }
+    }
+
     /** Pricing (single source: matrix tiers; handyman uses combined minutes incl. quantity × max_minutes per job + clarifier adjustments) */
     let totalPrice = 0;
     let displayTier = 'H1';
     const displayMinutes = totalMinutes;
 
     if (
-        category === 'HANDYMAN' ||
-        category === 'APPLIANCE' ||
-        category === 'PLUMBING' ||
-        category === 'ELECTRICAL' ||
-        category === 'PAINTER' ||
-        category === 'HVAC'
+        isHandymanLikeCategory(category)
     ) {
         const t = handymanTierForMinutes(totalMinutes, model.handymanTiers);
         totalPrice = t?.price_gbp ?? 0;

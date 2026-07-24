@@ -3,11 +3,7 @@ import { excelSource } from './excelLoader';
 import { computeClarifierPricingEffects } from './dynamicClarifiers';
 import { cleaningTierBhkFromRoomClarifierValue } from './wholeHomeCleaningScope';
 import type { MatrixV2Model } from './matrixV2/types';
-
-// Keep overflow copy local to avoid hard dependency on review modules in builds
-// where review workflow files are not deployed yet.
-const OVERFLOW_REVIEW_ETA = '30-60 minutes' as const;
-const OVERFLOW_REVIEW_MESSAGE = "This job looks more complex than a standard booking. We'll review it and share a custom quote shortly.";
+import { REVIEW_QUOTE_ETA, REVIEW_QUOTE_MESSAGE } from './bookingCopy';
 
 export interface ScopePricingSuccessResult {
     status: 'OK';
@@ -213,31 +209,6 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
     }
 
     if (answersQty !== null && answersQty > 0) {
-        let matchedMax = 999;
-        if (visit.primary_job_item_id.includes('mirror')) matchedMax = 10;
-        else if (visit.primary_job_item_id.includes('tv')) matchedMax = 5;
-        else if (visit.primary_job_item_id.includes('blind')) matchedMax = 8;
-        else if (visit.primary_job_item_id.includes('shelf')) matchedMax = 12;
-
-        if (answersQty > matchedMax) {
-            return {
-                status: 'OVERFLOW',
-                action: 'ROUTE_TO_REVIEW',
-                reason: 'COMMERCIAL_QUANTITY',
-                bookingAllowed: false,
-                nextStep: 'REVIEW',
-                message: "That quantity is outside standard residential pricing. Please contact us for a custom quote.",
-                eta: '30-60 minutes',
-                effectiveMinutes: 999,
-                ladderMaxTime: 999,
-                overflowDelta: 0,
-                capability: capability,
-                maxLadder: 'H3',
-                overflowAction: 'REVIEW',
-                selectedClarifiers,
-            };
-        }
-
         // Recalculate effective minutes using the new quantity
         const primaryMatrixMinutes = getMatrixTime(visit.primary_job_item_id);
         const dynamicBase = primaryMatrixMinutes * answersQty;
@@ -266,8 +237,8 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
             reason: 'EXCEEDS_MAX_LADDER_TIME',
             bookingAllowed: false,
             nextStep: 'REVIEW',
-            message: OVERFLOW_REVIEW_MESSAGE,
-            eta: OVERFLOW_REVIEW_ETA,
+            message: REVIEW_QUOTE_MESSAGE,
+            eta: REVIEW_QUOTE_ETA,
             effectiveMinutes,
             ladderMaxTime: guardrail.ladder_max_time,
             overflowDelta,
@@ -280,7 +251,7 @@ export function computeScopePricing(visit: any, answers: Record<string, string>)
 
     let { tier: finalTier, price: finalPrice } = forceH3
         ? { tier: 'H3', price: calculateTierAndPrice(150, ladder).price }
-        : calculateTierAndPrice(mappingTime, ladder);
+        : calculateTierAndPrice(effectiveMinutes, ladder);
 
     if (!forceH3 && clarifierEffects.tierStepDelta > 0) {
         finalTier = bumpTierOnLadder(ladder, finalTier, clarifierEffects.tierStepDelta);

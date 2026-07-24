@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Search, Mic, Camera, CheckCircle, FileQuestion, ShieldAlert } from 'lucide-react';
 import { AddressModal } from '@/components/AddressModal';
 import { ReviewQuoteModal } from '@/components/ReviewQuoteModal';
+import {
+    MANUAL_REVIEW_FALLBACK_CTA,
+    REVIEW_QUOTE_ETA,
+    REVIEW_QUOTE_MESSAGE,
+} from '@/lib/pricing/bookingCopy';
 
 export type HomeBookingFlow = 'fixed' | 'quote';
 
@@ -394,8 +399,8 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
     }
 
     const reviewQuoteBannerBody = needsCommercialQuoteOnLanding
-        ? 'This looks like a large commercial or high-quantity job. Share your details and we’ll follow up with a quote.'
-        : "We couldn’t match this to an instant fixed-price task. Share your details and our team will review and send a quote.";
+        ? `${REVIEW_QUOTE_MESSAGE} Expected review ETA: ${REVIEW_QUOTE_ETA}.`
+        : `${REVIEW_QUOTE_MESSAGE} Expected review ETA: ${REVIEW_QUOTE_ETA}.`;
 
     return (
         <div className="relative w-full min-h-screen font-sans text-white overflow-x-hidden">
@@ -620,6 +625,15 @@ export function HomeSearchInterface({ onBookNow, initialLocation = 'Location', s
                             <FileQuestion className="w-5 h-5" />
                             <span className="text-base font-bold">Request Custom Quote</span>
                         </Button>
+                    )}
+                    {canAct && (
+                        <button
+                            type="button"
+                            onClick={() => setIsReviewModalOpen(true)}
+                            className="w-full max-w-sm text-center text-xs text-white/50 hover:text-white/80 leading-relaxed px-4 py-2 transition-colors underline-offset-2 hover:underline"
+                        >
+                            {MANUAL_REVIEW_FALLBACK_CTA}
+                        </button>
                     )}
                 </div>
 

@@ -16,7 +16,8 @@ export const REVIEW_ONLY_WARNINGS = new Set([
 ]);
 
 /**
- * Residential bulk thresholds — above these ⇒ review / quote only (no matrix price).
+ * Residential bulk thresholds — above these ⇒ review / quote only (legacy path only).
+ * Matrix V2 uses minutes-based ladder overflow instead.
  */
 export function exceedsResidentialQuantityLimits(quantityByJob: Record<string, number>): boolean {
     for (const [jobId, rawQty] of Object.entries(quantityByJob)) {
@@ -24,14 +25,6 @@ export function exceedsResidentialQuantityLimits(quantityByJob: Record<string, n
         if (!Number.isFinite(qty) || qty <= 0) continue;
         const id = jobId.toLowerCase();
 
-        if (
-            (id.includes('tv_mount') ||
-                id.includes('mount_tv') ||
-                id.includes('install_wall_tv')) &&
-            qty > 3
-        ) {
-            return true;
-        }
         if ((id.includes('shelf') || id.includes('shelves')) && qty > 10) {
             return true;
         }
@@ -73,7 +66,7 @@ export function evaluateBookingConfidence(meta: BookingMappingMeta | null): Conf
 
     const warnings: string[] = [];
 
-    if (exceedsResidentialQuantityLimits(qtyMap)) {
+    if (!meta.matrixV2 && exceedsResidentialQuantityLimits(qtyMap)) {
         warnings.push('COMMERCIAL_QUOTE_REQUIRED');
     }
 
@@ -89,7 +82,7 @@ export function evaluateBookingConfidence(meta: BookingMappingMeta | null): Conf
     }
 
     const forceReview =
-        exceedsResidentialQuantityLimits(qtyMap) || lowConfidence || bundleNeedsReview;
+        (!meta.matrixV2 && exceedsResidentialQuantityLimits(qtyMap)) || lowConfidence || bundleNeedsReview;
 
     if (forceReview) {
         return {
